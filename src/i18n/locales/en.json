@@ -1,0 +1,111 @@
+{
+  "app": {
+    "title": "SDSAP League"
+  },
+  "nav": {
+    "home": "Home",
+    "dashboard": "Dashboard",
+    "standings": "Standings",
+    "matches": "Matches",
+    "teams": "Teams",
+    "setup": "Setup"
+  },
+  "language": {
+    "label": "Language",
+    "vi": "VI",
+    "en": "EN"
+  },
+  "common": {
+    "vs": "vs",
+    "viewAll": "View all",
+    "save": "Save",
+    "cancel": "Cancel",
+    "loading": "Loading…",
+    "pts": "pts",
+    "round": "Round"
+  },
+  "status": {
+    "scheduled": "Not played",
+    "completed": "Completed",
+    "forfeit": "Forfeit"
+  },
+  "filter": {
+    "all": "All",
+    "uncompleted": "Uncompleted",
+    "completed": "Completed",
+    "forfeit": "Forfeit"
+  },
+  "standings": {
+    "title": "Standings",
+    "leagueTitle": "League Standings",
+    "subtitle": "1 point per win · 0 for loss or forfeit",
+    "empty": "No standings yet.",
+    "team": "Team",
+    "played": "P",
+    "playedFull": "Played",
+    "wins": "W",
+    "winsFull": "Wins",
+    "losses": "L",
+    "lossesFull": "Losses",
+    "points": "Pts",
+    "record": "{{wins}}W · {{losses}}L",
+    "recordWithPlayed": "{{wins}}W · {{losses}}L · {{played}} played"
+  },
+  "dashboard": {
+    "title": "SDSAP League",
+    "subtitle": "6 teams · 12 players · Round robin",
+    "recordResult": "Record Result",
+    "standings": "Standings",
+    "upcomingMatches": "Unplayed Matches",
+    "recentResults": "Recent Results",
+    "noUpcoming": "No unplayed matches.",
+    "noResults": "No results yet."
+  },
+  "matches": {
+    "title": "Matches",
+    "subtitle": "{{count}} round-robin matches",
+    "empty": "No matches in this category.",
+    "filterByTeam": "Filter by team",
+    "allTeams": "All teams",
+    "showing": "Showing {{count}} matches",
+    "teamWins": "{{name}} wins",
+    "editResult": "Edit result"
+  },
+  "record": {
+    "title": "Record Result",
+    "editTitle": "Edit Result",
+    "teamPts": "{{name}} pts",
+    "teamWins": "{{name}} wins",
+    "teamForfeit": "{{name}} forfeit",
+    "clearResult": "Clear result (mark not played)",
+    "confirmForfeit": "Mark this team as forfeit?",
+    "confirmRevert": "Clear this result and mark the match as not played?"
+  },
+  "teams": {
+    "title": "Teams",
+    "subtitle": "6 doubles teams · 2 players each"
+  },
+  "setup": {
+    "title": "Setup",
+    "subtitle": "Edit team and player names",
+    "saveTeam": "Save Team",
+    "teamUpdated": "Team saved",
+    "saveFailed": "Save failed: {{message}}",
+    "resetTitle": "Reset Match Results",
+    "resetDescription": "Clear all recorded scores and set every match back to not played. Standings will return to zero.",
+    "recordedCount": "{{count}} recorded matches",
+    "resetButton": "Reset All Recorded Matches",
+    "resetting": "Resetting…",
+    "resetConfirm": "Reset all {{count}} recorded matches? This clears all scores and standings.",
+    "resetConfirm_one": "Reset {{count}} recorded match? This clears all scores and standings.",
+    "resetNone": "No recorded matches to reset",
+    "resetSuccess": "Reset {{count}} matches — standings cleared",
+    "resetSuccess_one": "Reset {{count}} match — standings cleared",
+    "resetFailed": "Reset failed: {{message}}"
+  },
+  "error": {
+    "title": "Something went wrong",
+    "supabaseTitle": "Supabase not configured",
+    "supabaseMessage": "Copy .env.example to .env.local and add your project URL and anon key. Then run the SQL migration in Supabase."
+  }
+}

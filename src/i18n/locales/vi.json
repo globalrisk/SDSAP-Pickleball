@@ -1,0 +1,112 @@
+{
+  "app": {
+    "title": "Giải SDSAP"
+  },
+  "nav": {
+    "home": "Trang chủ",
+    "dashboard": "Tổng quan",
+    "standings": "Bảng xếp hạng",
+    "matches": "Trận đấu",
+    "teams": "Đội",
+    "setup": "Cài đặt"
+  },
+  "language": {
+    "label": "Ngôn ngữ",
+    "vi": "VI",
+    "en": "EN"
+  },
+  "common": {
+    "vs": "vs",
+    "viewAll": "Xem tất cả",
+    "save": "Lưu",
+    "cancel": "Hủy",
+    "loading": "Đang tải…",
+    "pts": "điểm",
+    "round": "Vòng"
+  },
+  "status": {
+    "scheduled": "Chưa đấu",
+    "completed": "Đã đấu",
+    "forfeit": "Bỏ cuộc"
+  },
+  "filter": {
+    "all": "Tất cả",
+    "uncompleted": "Chưa đấu",
+    "completed": "Đã đấu",
+    "forfeit": "Bỏ cuộc"
+  },
+  "standings": {
+    "title": "Bảng xếp hạng",
+    "leagueTitle": "Bảng xếp hạng giải",
+    "subtitle": "1 điểm mỗi trận thắng · 0 khi thua hoặc bỏ cuộc",
+    "empty": "Chưa có bảng xếp hạng.",
+    "team": "Đội",
+    "played": "Đ",
+    "playedFull": "Đã đấu",
+    "wins": "T",
+    "winsFull": "Thắng",
+    "losses": "B",
+    "lossesFull": "Thua",
+    "points": "Điểm",
+    "record": "{{wins}}T · {{losses}}B",
+    "recordWithPlayed": "{{wins}}T · {{losses}}B · {{played}} trận"
+  },
+  "dashboard": {
+    "title": "Giải SDSAP",
+    "subtitle": "6 đội · 12 người · Vòng tròn",
+    "recordResult": "Ghi kết quả",
+    "standings": "Bảng xếp hạng",
+    "upcomingMatches": "Trận chưa đấu",
+    "recentResults": "Kết quả gần đây",
+    "noUpcoming": "Không có trận chưa đấu.",
+    "noResults": "Chưa có kết quả."
+  },
+  "matches": {
+    "title": "Trận đấu",
+    "subtitle": "{{count}} trận vòng tròn",
+    "empty": "Không có trận trong mục này.",
+    "filterByTeam": "Lọc theo đội",
+    "allTeams": "Tất cả đội",
+    "showing": "Hiển thị {{count}} trận",
+    "teamWins": "{{name}} thắng",
+    "editResult": "Sửa kết quả"
+  },
+  "record": {
+    "title": "Ghi kết quả",
+    "editTitle": "Sửa kết quả",
+    "teamPts": "{{name}} điểm",
+    "teamWins": "{{name}} thắng",
+    "teamForfeit": "{{name}} bỏ cuộc",
+    "clearResult": "Xóa kết quả (đánh dấu chưa đấu)",
+    "confirmForfeit": "Đánh dấu đội này bỏ cuộc?",
+    "confirmRevert": "Xóa kết quả và đánh dấu trận là chưa đấu?"
+  },
+  "teams": {
+    "title": "Các đội",
+    "subtitle": "6 đội đôi · 2 người mỗi đội"
+  },
+  "setup": {
+    "title": "Cài đặt",
+    "subtitle": "Sửa tên đội và người chơi",
+    "saveTeam": "Lưu đội",
+    "teamUpdated": "Đã lưu đội",
+    "saveFailed": "Lưu thất bại: {{message}}",
+    "resetTitle": "Đặt lại kết quả trận đấu",
+    "resetDescription": "Xóa tất cả điểm số đã ghi và đặt mọi trận về chưa đấu. Bảng xếp hạng sẽ về 0.",
+    "recordedCount": "{{count}} trận đã ghi kết quả",
+    "recordedCount_one": "{{count}} trận đã ghi kết quả",
+    "resetButton": "Đặt lại tất cả kết quả",
+    "resetting": "Đang đặt lại…",
+    "resetConfirm": "Đặt lại {{count}} trận đã ghi kết quả? Thao tác này xóa toàn bộ điểm số và bảng xếp hạng.",
+    "resetConfirm_one": "Đặt lại {{count}} trận đã ghi kết quả? Thao tác này xóa toàn bộ điểm số và bảng xếp hạng.",
+    "resetNone": "Không có trận nào cần đặt lại",
+    "resetSuccess": "Đã đặt lại {{count}} trận — bảng xếp hạng đã xóa",
+    "resetSuccess_one": "Đã đặt lại {{count}} trận — bảng xếp hạng đã xóa",
+    "resetFailed": "Đặt lại thất bại: {{message}}"
+  },
+  "error": {
+    "title": "Đã xảy ra lỗi",
+    "supabaseTitle": "Chưa cấu hình Supabase",
+    "supabaseMessage": "Sao chép .env.example sang .env.local và thêm URL dự án cùng anon key. Sau đó chạy migration SQL trên Supabase."
+  }
+}
