@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { RecordResultForm } from './RecordResultForm'
+import { useSeason } from '../context/SeasonContext'
 import type { MatchWithTeams } from '../types'
 
 interface MatchCardProps {
@@ -24,8 +25,10 @@ function StatusBadge({ status }: { status: MatchWithTeams['status'] }) {
 
 export function MatchCard({ match, showForm = true }: MatchCardProps) {
   const { t } = useTranslation()
+  const { isSelectedSeasonActive } = useSeason()
   const [editing, setEditing] = useState(false)
   const isFinished = match.status === 'completed' || match.status === 'forfeit'
+  const canEdit = showForm && isSelectedSeasonActive
 
   return (
     <div className="rounded-xl border border-green-200 bg-white p-4 shadow-sm sm:p-5">
@@ -57,9 +60,9 @@ export function MatchCard({ match, showForm = true }: MatchCardProps) {
         <TeamLabel team={match.away_team} alignEnd />
       </div>
 
-      {showForm && match.status === 'scheduled' && <RecordResultForm match={match} />}
+      {canEdit && match.status === 'scheduled' && <RecordResultForm match={match} />}
 
-      {showForm && isFinished && !editing && (
+      {canEdit && isFinished && !editing && (
         <button
           type="button"
           onClick={() => setEditing(true)}
@@ -69,7 +72,7 @@ export function MatchCard({ match, showForm = true }: MatchCardProps) {
         </button>
       )}
 
-      {showForm && isFinished && editing && (
+      {canEdit && isFinished && editing && (
         <RecordResultForm
           match={match}
           editing

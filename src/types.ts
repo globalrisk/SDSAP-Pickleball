@@ -1,16 +1,47 @@
 export type MatchStatus = 'scheduled' | 'completed' | 'forfeit'
+export type SeasonStatus = 'active' | 'archived'
+
+export interface Season {
+  id: string
+  name: string
+  status: SeasonStatus
+  starts_at: string
+  ends_at: string | null
+  created_at: string
+}
 
 export interface Team {
   id: string
+  season_id: string
   name: string
   color: string
   created_at: string
+}
+
+export interface PoolPlayer {
+  id: string
+  name: string
+  rating: number
+  rating_deviation: number
+  volatility: number
+  initial_rating: number
+  created_at: string
+}
+
+export interface PlayerRankingRow {
+  rank: number
+  id: string
+  name: string
+  rating: number
+  ratingDeviation: number
+  volatility: number
 }
 
 export interface Player {
   id: string
   name: string
   team_id: string
+  pool_player_id: string
   created_at: string
 }
 
@@ -20,6 +51,7 @@ export interface TeamWithPlayers extends Team {
 
 export interface Match {
   id: string
+  season_id: string
   home_team_id: string
   away_team_id: string
   scheduled_at: string

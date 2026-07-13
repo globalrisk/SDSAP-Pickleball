@@ -2,11 +2,13 @@ import { NavLink, Outlet } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { GlobalLoadingOverlay } from './components/GlobalLoadingOverlay'
 import { LanguageSwitcher } from './components/LanguageSwitcher'
+import { SeasonSelector } from './components/SeasonSelector'
 
 const navItems = [
   { to: '/', labelKey: 'nav.home', desktopKey: 'nav.dashboard', end: true },
   { to: '/standings', labelKey: 'nav.standings', desktopKey: 'nav.standings' },
   { to: '/matches', labelKey: 'nav.matches', desktopKey: 'nav.matches' },
+  { to: '/rankings', labelKey: 'nav.rankings', desktopKey: 'nav.rankings' },
   { to: '/teams', labelKey: 'nav.teams', desktopKey: 'nav.teams' },
   { to: '/setup', labelKey: 'nav.setup', desktopKey: 'nav.setup' },
 ] as const
@@ -33,7 +35,10 @@ export function AppLayout() {
             <span className="text-base font-bold text-green-800 sm:text-lg">
               {t('app.title')}
             </span>
-            <LanguageSwitcher />
+            <div className="flex items-center gap-2">
+              <SeasonSelector />
+              <LanguageSwitcher />
+            </div>
           </div>
           <nav className="hidden gap-1 overflow-x-auto pb-3 md:flex">
             {navItems.map(({ to, labelKey, desktopKey, ...rest }) => (
@@ -92,6 +97,12 @@ function NavIcon({ to }: { to: string }) {
       return (
         <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
+      )
+    case '/rankings':
+      return (
+        <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
         </svg>
       )
     case '/teams':

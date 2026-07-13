@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { recordForfeit, recordResult, revertMatchToScheduled } from '../lib/api'
+import { useSeason } from '../context/SeasonContext'
 import type { MatchWithTeams } from '../types'
 
 interface RecordResultFormProps {
@@ -22,6 +23,7 @@ const inputClass =
 export function RecordResultForm({ match, editing = false, onDone }: RecordResultFormProps) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
+  const { selectedSeason } = useSeason()
   const [homeScore, setHomeScore] = useState(
     match.home_score != null ? String(match.home_score) : '',
   )
@@ -58,7 +60,9 @@ export function RecordResultForm({ match, editing = false, onDone }: RecordResul
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['matches'] })
+      queryClient.invalidateQueries({ queryKey: ['matches', selectedSeason?.id] })
+      queryClient.invalidateQueries({ queryKey: ['player-rankings'] })
+      queryClient.invalidateQueries({ queryKey: ['player-pool'] })
       setError(null)
       onDone?.()
     },

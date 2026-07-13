@@ -1,7 +1,11 @@
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { createSeasonMatches } from '../lib/api'
 import { MatchCard } from '../components/MatchCard'
+import { ArchivedSeasonBanner } from '../components/ArchivedSeasonBanner'
 import { ErrorState, PageHeader, SetupBanner } from '../components/Layout'
+import { useSeason } from '../context/SeasonContext'
 import { useMatches } from '../hooks/useMatches'
 import { useTeams } from '../hooks/useTeams'
 import type { MatchStatus } from '../types'
@@ -17,10 +21,36 @@ const STATUS_FILTERS: { key: StatusFilter; labelKey: string }[] = [
 
 export function MatchesPage() {
   const { t } = useTranslation()
+  const queryClient = useQueryClient()
+  const { selectedSeason, isSelectedSeasonActive } = useSeason()
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [teamFilterId, setTeamFilterId] = useState<string>('all')
+  const [message, setMessage] = useState<string | null>(null)
   const { data: matches, isError, error } = useMatches()
   const { data: teams } = useTeams()
+
+  const matchCount = matches?.length ?? 0
+  const teamCount = teams?.length ?? 0
+  const canCreateMatches =
+    isSelectedSeasonActive &&
+    matchCount === 0 &&
+    teamCount >= 2 &&
+    teamCount % 2 === 0
+
+  const createMatchesMutation = useMutation({
+    mutationFn: () => createSeasonMatches(selectedSeason!.id),
+    onSuccess: (count) => {
+      queryClient.invalidateQueries({ queryKey: ['matches', selectedSeason?.id] })
+      setMessage(t('matches.createSuccess', { count }))
+    },
+    onError: (err: Error) => setMessage(t('matches.createFailed', { message: err.message })),
+  })
+
+  function handleCreateMatches() {
+    if (!selectedSeason || !canCreateMatches) return
+    if (!confirm(t('matches.createConfirm', { teams: teamCount }))) return
+    createMatchesMutation.mutate()
+  }
 
   const filtered = useMemo(() => {
     return (matches ?? []).filter((m) => {
@@ -39,10 +69,46 @@ export function MatchesPage() {
   return (
     <div>
       <SetupBanner />
+      <ArchivedSeasonBanner />
       <PageHeader
         title={t('matches.title')}
-        subtitle={t('matches.subtitle', { count: matches?.length ?? 0 })}
+        subtitle={t('matches.subtitle', { count: matchCount })}
       />
+
+      {isSelectedSeasonActive && (
+        <section className="mb-6 rounded-xl border border-green-200 bg-white p-4 shadow-sm sm:p-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-base font-semibold text-green-900">
+                {t('matches.createTitle')}
+              </h2>
+              <p className="mt-1 text-sm text-gray-600">{t('matches.createDescription')}</p>
+              {matchCount > 0 && (
+                <p className="mt-1 text-sm text-amber-700">{t('matches.createAlreadyExists')}</p>
+              )}
+              {matchCount === 0 && teamCount < 2 && (
+                <p className="mt-1 text-sm text-amber-700">{t('matches.createNeedTeams')}</p>
+              )}
+              {matchCount === 0 && teamCount >= 2 && teamCount % 2 !== 0 && (
+                <p className="mt-1 text-sm text-amber-700">{t('matches.createNeedEvenTeams')}</p>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={handleCreateMatches}
+              disabled={!canCreateMatches || createMatchesMutation.isPending}
+              className="min-h-11 shrink-0 rounded-lg bg-green-600 px-4 py-3 text-sm font-medium text-white hover:bg-green-700 active:bg-green-800 disabled:cursor-not-allowed disabled:opacity-50 sm:py-2"
+            >
+              {createMatchesMutation.isPending
+                ? t('matches.creating')
+                : t('matches.createButton')}
+            </button>
+          </div>
+          {message && (
+            <p className="mt-3 rounded-lg bg-green-50 px-3 py-2 text-sm text-green-800">{message}</p>
+          )}
+        </section>
+      )}
 
       <div className="mb-4">
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-green-800">

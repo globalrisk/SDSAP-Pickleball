@@ -3,9 +3,11 @@ import { createRoot } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { AppLayout } from './App'
+import { SeasonProvider } from './context/SeasonContext'
 import { Dashboard } from './pages/Dashboard'
 import { StandingsPage } from './pages/Standings'
 import { MatchesPage } from './pages/Matches'
+import { RankingsPage } from './pages/Rankings'
 import { TeamsPage } from './pages/Teams'
 import { SetupPage } from './pages/Setup'
 import './i18n'
@@ -23,17 +25,20 @@ const queryClient = new QueryClient({
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <Routes>
-          <Route element={<AppLayout />}>
+      <SeasonProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route element={<AppLayout />}>
             <Route index element={<Dashboard />} />
             <Route path="standings" element={<StandingsPage />} />
             <Route path="matches" element={<MatchesPage />} />
+            <Route path="rankings" element={<RankingsPage />} />
             <Route path="teams" element={<TeamsPage />} />
             <Route path="setup" element={<SetupPage />} />
           </Route>
-        </Routes>
-      </BrowserRouter>
+          </Routes>
+        </BrowserRouter>
+      </SeasonProvider>
     </QueryClientProvider>
   </StrictMode>,
 )

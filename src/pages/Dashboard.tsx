@@ -1,15 +1,20 @@
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { MatchCard } from '../components/MatchCard'
+import { ArchivedSeasonBanner } from '../components/ArchivedSeasonBanner'
 import { ErrorState, PageHeader, SetupBanner } from '../components/Layout'
 import { StandingsTable } from '../components/StandingsTable'
+import { useSeason } from '../context/SeasonContext'
 import { useMatches } from '../hooks/useMatches'
 import { useStandings } from '../hooks/useStandings'
+import { useTeamsWithPlayers } from '../hooks/useTeams'
 
 export function Dashboard() {
   const { t } = useTranslation()
+  const { selectedSeason, isSelectedSeasonActive } = useSeason()
   const { standings, isError, error } = useStandings()
   const { data: matches } = useMatches()
+  const { data: teams } = useTeamsWithPlayers()
 
   if (isError) return <ErrorState message={(error as Error).message} />
 
@@ -25,10 +30,18 @@ export function Dashboard() {
   return (
     <div>
       <SetupBanner />
+      <ArchivedSeasonBanner />
       <PageHeader
-        title={t('dashboard.title')}
-        subtitle={t('dashboard.subtitle')}
-        action={{ label: t('dashboard.recordResult'), to: '/matches' }}
+        title={selectedSeason?.name ?? t('dashboard.title')}
+        subtitle={t('dashboard.subtitleDynamic', {
+          teams: teams?.length ?? 0,
+          players: (teams ?? []).reduce((sum, team) => sum + team.players.length, 0),
+        })}
+        action={
+          isSelectedSeasonActive
+            ? { label: t('dashboard.recordResult'), to: '/matches' }
+            : undefined
+        }
       />
 
       <section className="mb-8">

@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { ErrorState, PageHeader, SetupBanner } from '../components/Layout'
+import { ArchivedSeasonBanner } from '../components/ArchivedSeasonBanner'
 import { StandingsTable } from '../components/StandingsTable'
 import { useStandings } from '../hooks/useStandings'
 
@@ -12,6 +13,7 @@ export function StandingsPage() {
   return (
     <div>
       <SetupBanner />
+      <ArchivedSeasonBanner />
       <PageHeader
         title={t('standings.leagueTitle')}
         subtitle={t('standings.subtitle')}
