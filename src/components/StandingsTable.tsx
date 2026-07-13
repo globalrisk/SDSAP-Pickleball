@@ -25,6 +25,12 @@ function getPodiumStyles(rank: number, points: number) {
       rankBadge: 'bg-slate-300 text-slate-800',
     }
   }
+  if (rank === 3) {
+    return {
+      row: 'bg-amber-50 ring-2 ring-amber-300 border-amber-200',
+      rankBadge: 'bg-amber-500 text-white',
+    }
+  }
   return {
     row: '',
     rankBadge: 'bg-green-100 text-green-800',

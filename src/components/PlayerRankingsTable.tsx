@@ -6,6 +6,31 @@ interface PlayerRankingsTableProps {
   rows: PlayerRankingRow[]
 }
 
+function getPodiumStyles(rank: number) {
+  if (rank === 1) {
+    return {
+      row: 'bg-yellow-50 ring-2 ring-inset ring-yellow-300',
+      rankBadge: 'bg-yellow-300 text-yellow-900',
+    }
+  }
+  if (rank === 2) {
+    return {
+      row: 'bg-slate-100 ring-2 ring-inset ring-slate-300',
+      rankBadge: 'bg-slate-300 text-slate-800',
+    }
+  }
+  if (rank === 3) {
+    return {
+      row: 'bg-amber-50 ring-2 ring-inset ring-amber-300',
+      rankBadge: 'bg-amber-500 text-white',
+    }
+  }
+  return {
+    row: '',
+    rankBadge: 'bg-green-100 text-green-800',
+  }
+}
+
 export function PlayerRankingsTable({ rows }: PlayerRankingsTableProps) {
   const { t } = useTranslation()
 
@@ -25,18 +50,27 @@ export function PlayerRankingsTable({ rows }: PlayerRankingsTableProps) {
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => (
-            <tr key={row.id} className="border-b border-green-50 last:border-0">
-              <td className="px-4 py-3 font-medium text-gray-500">{row.rank}</td>
-              <td className="px-4 py-3 font-semibold text-gray-900">{row.name}</td>
-              <td className="px-4 py-3 text-right font-bold text-green-800">
-                {roundRating(row.rating)}
-              </td>
-              <td className="hidden px-4 py-3 text-right text-gray-600 sm:table-cell">
-                {roundRating(row.ratingDeviation)}
-              </td>
-            </tr>
-          ))}
+          {rows.map((row) => {
+            const podium = getPodiumStyles(row.rank)
+            return (
+              <tr key={row.id} className={`border-b border-green-50 last:border-0 ${podium.row}`}>
+                <td className="px-4 py-3">
+                  <span
+                    className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${podium.rankBadge}`}
+                  >
+                    {row.rank}
+                  </span>
+                </td>
+                <td className="px-4 py-3 font-semibold text-gray-900">{row.name}</td>
+                <td className="px-4 py-3 text-right font-bold text-green-800">
+                  {roundRating(row.rating)}
+                </td>
+                <td className="hidden px-4 py-3 text-right text-gray-600 sm:table-cell">
+                  {roundRating(row.ratingDeviation)}
+                </td>
+              </tr>
+            )
+          })}
         </tbody>
       </table>
     </div>
