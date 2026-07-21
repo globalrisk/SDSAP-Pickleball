@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next'
+import { TeamNameWithPlayers } from './TeamNameWithPlayers'
 import type { StandingRow } from '../types'
 
 interface StandingsTableProps {
@@ -58,14 +59,12 @@ function StandingCard({
           {row.rank}
         </span>
         <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <span
-              className="inline-block h-3 w-3 shrink-0 rounded-full"
-              style={{ backgroundColor: row.team.color }}
-            />
-            <span className="truncate font-medium text-gray-900">{row.team.name}</span>
-          </div>
-          <p className="mt-0.5 text-xs text-gray-500">
+          <TeamNameWithPlayers
+            name={row.team.name}
+            color={row.team.color}
+            playerNames={row.playerNames}
+          />
+          <p className="mt-0.5 pl-5 text-xs text-gray-500">
             {compact
               ? t('standings.record', { wins: row.wins, losses: row.losses })
               : t('standings.recordWithPlayed', {
@@ -141,13 +140,11 @@ export function StandingsTable({ rows, compact = false }: StandingsTableProps) {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className="inline-block h-3 w-3 shrink-0 rounded-full"
-                        style={{ backgroundColor: row.team.color }}
-                      />
-                      <span className="font-medium text-gray-900">{row.team.name}</span>
-                    </div>
+                    <TeamNameWithPlayers
+                      name={row.team.name}
+                      color={row.team.color}
+                      playerNames={row.playerNames}
+                    />
                   </td>
                   {!compact && (
                     <td className="px-4 py-3 text-center text-gray-600">{row.played}</td>

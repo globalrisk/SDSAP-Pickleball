@@ -11,8 +11,8 @@ import type { MatchWithTeams, PlayerRankingRow, PoolPlayer, Season, Team, TeamWi
 
 const MATCH_SELECT = `
   *,
-  home_team:teams!matches_home_team_id_fkey(id, name, color),
-  away_team:teams!matches_away_team_id_fkey(id, name, color),
+  home_team:teams!matches_home_team_id_fkey(id, name, color, players(name, pool_player_id)),
+  away_team:teams!matches_away_team_id_fkey(id, name, color, players(name, pool_player_id)),
   winner:teams!matches_winner_team_id_fkey(id, name, color)
 `
 
@@ -305,14 +305,40 @@ export async function fetchTeamsWithPlayers(seasonId: string): Promise<TeamWithP
 }
 
 export async function fetchMatches(seasonId: string): Promise<MatchWithTeams[]> {
-  const { data, error } = await supabase
-    .from('matches')
-    .select(MATCH_SELECT)
-    .eq('season_id', seasonId)
-    .order('scheduled_at')
+  const [matchesResult, ratingsResult] = await Promise.all([
+    supabase
+      .from('matches')
+      .select(MATCH_SELECT)
+      .eq('season_id', seasonId)
+      .order('scheduled_at'),
+    supabase.from('player_pool').select('id, rating'),
+  ])
 
-  if (error) throw error
-  return (data ?? []) as MatchWithTeams[]
+  if (matchesResult.error) throw matchesResult.error
+  if (ratingsResult.error) throw ratingsResult.error
+
+  const ratings = new Map(
+    (ratingsResult.data ?? []).map((player) => [player.id, player.rating]),
+  )
+  const matches = (matchesResult.data ?? []) as MatchWithTeams[]
+
+  return matches.map((match) => ({
+    ...match,
+    home_team: {
+      ...match.home_team,
+      players: match.home_team.players?.map((player) => ({
+        ...player,
+        rating: ratings.get(player.pool_player_id),
+      })),
+    },
+    away_team: {
+      ...match.away_team,
+      players: match.away_team.players?.map((player) => ({
+        ...player,
+        rating: ratings.get(player.pool_player_id),
+      })),
+    },
+  }))
 }
 
 export async function createSeasonMatches(seasonId: string): Promise<number> {

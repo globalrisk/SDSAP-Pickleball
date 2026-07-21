@@ -1,4 +1,4 @@
-import type { MatchWithTeams, StandingRow, Team } from '../types'
+import type { MatchWithTeams, StandingRow, Team, TeamWithPlayers } from '../types'
 
 const FINISHED_STATUSES = new Set(['completed', 'forfeit'])
 
@@ -8,6 +8,7 @@ interface HeadToHeadResult {
 
 interface TeamStats {
   team: Team
+  playerNames: string[]
   played: number
   wins: number
   losses: number
@@ -66,11 +67,21 @@ function areStandingsTied(
   return getHeadToHead(a.team.id, b.team.id, headToHeadMap) === null
 }
 
-export function computeStandings(teams: Team[], matches: MatchWithTeams[]): StandingRow[] {
+export function computeStandings(
+  teams: TeamWithPlayers[],
+  matches: MatchWithTeams[],
+): StandingRow[] {
   const stats = new Map(
     teams.map((team) => [
       team.id,
-      { team, played: 0, wins: 0, losses: 0, points: 0 },
+      {
+        team,
+        playerNames: team.players.map((player) => player.name),
+        played: 0,
+        wins: 0,
+        losses: 0,
+        points: 0,
+      },
     ]),
   )
 

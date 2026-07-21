@@ -8,7 +8,6 @@
     "standings": "Standings",
     "matches": "Matches",
     "rankings": "Rankings",
-    "teams": "Teams",
     "setup": "Setup"
   },
   "language": {
@@ -78,6 +77,9 @@
     "showing": "Showing {{count}} matches",
     "teamWins": "{{name}} wins",
     "editResult": "Edit result",
+    "winProbability": "Win chance",
+    "probabilityLabel": "{{homeTeam}} {{homePercent}}% win chance, {{awayTeam}} {{awayPercent}}%",
+    "averageRating": "Average player rating",
     "createTitle": "Schedule",
     "createDescription": "Generate a full round-robin schedule for this season (one round per week).",
     "createButton": "Create Matches",
@@ -98,11 +100,6 @@
     "clearResult": "Clear result (mark not played)",
     "confirmForfeit": "Mark this team as forfeit?",
     "confirmRevert": "Clear this result and mark the match as not played?"
-  },
-  "teams": {
-    "title": "Teams",
-    "subtitle": "6 doubles teams · 2 players each",
-    "subtitleDynamic": "{{teams}} teams · {{players}} players"
   },
   "rankings": {
     "title": "Player Rankings",

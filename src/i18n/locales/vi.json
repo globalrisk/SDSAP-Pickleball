@@ -8,7 +8,6 @@
     "standings": "Bảng xếp hạng",
     "matches": "Trận đấu",
     "rankings": "Xếp hạng",
-    "teams": "Đội",
     "setup": "Cài đặt"
   },
   "language": {
@@ -78,6 +77,9 @@
     "showing": "Hiển thị {{count}} trận",
     "teamWins": "{{name}} thắng",
     "editResult": "Sửa kết quả",
+    "winProbability": "Khả năng thắng",
+    "probabilityLabel": "{{homeTeam}} có {{homePercent}}% khả năng thắng, {{awayTeam}} có {{awayPercent}}%",
+    "averageRating": "Điểm trung bình của người chơi",
     "createTitle": "Lịch thi đấu",
     "createDescription": "Tạo lịch vòng tròn cho mùa giải này (mỗi tuần một vòng).",
     "createButton": "Tạo trận đấu",
@@ -98,11 +100,6 @@
     "clearResult": "Xóa kết quả (đánh dấu chưa đấu)",
     "confirmForfeit": "Đánh dấu đội này bỏ cuộc?",
     "confirmRevert": "Xóa kết quả và đánh dấu trận là chưa đấu?"
-  },
-  "teams": {
-    "title": "Các đội",
-    "subtitle": "6 đội đôi · 2 người mỗi đội",
-    "subtitleDynamic": "{{teams}} đội · {{players}} người"
   },
   "rankings": {
     "title": "Xếp hạng người chơi",

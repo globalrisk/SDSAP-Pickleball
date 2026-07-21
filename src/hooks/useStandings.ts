@@ -1,10 +1,10 @@
 import { useMemo } from 'react'
 import { computeStandings } from '../lib/standings'
 import { useMatches } from './useMatches'
-import { useTeams } from './useTeams'
+import { useTeamsWithPlayers } from './useTeams'
 
 export function useStandings() {
-  const teamsQuery = useTeams()
+  const teamsQuery = useTeamsWithPlayers()
   const matchesQuery = useMatches()
 
   const standings = useMemo(() => {

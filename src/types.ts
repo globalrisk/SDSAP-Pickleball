@@ -64,14 +64,19 @@ export interface Match {
 }
 
 export interface MatchWithTeams extends Match {
-  home_team: Pick<Team, 'id' | 'name' | 'color'>
-  away_team: Pick<Team, 'id' | 'name' | 'color'>
+  home_team: Pick<Team, 'id' | 'name' | 'color'> & {
+    players?: (Pick<Player, 'name' | 'pool_player_id'> & { rating?: number })[]
+  }
+  away_team: Pick<Team, 'id' | 'name' | 'color'> & {
+    players?: (Pick<Player, 'name' | 'pool_player_id'> & { rating?: number })[]
+  }
   winner: Pick<Team, 'id' | 'name' | 'color'> | null
 }
 
 export interface StandingRow {
   rank: number
   team: Team
+  playerNames: string[]
   played: number
   wins: number
   losses: number

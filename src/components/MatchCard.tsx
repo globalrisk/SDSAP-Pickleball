@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { RecordResultForm } from './RecordResultForm'
+import { TeamNameWithPlayers } from './TeamNameWithPlayers'
 import { useSeason } from '../context/SeasonContext'
+import { calculateMatchProbability } from '../lib/matchProbability'
 import type { MatchWithTeams } from '../types'
 
 interface MatchCardProps {
@@ -29,6 +31,9 @@ export function MatchCard({ match, showForm = true }: MatchCardProps) {
   const [editing, setEditing] = useState(false)
   const isFinished = match.status === 'completed' || match.status === 'forfeit'
   const canEdit = showForm && isSelectedSeasonActive
+  const probability = !isFinished
+    ? calculateMatchProbability(match.home_team, match.away_team)
+    : null
 
   return (
     <div className="rounded-xl border border-green-200 bg-white p-4 shadow-sm sm:p-5">
@@ -60,6 +65,16 @@ export function MatchCard({ match, showForm = true }: MatchCardProps) {
         <TeamLabel team={match.away_team} alignEnd />
       </div>
 
+      {probability && (
+        <WinProbability
+          homeTeamName={match.home_team.name}
+          awayTeamName={match.away_team.name}
+          homeProbability={probability.home}
+          homeRating={probability.homeRating}
+          awayRating={probability.awayRating}
+        />
+      )}
+
       {canEdit && match.status === 'scheduled' && <RecordResultForm match={match} />}
 
       {canEdit && isFinished && !editing && (
@@ -83,24 +98,80 @@ export function MatchCard({ match, showForm = true }: MatchCardProps) {
   )
 }
 
+function WinProbability({
+  homeTeamName,
+  awayTeamName,
+  homeProbability,
+  homeRating,
+  awayRating,
+}: {
+  homeTeamName: string
+  awayTeamName: string
+  homeProbability: number
+  homeRating: number
+  awayRating: number
+}) {
+  const { t } = useTranslation()
+  const homePercent = Math.round(homeProbability * 100)
+  const awayPercent = 100 - homePercent
+
+  return (
+    <div className="mt-4 border-t border-green-100 pt-3">
+      <div className="mb-1.5 flex items-center justify-between gap-3 text-xs">
+        <span className="min-w-0 truncate font-semibold text-green-800">
+          {homePercent}% <span className="font-normal text-gray-500">({Math.round(homeRating)})</span>
+        </span>
+        <span className="shrink-0 text-[11px] font-medium uppercase tracking-wide text-gray-400">
+          {t('matches.winProbability')}
+        </span>
+        <span className="min-w-0 truncate text-right font-semibold text-green-800">
+          {awayPercent}% <span className="font-normal text-gray-500">({Math.round(awayRating)})</span>
+        </span>
+      </div>
+      <div
+        className="flex h-2 overflow-hidden rounded-full bg-green-100"
+        role="img"
+        aria-label={t('matches.probabilityLabel', {
+          homeTeam: homeTeamName,
+          homePercent,
+          awayTeam: awayTeamName,
+          awayPercent,
+        })}
+      >
+        <div
+          className="bg-green-600 transition-[width]"
+          style={{ width: `${homePercent}%` }}
+        />
+        <div className="flex-1 bg-emerald-300" />
+      </div>
+      <p className="mt-1 text-center text-[10px] text-gray-400">
+        {t('matches.averageRating')}
+      </p>
+    </div>
+  )
+}
+
 function TeamLabel({
   team,
   alignEnd = false,
 }: {
-  team: { name: string; color: string }
+  team: { name: string; color: string; players?: { name: string; rating?: number }[] }
   alignEnd?: boolean
 }) {
+  const playerNames = (team.players ?? []).map((player) => player.name)
+
   return (
     <div
-      className={`flex min-w-0 items-center gap-2 rounded-lg bg-green-50 px-3 py-2.5 sm:flex-1 sm:bg-transparent sm:px-0 sm:py-0 ${
-        alignEnd ? 'sm:justify-end' : ''
+      className={`min-w-0 rounded-lg bg-green-50 px-3 py-2.5 sm:flex-1 sm:bg-transparent sm:px-0 sm:py-0 ${
+        alignEnd ? 'sm:text-right' : ''
       }`}
     >
-      <span
-        className="inline-block h-3 w-3 shrink-0 rounded-full"
-        style={{ backgroundColor: team.color }}
+      <TeamNameWithPlayers
+        name={team.name}
+        color={team.color}
+        playerNames={playerNames}
+        alignEnd={alignEnd}
       />
-      <span className="truncate font-semibold text-gray-900">{team.name}</span>
     </div>
   )
 }
