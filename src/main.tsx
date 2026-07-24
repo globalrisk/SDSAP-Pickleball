@@ -8,6 +8,7 @@ import { Dashboard } from './pages/Dashboard'
 import { StandingsPage } from './pages/Standings'
 import { MatchesPage } from './pages/Matches'
 import { RankingsPage } from './pages/Rankings'
+import { PlayerProfilePage } from './pages/PlayerProfile'
 import { SetupPage } from './pages/Setup'
 import './i18n'
 import './index.css'
@@ -32,6 +33,7 @@ createRoot(document.getElementById('root')!).render(
             <Route path="standings" element={<StandingsPage />} />
             <Route path="matches" element={<MatchesPage />} />
             <Route path="rankings" element={<RankingsPage />} />
+            <Route path="players/:playerId" element={<PlayerProfilePage />} />
             <Route path="setup" element={<SetupPage />} />
           </Route>
           </Routes>

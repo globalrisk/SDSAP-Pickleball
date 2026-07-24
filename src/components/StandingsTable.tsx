@@ -62,7 +62,7 @@ function StandingCard({
           <TeamNameWithPlayers
             name={row.team.name}
             color={row.team.color}
-            playerNames={row.playerNames}
+            players={row.players}
           />
           <p className="mt-0.5 pl-5 text-xs text-gray-500">
             {compact
@@ -143,7 +143,7 @@ export function StandingsTable({ rows, compact = false }: StandingsTableProps) {
                     <TeamNameWithPlayers
                       name={row.team.name}
                       color={row.team.color}
-                      playerNames={row.playerNames}
+                      players={row.players}
                     />
                   </td>
                   {!compact && (

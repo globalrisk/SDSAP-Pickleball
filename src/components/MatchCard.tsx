@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { RecordResultForm } from './RecordResultForm'
 import { TeamNameWithPlayers } from './TeamNameWithPlayers'
 import { useSeason } from '../context/SeasonContext'
+import { formatMatchDate } from '../lib/formatDate'
 import { calculateMatchProbability } from '../lib/matchProbability'
 import type { MatchWithTeams } from '../types'
 
@@ -26,7 +27,7 @@ function StatusBadge({ status }: { status: MatchWithTeams['status'] }) {
 }
 
 export function MatchCard({ match, showForm = true }: MatchCardProps) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { isSelectedSeasonActive } = useSeason()
   const [editing, setEditing] = useState(false)
   const isFinished = match.status === 'completed' || match.status === 'forfeit'
@@ -35,11 +36,15 @@ export function MatchCard({ match, showForm = true }: MatchCardProps) {
     ? calculateMatchProbability(match.home_team, match.away_team)
     : null
 
+  const recordedLabel = isFinished
+    ? formatMatchDate(match.result_recorded_at, i18n.language)
+    : null
+
   return (
     <div className="rounded-xl border border-green-200 bg-white p-4 shadow-sm sm:p-5">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <span className="text-xs font-medium text-gray-500">
-          {t('common.round')} {match.round_number}
+          {recordedLabel ?? '\u00a0'}
         </span>
         <StatusBadge status={match.status} />
       </div>
@@ -155,11 +160,13 @@ function TeamLabel({
   team,
   alignEnd = false,
 }: {
-  team: { name: string; color: string; players?: { name: string; rating?: number }[] }
+  team: {
+    name: string
+    color: string
+    players?: { name: string; pool_player_id?: string; rating?: number }[]
+  }
   alignEnd?: boolean
 }) {
-  const playerNames = (team.players ?? []).map((player) => player.name)
-
   return (
     <div
       className={`min-w-0 rounded-lg bg-green-50 px-3 py-2.5 sm:flex-1 sm:bg-transparent sm:px-0 sm:py-0 ${
@@ -169,7 +176,10 @@ function TeamLabel({
       <TeamNameWithPlayers
         name={team.name}
         color={team.color}
-        playerNames={playerNames}
+        players={(team.players ?? []).map((player) => ({
+          name: player.name,
+          poolPlayerId: player.pool_player_id,
+        }))}
         alignEnd={alignEnd}
       />
     </div>

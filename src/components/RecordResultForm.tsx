@@ -63,6 +63,7 @@ export function RecordResultForm({ match, editing = false, onDone }: RecordResul
       queryClient.invalidateQueries({ queryKey: ['matches', selectedSeason?.id] })
       queryClient.invalidateQueries({ queryKey: ['player-rankings'] })
       queryClient.invalidateQueries({ queryKey: ['player-pool'] })
+      queryClient.invalidateQueries({ queryKey: ['player-profile'] })
       setError(null)
       onDone?.()
     },

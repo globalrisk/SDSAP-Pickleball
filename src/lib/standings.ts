@@ -9,6 +9,7 @@ interface HeadToHeadResult {
 interface TeamStats {
   team: Team
   playerNames: string[]
+  players: { name: string; poolPlayerId: string }[]
   played: number
   wins: number
   losses: number
@@ -77,6 +78,10 @@ export function computeStandings(
       {
         team,
         playerNames: team.players.map((player) => player.name),
+        players: team.players.map((player) => ({
+          name: player.name,
+          poolPlayerId: player.pool_player_id,
+        })),
         played: 0,
         wins: 0,
         losses: 0,

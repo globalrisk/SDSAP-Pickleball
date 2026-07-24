@@ -1,16 +1,20 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   archiveSeason,
+  createManyTeamsWithPlayers,
   createPoolPlayer,
   createSeason,
   createTeamWithPlayers,
   deletePoolPlayer,
   fetchMatches,
+  resetSeasonTeams,
   saveTeamWithPlayers,
   updatePoolPlayer,
 } from '../lib/api'
+import { generateBalancedTeams } from '../lib/balanceTeams'
 import { roundRating } from '../lib/ratings'
 import { ArchivedSeasonBanner } from '../components/ArchivedSeasonBanner'
 import { ErrorState, PageHeader, SetupBanner } from '../components/Layout'
@@ -92,7 +96,9 @@ function PoolPlayerRow({
         {isAssigned ? t('pool.assigned') : t('pool.available')}
       </span>
       <span className="shrink-0 rounded-full bg-blue-100 px-2.5 py-1 text-xs font-medium text-blue-800">
-        {t('pool.ratingBadge', { rating: roundRating(player.rating) })}
+        <Link to={`/players/${player.id}`} className="hover:underline">
+          {t('pool.ratingBadge', { rating: roundRating(player.rating) })}
+        </Link>
       </span>
       <button
         type="button"
@@ -348,6 +354,36 @@ export function SetupPage() {
       setSaved(t('setup.createTeamFailed', { message: err.message })),
   })
 
+  const balanceTeamsMutation = useMutation({
+    mutationFn: (payload: {
+      name: string
+      color: string
+      poolPlayerIds: [string, string]
+    }[]) => createManyTeamsWithPlayers(selectedSeason!.id, payload),
+    onSuccess: (count) => {
+      queryClient.invalidateQueries({ queryKey: ['teams'] })
+      queryClient.invalidateQueries({ queryKey: ['teams-with-players'] })
+      queryClient.invalidateQueries({ queryKey: ['assigned-pool-players'] })
+      setSaved(t('setup.balancedTeamsCreated', { count }))
+    },
+    onError: (err: Error) =>
+      setSaved(t('setup.balancedTeamsFailed', { message: err.message })),
+  })
+
+  const resetTeamsMutation = useMutation({
+    mutationFn: (payload: {
+      name: string
+      color: string
+      poolPlayerIds: [string, string]
+    }[]) => resetSeasonTeams(selectedSeason!.id, payload),
+    onSuccess: (count) => {
+      invalidateSeasonData()
+      setSaved(t('setup.resetTeamsSuccess', { count }))
+    },
+    onError: (err: Error) =>
+      setSaved(t('setup.resetTeamsFailed', { message: err.message })),
+  })
+
   function handleArchiveSeason() {
     if (!activeSeason) return
     if (!confirm(t('setup.archiveConfirm', { name: activeSeason.name, count: recordedCount }))) {
@@ -379,6 +415,97 @@ export function SetupPage() {
       color: pickNextTeamColor((teams ?? []).map((team) => team.color)),
       poolPlayerIds: [newTeam.poolPlayerId1, newTeam.poolPlayerId2],
     })
+  }
+
+  function handleGenerateBalancedTeams() {
+    if (!selectedSeason) return
+    if (availablePool.length < 2 || availablePool.length % 2 !== 0) {
+      setSaved(t('setup.balancedTeamsNeedEven'))
+      return
+    }
+
+    const balanced = generateBalancedTeams(
+      availablePool.map((player) => ({
+        id: player.id,
+        name: player.name,
+        rating: player.rating,
+      })),
+    )
+
+    const preview = balanced
+      .map(
+        (team, index) =>
+          `${index + 1}. ${team.playerNames[0]} + ${team.playerNames[1]} (${roundRating(team.teamRating / 2)} avg)`,
+      )
+      .join('\n')
+
+    if (!confirm(`${t('setup.balancedTeamsConfirm', { count: balanced.length })}\n\n${preview}`)) {
+      return
+    }
+
+    const usedColors = (teams ?? []).map((team) => team.color)
+    const payloads = balanced.map((team) => {
+      const color = pickNextTeamColor(usedColors)
+      usedColors.push(color)
+      return {
+        name: `${team.playerNames[0]} / ${team.playerNames[1]}`,
+        color,
+        poolPlayerIds: team.poolPlayerIds,
+      }
+    })
+
+    balanceTeamsMutation.mutate(payloads)
+  }
+
+  function handleResetAndRebalanceTeams() {
+    if (!selectedSeason) return
+    const roster = (teams ?? []).flatMap((team) => team.players)
+    const uniqueIds = [...new Set(roster.map((player) => player.pool_player_id))]
+    const ratedPlayers = uniqueIds
+      .map((id) => pool.find((player) => player.id === id))
+      .filter((player): player is NonNullable<typeof player> => player != null)
+      .map((player) => ({
+        id: player.id,
+        name: player.name,
+        rating: player.rating,
+      }))
+
+    if (ratedPlayers.length < 2 || ratedPlayers.length % 2 !== 0) {
+      setSaved(t('setup.resetTeamsNeedEven'))
+      return
+    }
+
+    const balanced = generateBalancedTeams(ratedPlayers)
+    const preview = balanced
+      .map(
+        (team, index) =>
+          `${index + 1}. ${team.playerNames[0]} + ${team.playerNames[1]} (${roundRating(team.teamRating / 2)} avg)`,
+      )
+      .join('\n')
+
+    const matchCount = (activeSeasonMatches ?? []).length
+    const confirmMessage =
+      matchCount > 0
+        ? t('setup.resetTeamsConfirmWithMatches', {
+            count: balanced.length,
+            matches: matchCount,
+          })
+        : t('setup.resetTeamsConfirm', { count: balanced.length })
+
+    if (!confirm(`${confirmMessage}\n\n${preview}`)) return
+
+    const usedColors: string[] = []
+    const payloads = balanced.map((team) => {
+      const color = pickNextTeamColor(usedColors)
+      usedColors.push(color)
+      return {
+        name: `${team.playerNames[0]} / ${team.playerNames[1]}`,
+        color,
+        poolPlayerIds: team.poolPlayerIds,
+      }
+    })
+
+    resetTeamsMutation.mutate(payloads)
   }
 
   function handleDeletePoolPlayer(id: string, name: string) {
@@ -503,7 +630,53 @@ export function SetupPage() {
           {availablePool.length < 2 && (
             <p className="mt-2 text-sm text-amber-700">{t('setup.notEnoughPlayers')}</p>
           )}
-          <form onSubmit={handleCreateTeam} className="mt-4 space-y-3">
+
+          <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-4">
+            <h3 className="text-sm font-semibold text-blue-900">
+              {t('setup.balancedTeamsTitle')}
+            </h3>
+            <p className="mt-1 text-sm text-blue-800">{t('setup.balancedTeamsDescription')}</p>
+            {availablePool.length % 2 !== 0 && availablePool.length > 0 && (
+              <p className="mt-2 text-sm text-amber-700">{t('setup.balancedTeamsNeedEven')}</p>
+            )}
+            <button
+              type="button"
+              onClick={handleGenerateBalancedTeams}
+              disabled={
+                balanceTeamsMutation.isPending ||
+                resetTeamsMutation.isPending ||
+                availablePool.length < 2 ||
+                availablePool.length % 2 !== 0
+              }
+              className="mt-3 min-h-11 w-full rounded-lg bg-blue-600 px-4 py-3 text-sm font-medium text-white hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 sm:w-auto sm:py-2"
+            >
+              {balanceTeamsMutation.isPending
+                ? t('setup.balancedTeamsGenerating')
+                : t('setup.balancedTeamsButton', { count: Math.floor(availablePool.length / 2) })}
+            </button>
+            {(teams ?? []).length > 0 && (
+              <button
+                type="button"
+                onClick={handleResetAndRebalanceTeams}
+                disabled={
+                  resetTeamsMutation.isPending ||
+                  balanceTeamsMutation.isPending ||
+                  createTeamMutation.isPending
+                }
+                className="mt-2 min-h-11 w-full rounded-lg border border-blue-300 bg-white px-4 py-3 text-sm font-medium text-blue-800 hover:bg-blue-50 active:bg-blue-100 disabled:opacity-50 sm:w-auto sm:py-2"
+              >
+                {resetTeamsMutation.isPending
+                  ? t('setup.resetTeamsWorking')
+                  : t('setup.resetTeamsButton')}
+              </button>
+            )}
+            {(teams ?? []).length > 0 && (
+              <p className="mt-2 text-xs text-blue-700">{t('setup.resetTeamsHint')}</p>
+            )}
+          </div>
+
+          <form onSubmit={handleCreateTeam} className="mt-6 space-y-3 border-t border-green-100 pt-6">
+            <p className="text-sm font-medium text-green-900">{t('setup.createTeamManual')}</p>
             <input
               value={newTeam.name}
               onChange={(e) => setNewTeam((prev) => ({ ...prev, name: e.target.value }))}

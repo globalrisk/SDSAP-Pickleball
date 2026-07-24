@@ -1,5 +1,7 @@
+import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { DashboardHighlights } from '../components/DashboardHighlights'
 import { MatchCard } from '../components/MatchCard'
 import { ArchivedSeasonBanner } from '../components/ArchivedSeasonBanner'
 import { ErrorState, PageHeader, SetupBanner } from '../components/Layout'
@@ -8,6 +10,7 @@ import { useSeason } from '../context/SeasonContext'
 import { useMatches } from '../hooks/useMatches'
 import { useStandings } from '../hooks/useStandings'
 import { useTeamsWithPlayers } from '../hooks/useTeams'
+import { computeLeagueHighlights } from '../lib/engagement'
 
 export function Dashboard() {
   const { t } = useTranslation()
@@ -15,6 +18,11 @@ export function Dashboard() {
   const { standings, isError, error } = useStandings()
   const { data: matches } = useMatches()
   const { data: teams } = useTeamsWithPlayers()
+
+  const highlights = useMemo(
+    () => computeLeagueHighlights(matches ?? []),
+    [matches],
+  )
 
   if (isError) return <ErrorState message={(error as Error).message} />
 
@@ -24,8 +32,7 @@ export function Dashboard() {
 
   const recent = (matches ?? [])
     .filter((m) => m.status === 'completed' || m.status === 'forfeit')
-    .slice(-3)
-    .reverse()
+    .slice(0, 3)
 
   return (
     <div>
@@ -43,6 +50,8 @@ export function Dashboard() {
             : undefined
         }
       />
+
+      <DashboardHighlights highlights={highlights} />
 
       <section className="mb-8">
         <div className="mb-3 flex items-center justify-between">

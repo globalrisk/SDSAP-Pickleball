@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { roundRating } from '../lib/ratings'
 import type { PlayerRankingRow } from '../types'
@@ -47,6 +48,7 @@ export function PlayerRankingsTable({ rows }: PlayerRankingsTableProps) {
             <th className="px-4 py-3">{t('rankings.player')}</th>
             <th className="px-4 py-3 text-right">{t('rankings.rating')}</th>
             <th className="hidden px-4 py-3 text-right sm:table-cell">{t('rankings.rd')}</th>
+            <th className="w-8 px-2 py-3" aria-hidden />
           </tr>
         </thead>
         <tbody>
@@ -54,19 +56,34 @@ export function PlayerRankingsTable({ rows }: PlayerRankingsTableProps) {
             const podium = getPodiumStyles(row.rank)
             return (
               <tr key={row.id} className={`border-b border-green-50 last:border-0 ${podium.row}`}>
-                <td className="px-4 py-3">
-                  <span
-                    className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${podium.rankBadge}`}
+                <td className="p-0" colSpan={5}>
+                  <Link
+                    to={`/players/${row.id}`}
+                    className="flex min-h-12 items-center gap-0 active:bg-green-50/80"
+                    aria-label={t('rankings.viewProfile', { name: row.name })}
                   >
-                    {row.rank}
-                  </span>
-                </td>
-                <td className="px-4 py-3 font-semibold text-gray-900">{row.name}</td>
-                <td className="px-4 py-3 text-right font-bold text-green-800">
-                  {roundRating(row.rating)}
-                </td>
-                <td className="hidden px-4 py-3 text-right text-gray-600 sm:table-cell">
-                  {roundRating(row.ratingDeviation)}
+                    <span className="px-4 py-3">
+                      <span
+                        className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${podium.rankBadge}`}
+                      >
+                        {row.rank}
+                      </span>
+                    </span>
+                    <span className="min-w-0 flex-1 px-4 py-3 font-semibold text-green-800">
+                      {row.name}
+                    </span>
+                    <span className="w-16 shrink-0 px-2 py-3 text-right font-bold text-green-800 sm:w-20 sm:px-4">
+                      {roundRating(row.rating)}
+                    </span>
+                    <span className="hidden w-20 shrink-0 px-4 py-3 text-right text-gray-600 sm:block">
+                      {roundRating(row.ratingDeviation)}
+                    </span>
+                    <span className="shrink-0 px-3 py-3 text-green-600" aria-hidden>
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                      </svg>
+                    </span>
+                  </Link>
                 </td>
               </tr>
             )
