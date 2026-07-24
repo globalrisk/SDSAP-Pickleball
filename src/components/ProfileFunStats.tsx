@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { formatSwingDelta } from '../lib/engagement'
+import { formatMatchDate } from '../lib/formatDate'
 import { roundRating } from '../lib/ratings'
 import type { PlayerFunStats } from '../types'
 
@@ -8,11 +9,36 @@ interface ProfileFunStatsProps {
 }
 
 export function ProfileFunStats({ stats }: ProfileFunStatsProps) {
-  const { t } = useTranslation()
-  const { currentStreak, bestPartner, toughestOpponent, biggestSwing } = stats
+  const { t, i18n } = useTranslation()
+  const { currentStreak, bestPartner, biggestSwing } = stats
 
-  if (!currentStreak && !bestPartner && !toughestOpponent && !biggestSwing) {
+  if (!currentStreak && !bestPartner && !biggestSwing) {
     return null
+  }
+
+  const swingDetailParts: string[] = []
+  if (biggestSwing) {
+    if (biggestSwing.result) {
+      swingDetailParts.push(
+        biggestSwing.result === 'W'
+          ? t('profile.swingResultWin')
+          : t('profile.swingResultLoss'),
+      )
+    }
+    if (biggestSwing.scoreLabel) swingDetailParts.push(biggestSwing.scoreLabel)
+    if (biggestSwing.partnerName) {
+      swingDetailParts.push(
+        t('profile.withPartner', { name: biggestSwing.partnerName }),
+      )
+    }
+    if (biggestSwing.opponentNames.length > 0) {
+      swingDetailParts.push(
+        t('profile.vsOpponents', { names: biggestSwing.opponentNames.join(', ') }),
+      )
+    }
+    if (biggestSwing.seasonName) swingDetailParts.push(biggestSwing.seasonName)
+    const dateLabel = formatMatchDate(biggestSwing.resultRecordedAt, i18n.language)
+    if (dateLabel) swingDetailParts.push(dateLabel)
   }
 
   return (
@@ -43,21 +69,15 @@ export function ProfileFunStats({ stats }: ProfileFunStatsProps) {
             })}
           />
         )}
-        {toughestOpponent && (
-          <FunStat
-            label={t('profile.toughestOpponentLabel')}
-            value={toughestOpponent.name}
-            detail={t('profile.toughestOpponentDetail', {
-              losses: toughestOpponent.lossesAgainst,
-              played: toughestOpponent.played,
-            })}
-          />
-        )}
         {biggestSwing && (
           <FunStat
             label={t('profile.biggestSwingLabel')}
             value={formatSwingDelta(biggestSwing.delta)}
-            detail={t('profile.biggestSwingDetail')}
+            detail={
+              swingDetailParts.length > 0
+                ? swingDetailParts.join(' · ')
+                : t('profile.biggestSwingDetail')
+            }
             accent={
               roundRating(biggestSwing.delta) > 0
                 ? 'up'

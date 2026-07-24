@@ -56,6 +56,48 @@
     "archivedBannerTitle": "Archived season",
     "archivedBannerMessage": "{{name}} is archived. Results are read-only."
   },
+  "recap": {
+    "title": "Season Recap",
+    "subtitle": "Awards, upsets, and bragging rights for {{season}}",
+    "eyebrow": "Season wrap-up",
+    "footer": "SDSAP Pickleball League",
+    "backHome": "Back to dashboard",
+    "bannerLink": "View season recap →",
+    "dashboardTitle": "Season recap is ready",
+    "dashboardMessage": "Champions, awards, and the biggest plot twists from the season.",
+    "dashboardLink": "Open season recap →",
+    "partialNotice": "Partial recap: this archived season still has unplayed fixtures.",
+    "champion": "Champions",
+    "runnerUp": "Runner-up",
+    "mvp": "Season MVP",
+    "mvpDetail": "{{wins}} wins in {{played}} ({{winRate}}%) · rating {{delta}}",
+    "mvpChampBonus": "champ-team bonus",
+    "mvpMethod": "MVP mix: 50% win rate · 30% rating climb · 20% champion-team bonus",
+    "mostImproved": "Most improved",
+    "mostImprovedDetail": "{{delta}} rating across {{played}} matches",
+    "bestPartnership": "Best partnership",
+    "bestPartnershipDetail": "{{players}} · {{wins}}–{{losses}}",
+    "biggestUpset": "Biggest upset",
+    "upsetTitle": "{{winner}} stunned {{loser}}",
+    "upsetDetail": "Only a {{percent}}% chance · {{score}}{{date}}",
+    "none": "Still brewing…"
+  },
+  "rivalries": {
+    "title": "Rivalries",
+    "subtitle": "Doubles head-to-head — each opposing player counts as one meeting",
+    "nemesis": "Nemesis",
+    "nemesisDetail": "{{losses}} losses in {{played}} meetings",
+    "favorite": "Favorite opponent",
+    "favoriteDetail": "{{wins}} wins in {{played}} meetings",
+    "needTwoMeetings": "Need 2+ meetings to unlock",
+    "h2hLead": "{{player}} leads {{opponent}} {{wins}}–{{losses}}",
+    "h2hTrail": "{{opponent}} leads {{player}} {{wins}}–{{losses}}",
+    "h2hTied": "{{player}} and {{opponent}} are tied {{wins}}–{{losses}}",
+    "streak": "Best win streak: {{count}}",
+    "latest": "Latest: {{detail}}",
+    "latestWin": "Win",
+    "latestLoss": "Loss"
+  },
   "dashboard": {
     "title": "SDSAP League",
     "subtitle": "6 teams · 12 players · Round robin",
@@ -66,13 +108,14 @@
     "recentResults": "Recent Results",
     "noUpcoming": "No unplayed matches.",
     "noResults": "No results yet.",
-    "highlightsTitle": "League buzz",
-    "hotStreakLabel": "On fire",
-    "hotStreakDetail": "{{count}}-match win streak",
-    "mustWatchLabel": "Must-watch",
-    "mustWatchDetail": "{{home}} {{percent}}% win chance — toss-up",
-    "upsetLabel": "Upset watch",
-    "upsetDetail": "Won with {{percent}}% chance · {{score}}"
+    "highlightsTitle": "League gossip",
+    "hotStreakLabel": "Too hot to handle",
+    "hotStreakDetail": "Won {{count}} straight — somebody stop them",
+    "mustWatchLabel": "Popcorn match",
+    "mustWatchDetail": "{{home}} at {{percent}}% — basically a coin flip",
+    "upsetLabel": "Plot twist",
+    "upsetTitle": "{{winner}} stunned {{loser}}",
+    "upsetDetail": "Only a {{percent}}% chance · {{score}}{{date}}"
   },
   "matches": {
     "title": "Matches",
@@ -109,13 +152,63 @@
   },
   "rankings": {
     "title": "Player Rankings",
-    "subtitle": "TrueSkill doubles ratings · tap a player for profile & history",
+    "subtitle": "TrueSkill doubles ratings · earned nicknames from your record",
     "rank": "Rank",
     "player": "Player",
     "rating": "Rating",
     "rd": "Confidence",
     "viewProfile": "View {{name}}'s profile",
     "empty": "No players in the pool yet."
+  },
+  "titles": {
+    "on_fire": {
+      "name": "On Fire",
+      "why": "Won {{count}} straight — bring a fire extinguisher"
+    },
+    "ice_cold": {
+      "name": "Cold Snap",
+      "why": "Lost {{count}} straight — currently accepting warm hugs"
+    },
+    "silver_forever": {
+      "name": "Silver Magnet",
+      "why": "Finished 2nd in {{count}} seasons — gold keeps escaping"
+    },
+    "almost_there": {
+      "name": "So Close",
+      "why": "Runner-up {{count}}× — one tiny step from the trophy"
+    },
+    "giant_killer": {
+      "name": "Giant Slayer",
+      "why": "Pulled off {{count}} underdog wins"
+    },
+    "climbing": {
+      "name": "To the Moon",
+      "why": "Rating climbed {{delta}} and is still going"
+    },
+    "free_fall": {
+      "name": "Tumbling Down",
+      "why": "Rating moved {{delta}} — mind the step"
+    },
+    "loyal_duo": {
+      "name": "Partner in Crime",
+      "why": "With {{partner}}: {{wins}} wins from {{played}} matches"
+    },
+    "closer": {
+      "name": "Cardiac Kid",
+      "why": "Survived {{count}} nail-biters by 2 points or fewer"
+    },
+    "blowout": {
+      "name": "Steamroller",
+      "why": "Flattened the opposition {{count}} times by 5+ points"
+    },
+    "iron": {
+      "name": "Always Shows Up",
+      "why": "{{count}} matches played — attendance: flawless"
+    },
+    "wildcard": {
+      "name": "Chaos Agent",
+      "why": "One match swung the rating by {{swing}} points"
+    }
   },
   "profile": {
     "title": "Player Profile",
@@ -127,16 +220,18 @@
     "winRate": "Win rate",
     "formTitle": "Recent form",
     "confidence": "Confidence band ±{{rd}}",
-    "funStatsTitle": "Fun stats",
-    "streakLabel": "Current streak",
+    "funStatsTitle": "Bragging rights",
+    "streakLabel": "Current vibe",
     "streakValueWin": "{{count}}-game win streak",
     "streakValueLoss": "{{count}}-game losing streak",
-    "bestPartnerLabel": "Best partner",
+    "bestPartnerLabel": "Partner in crime",
     "bestPartnerDetail": "{{wins}}–{{losses}} together",
-    "toughestOpponentLabel": "Toughest opponent",
+    "toughestOpponentLabel": "Nemesis",
     "toughestOpponentDetail": "{{losses}} losses in {{played}} meetings",
-    "biggestSwingLabel": "Biggest swing",
+    "biggestSwingLabel": "Wildest rating swing",
     "biggestSwingDetail": "Largest single-match rating change",
+    "swingResultWin": "Win",
+    "swingResultLoss": "Loss",
     "historyTitle": "Rating history",
     "matchesTitle": "Match log",
     "noHistory": "No rating history yet. Play a match to start the chart.",

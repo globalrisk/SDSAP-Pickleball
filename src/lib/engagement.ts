@@ -21,6 +21,12 @@ export interface OpponentStat {
 
 export interface SwingStat {
   delta: number
+  result: 'W' | 'L' | null
+  partnerName: string | null
+  opponentNames: string[]
+  scoreLabel: string | null
+  seasonName: string | null
+  resultRecordedAt: string | null
 }
 
 export interface PlayerFunStats {
@@ -44,7 +50,9 @@ export interface ClosestMatchHighlight {
 export interface UpsetHighlight {
   match: MatchWithTeams
   winnerName: string
+  loserName: string
   winnerPercent: number
+  scoreLabel: string | null
 }
 
 export interface LeagueHighlights {
@@ -154,7 +162,15 @@ export function computePlayerFunStats(
     if (!curr.matchId) continue
     const delta = curr.rating - prev.rating
     if (!biggestSwing || Math.abs(delta) > Math.abs(biggestSwing.delta)) {
-      biggestSwing = { delta }
+      biggestSwing = {
+        delta,
+        result: curr.result,
+        partnerName: curr.partnerName,
+        opponentNames: curr.opponentNames,
+        scoreLabel: curr.scoreLabel,
+        seasonName: curr.seasonName,
+        resultRecordedAt: curr.resultRecordedAt,
+      }
     }
   }
 
@@ -260,8 +276,13 @@ export function computeLeagueHighlights(
     const winnerPercent = Math.round((homeWon ? probability.home : probability.away) * 100)
     if (winnerPercent >= 45) continue
     const winnerName = homeWon ? match.home_team.name : match.away_team.name
+    const loserName = homeWon ? match.away_team.name : match.home_team.name
+    const scoreLabel =
+      match.home_score != null && match.away_score != null
+        ? `${match.home_score}-${match.away_score}`
+        : null
     if (!recentUpset || winnerPercent < recentUpset.winnerPercent) {
-      recentUpset = { match, winnerName, winnerPercent }
+      recentUpset = { match, winnerName, loserName, winnerPercent, scoreLabel }
     }
   }
 

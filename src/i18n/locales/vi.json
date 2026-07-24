@@ -56,6 +56,48 @@
     "archivedBannerTitle": "Mùa giải đã kết thúc",
     "archivedBannerMessage": "{{name}} đã được lưu trữ. Kết quả chỉ xem, không chỉnh sửa."
   },
+  "recap": {
+    "title": "Tổng kết mùa",
+    "subtitle": "Giải thưởng, ngựa ô và quyền khoe khoang cho {{season}}",
+    "eyebrow": "Gói tổng kết",
+    "footer": "Giải Pickleball SDSAP",
+    "backHome": "Về trang chủ",
+    "bannerLink": "Xem tổng kết mùa →",
+    "dashboardTitle": "Tổng kết mùa đã sẵn sàng",
+    "dashboardMessage": "Nhà vô địch, giải thưởng và những cú twist đáng nhớ của mùa giải.",
+    "dashboardLink": "Mở tổng kết mùa →",
+    "partialNotice": "Tổng kết chưa đủ: mùa đã lưu trữ vẫn còn trận chưa đấu.",
+    "champion": "Vô địch",
+    "runnerUp": "Á quân",
+    "mvp": "MVP mùa giải",
+    "mvpDetail": "{{wins}} thắng / {{played}} trận ({{winRate}}%) · điểm {{delta}}",
+    "mvpChampBonus": "thưởng đội vô địch",
+    "mvpMethod": "Cách tính MVP: 50% tỷ lệ thắng · 30% tăng điểm · 20% thưởng đội vô địch",
+    "mostImproved": "Tiến bộ nhất",
+    "mostImprovedDetail": "{{delta}} điểm sau {{played}} trận",
+    "bestPartnership": "Cặp đôi hay nhất",
+    "bestPartnershipDetail": "{{players}} · {{wins}}–{{losses}}",
+    "biggestUpset": "Ngựa ô lớn nhất",
+    "upsetTitle": "{{winner}} hạ đẹp {{loser}}",
+    "upsetDetail": "Cửa chỉ {{percent}}% · {{score}}{{date}}",
+    "none": "Chưa có…"
+  },
+  "rivalries": {
+    "title": "Đối đầu",
+    "subtitle": "Đối đầu đôi — mỗi đối thủ trong trận tính một lần gặp",
+    "nemesis": "Khắc tinh",
+    "nemesisDetail": "Thua {{losses}} trên {{played}} lần gặp",
+    "favorite": "Đối thủ ưa thích",
+    "favoriteDetail": "Thắng {{wins}} trên {{played}} lần gặp",
+    "needTwoMeetings": "Cần gặp từ 2 lần trở lên",
+    "h2hLead": "{{player}} dẫn {{opponent}} {{wins}}–{{losses}}",
+    "h2hTrail": "{{opponent}} dẫn {{player}} {{wins}}–{{losses}}",
+    "h2hTied": "{{player}} và {{opponent}} hòa {{wins}}–{{losses}}",
+    "streak": "Chuỗi thắng dài nhất: {{count}}",
+    "latest": "Gần nhất: {{detail}}",
+    "latestWin": "Thắng",
+    "latestLoss": "Thua"
+  },
   "dashboard": {
     "title": "Giải SDSAP",
     "subtitle": "6 đội · 12 người · Vòng tròn",
@@ -66,13 +108,14 @@
     "recentResults": "Kết quả gần đây",
     "noUpcoming": "Không có trận chưa đấu.",
     "noResults": "Chưa có kết quả.",
-    "highlightsTitle": "Điểm nóng",
+    "highlightsTitle": "Tin nóng",
     "hotStreakLabel": "Đang cháy",
-    "hotStreakDetail": "Chuỗi {{count}} trận thắng",
-    "mustWatchLabel": "Đáng xem",
-    "mustWatchDetail": "{{home}} {{percent}}% thắng — ngang tài ngang sức",
-    "upsetLabel": "Bất ngờ",
-    "upsetDetail": "Thắng với {{percent}}% cơ hội · {{score}}"
+    "hotStreakDetail": "Thắng liền {{count}} trận",
+    "mustWatchLabel": "Trận đáng xem",
+    "mustWatchDetail": "{{home}} cửa {{percent}}% — ngang ngửa",
+    "upsetLabel": "Ngựa ô",
+    "upsetTitle": "{{winner}} hạ {{loser}}",
+    "upsetDetail": "Cửa chỉ {{percent}}% · {{score}}{{date}}"
   },
   "matches": {
     "title": "Trận đấu",
@@ -109,13 +152,63 @@
   },
   "rankings": {
     "title": "Xếp hạng người chơi",
-    "subtitle": "Điểm TrueSkill đôi · chạm tên để xem hồ sơ & lịch sử",
+    "subtitle": "Xếp hạng TrueSkill đôi · biệt danh theo thành tích",
     "rank": "Hạng",
     "player": "Người chơi",
     "rating": "Điểm",
-    "rd": "Độ tin cậy",
+    "rd": "Độ tin",
     "viewProfile": "Xem hồ sơ {{name}}",
     "empty": "Chưa có người chơi trong danh sách."
+  },
+  "titles": {
+    "on_fire": {
+      "name": "Đang cháy",
+      "why": "Thắng liền {{count}} trận"
+    },
+    "ice_cold": {
+      "name": "Đóng băng",
+      "why": "Thua liền {{count}} trận"
+    },
+    "silver_forever": {
+      "name": "Vua về nhì",
+      "why": "Đã về nhì {{count}} mùa"
+    },
+    "almost_there": {
+      "name": "Thiếu chút nữa",
+      "why": "Về nhì {{count}} lần, vẫn chưa chạm cúp"
+    },
+    "giant_killer": {
+      "name": "Khắc tinh cửa trên",
+      "why": "Đã lật kèo {{count}} trận"
+    },
+    "climbing": {
+      "name": "Lên như diều",
+      "why": "Điểm đã tăng {{delta}}"
+    },
+    "free_fall": {
+      "name": "Tụt không phanh",
+      "why": "Điểm đã giảm {{delta}}"
+    },
+    "loyal_duo": {
+      "name": "Cạ cứng",
+      "why": "Đánh cặp với {{partner}}: thắng {{wins}}/{{played}} trận"
+    },
+    "closer": {
+      "name": "Vua sát nút",
+      "why": "Đã thắng {{count}} trận với cách biệt không quá 2 điểm"
+    },
+    "blowout": {
+      "name": "Vua áp đảo",
+      "why": "Đã thắng đậm {{count}} trận với cách biệt từ 5 điểm"
+    },
+    "iron": {
+      "name": "Cày ải",
+      "why": "Đã ra sân {{count}} trận"
+    },
+    "wildcard": {
+      "name": "Ẩn số",
+      "why": "Một trận từng làm điểm biến động tới {{swing}}"
+    }
   },
   "profile": {
     "title": "Hồ sơ người chơi",
@@ -126,17 +219,19 @@
     "record": "Thắng-thua",
     "winRate": "Tỷ lệ thắng",
     "formTitle": "Phong độ gần đây",
-    "confidence": "Độ tin cậy ±{{rd}}",
-    "funStatsTitle": "Thống kê vui",
-    "streakLabel": "Chuỗi hiện tại",
-    "streakValueWin": "Chuỗi {{count}} trận thắng",
-    "streakValueLoss": "Chuỗi {{count}} trận thua",
-    "bestPartnerLabel": "Đồng đội hợp nhất",
-    "bestPartnerDetail": "{{wins}}–{{losses}} khi chơi cùng",
-    "toughestOpponentLabel": "Đối thủ khó nhất",
-    "toughestOpponentDetail": "Thua {{losses}}/{{played}} lần gặp",
-    "biggestSwingLabel": "Biến động lớn nhất",
+    "confidence": "Độ tin ±{{rd}}",
+    "funStatsTitle": "Góc vui",
+    "streakLabel": "Chuỗi trận",
+    "streakValueWin": "Thắng liền {{count}} trận",
+    "streakValueLoss": "Thua liền {{count}} trận",
+    "bestPartnerLabel": "Đánh cặp hợp nhất",
+    "bestPartnerDetail": "Cùng nhau {{wins}}–{{losses}}",
+    "toughestOpponentLabel": "Khắc tinh",
+    "toughestOpponentDetail": "Thua {{losses}} trên {{played}} lần gặp",
+    "biggestSwingLabel": "Nhảy điểm mạnh nhất",
     "biggestSwingDetail": "Thay đổi điểm lớn nhất trong một trận",
+    "swingResultWin": "Thắng",
+    "swingResultLoss": "Thua",
     "historyTitle": "Lịch sử điểm",
     "matchesTitle": "Nhật ký trận",
     "noHistory": "Chưa có lịch sử điểm. Đấu một trận để bắt đầu biểu đồ.",
@@ -147,8 +242,8 @@
     "legendWin": "Thắng",
     "legendLoss": "Thua",
     "legendStart": "Bắt đầu",
-    "withPartner": "cùng {{name}}",
-    "vsOpponents": "vs {{names}}"
+    "withPartner": "cặp với {{name}}",
+    "vsOpponents": "gặp {{names}}"
   },
   "setup": {
     "title": "Cài đặt",

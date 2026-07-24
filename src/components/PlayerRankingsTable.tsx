@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { PlayerTitleBadge } from './PlayerTitleBadge'
 import { roundRating } from '../lib/ratings'
 import type { PlayerRankingRow } from '../types'
 
@@ -70,7 +71,8 @@ export function PlayerRankingsTable({ rows }: PlayerRankingsTableProps) {
                       </span>
                     </span>
                     <span className="min-w-0 flex-1 px-4 py-3 font-semibold text-green-800">
-                      {row.name}
+                      <span className="block">{row.name}</span>
+                      {row.title ? <PlayerTitleBadge title={row.title} /> : null}
                     </span>
                     <span className="w-16 shrink-0 px-2 py-3 text-right font-bold text-green-800 sm:w-20 sm:px-4">
                       {roundRating(row.rating)}

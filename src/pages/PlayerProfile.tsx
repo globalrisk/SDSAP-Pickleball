@@ -1,7 +1,9 @@
 import { Link, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { ErrorState, PageHeader, SetupBanner } from '../components/Layout'
+import { PlayerTitleBadge } from '../components/PlayerTitleBadge'
 import { ProfileFunStats } from '../components/ProfileFunStats'
+import { ProfileRivalries } from '../components/ProfileRivalries'
 import { RatingHistoryChart } from '../components/RatingHistoryChart'
 import { usePlayerProfile } from '../hooks/usePlayerProfile'
 import { formatMatchDate } from '../lib/formatDate'
@@ -70,6 +72,11 @@ export function PlayerProfilePage() {
         title={profile.name}
         subtitle={t('profile.subtitle', { rank: profile.rank })}
       />
+      {profile.title ? (
+        <div className="mb-6 -mt-2">
+          <PlayerTitleBadge title={profile.title} size="md" showWhy />
+        </div>
+      ) : null}
 
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatCard label={t('profile.rating')} value={String(roundRating(profile.rating))} />
@@ -89,6 +96,7 @@ export function PlayerProfilePage() {
       </div>
 
       <ProfileFunStats stats={profile.funStats} />
+      <ProfileRivalries playerName={profile.name} rivalries={profile.rivalries} />
 
       <section className="mb-6 rounded-xl border border-green-200 bg-white p-4 shadow-sm sm:p-5">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">

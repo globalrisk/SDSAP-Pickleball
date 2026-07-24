@@ -2,13 +2,14 @@ import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import type { LeagueHighlights } from '../lib/engagement'
+import { formatMatchDate } from '../lib/formatDate'
 
 interface DashboardHighlightsProps {
   highlights: LeagueHighlights
 }
 
 export function DashboardHighlights({ highlights }: DashboardHighlightsProps) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { hotStreak, closestMatch, recentUpset } = highlights
 
   if (!hotStreak && !closestMatch && !recentUpset) {
@@ -49,14 +50,20 @@ export function DashboardHighlights({ highlights }: DashboardHighlightsProps) {
         {recentUpset && (
           <HighlightCard
             eyebrow={t('dashboard.upsetLabel')}
-            title={recentUpset.winnerName}
+            title={t('dashboard.upsetTitle', {
+              winner: recentUpset.winnerName,
+              loser: recentUpset.loserName,
+            })}
             detail={t('dashboard.upsetDetail', {
               percent: recentUpset.winnerPercent,
-              score:
-                recentUpset.match.home_score != null &&
-                recentUpset.match.away_score != null
-                  ? `${recentUpset.match.home_score}-${recentUpset.match.away_score}`
-                  : '—',
+              score: recentUpset.scoreLabel ?? '—',
+              date: (() => {
+                const label = formatMatchDate(
+                  recentUpset.match.result_recorded_at,
+                  i18n.language,
+                )
+                return label ? ` · ${label}` : ''
+              })(),
             })}
             to="/matches"
           />

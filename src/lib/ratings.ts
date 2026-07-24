@@ -234,6 +234,7 @@ export function buildRankingRows(
     rating: player.rating,
     ratingDeviation: player.rating_deviation,
     volatility: player.volatility,
+    title: null,
   }))
 }
 

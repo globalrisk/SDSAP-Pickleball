@@ -26,13 +26,18 @@ export function Dashboard() {
 
   if (isError) return <ErrorState message={(error as Error).message} />
 
-  const upcoming = (matches ?? [])
-    .filter((m) => m.status === 'scheduled')
-    .slice(0, 3)
+  const allMatches = matches ?? []
+  const upcoming = allMatches.filter((m) => m.status === 'scheduled').slice(0, 3)
 
-  const recent = (matches ?? [])
+  const recent = allMatches
     .filter((m) => m.status === 'completed' || m.status === 'forfeit')
     .slice(0, 3)
+
+  const seasonComplete =
+    allMatches.length > 0 &&
+    allMatches.every((m) => m.status === 'completed' || m.status === 'forfeit')
+  const showRecap =
+    Boolean(selectedSeason) && (!isSelectedSeasonActive || seasonComplete)
 
   return (
     <div>
@@ -50,6 +55,19 @@ export function Dashboard() {
             : undefined
         }
       />
+
+      {showRecap && selectedSeason ? (
+        <div className="mb-6 rounded-xl border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-900">
+          <p className="font-semibold">{t('recap.dashboardTitle')}</p>
+          <p className="mt-1">{t('recap.dashboardMessage')}</p>
+          <Link
+            to={`/seasons/${selectedSeason.id}/recap`}
+            className="mt-2 inline-flex font-semibold text-green-800 underline-offset-2 hover:underline"
+          >
+            {t('recap.dashboardLink')}
+          </Link>
+        </div>
+      ) : null}
 
       <DashboardHighlights highlights={highlights} />
 

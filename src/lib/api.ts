@@ -9,13 +9,24 @@ import {
 } from './ratings'
 import { buildRoundRobinMatches } from './schedule'
 import { computePlayerFunStats } from './engagement'
+import {
+  assignPlayerTitles,
+  buildTitlePlayerStats,
+  type PlayerTitle as AssignedPlayerTitle,
+} from './playerTitles'
+import { buildPlayerMatchEvents } from './playerMatches'
+import { computePlayerRivalries } from './rivalries'
+import { computeSeasonRecap, type RatingHistoryRow } from './seasonRecap'
+import { computeStandings } from './standings'
 import type {
   MatchWithTeams,
   PlayerProfile,
   PlayerRankingRow,
+  PlayerTitle,
   PoolPlayer,
   RatingHistoryPoint,
   Season,
+  SeasonRecap,
   Team,
   TeamWithPlayers,
 } from '../types'
@@ -78,7 +89,228 @@ export async function fetchPlayerRankings(): Promise<PlayerRankingRow[]> {
     .order('rating', { ascending: false })
 
   if (error) throw error
-  return buildRankingRows(data ?? [])
+  const rows = buildRankingRows(data ?? [])
+  const titles = await fetchPlayerTitlesMap()
+  return rows.map((row) => ({
+    ...row,
+    title: titles.get(row.id) ?? null,
+  }))
+}
+
+function toPublicTitle(title: AssignedPlayerTitle | undefined): PlayerTitle | null {
+  if (!title) return null
+  return { id: title.id, whyParams: title.whyParams }
+}
+
+export async function fetchPlayerTitlesMap(): Promise<Map<string, PlayerTitle>> {
+  const { data: pool, error: poolError } = await supabase
+    .from('player_pool')
+    .select('id, name, rating, rating_deviation, initial_rating')
+  if (poolError) throw poolError
+
+  const poolRows = pool ?? []
+  if (poolRows.length === 0) return new Map()
+
+  const ratingById = new Map(
+    poolRows.map((row) => [
+      row.id,
+      { rating: row.rating as number, rd: row.rating_deviation as number },
+    ]),
+  )
+  const nameById = new Map(poolRows.map((row) => [row.id, row.name as string]))
+
+  const { data: historyRows, error: historyError } = await supabase
+    .from('rating_history')
+    .select('id, pool_player_id, match_id, rating, rating_deviation, recorded_at, sequence')
+    .order('sequence')
+  if (historyError) throw historyError
+
+  const { data: matches, error: matchError } = await supabase
+    .from('matches')
+    .select(
+      'id, season_id, status, winner_team_id, home_team_id, away_team_id, home_score, away_score, home_pool_player_ids, away_pool_player_ids, result_recorded_at',
+    )
+    .in('status', ['completed', 'forfeit'])
+  if (matchError) throw matchError
+
+  const { data: teams, error: teamsError } = await supabase
+    .from('teams')
+    .select('id, season_id, name, color, created_at, players(id, name, pool_player_id, team_id, created_at)')
+  if (teamsError) throw teamsError
+
+  const { data: seasons, error: seasonsError } = await supabase
+    .from('seasons')
+    .select('id, status')
+  if (seasonsError) throw seasonsError
+
+  const teamsBySeason = new Map<string, TeamWithPlayers[]>()
+  for (const team of teams ?? []) {
+    const list = teamsBySeason.get(team.season_id) ?? []
+    list.push({
+      ...team,
+      players: [...(team.players ?? [])].sort((a, b) =>
+        a.created_at.localeCompare(b.created_at),
+      ),
+    } as TeamWithPlayers)
+    teamsBySeason.set(team.season_id, list)
+  }
+
+  const matchesBySeason = new Map<string, MatchWithTeams[]>()
+  for (const match of matches ?? []) {
+    const list = matchesBySeason.get(match.season_id) ?? []
+    list.push(match as MatchWithTeams)
+    matchesBySeason.set(match.season_id, list)
+  }
+
+  const seasonFinishes: {
+    seasonId: string
+    ranks: Map<string, number>
+  }[] = []
+
+  for (const season of seasons ?? []) {
+    const seasonTeams = teamsBySeason.get(season.id) ?? []
+    const seasonMatches = matchesBySeason.get(season.id) ?? []
+    const finished = seasonMatches.filter(
+      (m) => m.status === 'completed' || m.status === 'forfeit',
+    )
+    if (seasonTeams.length === 0 || finished.length === 0) continue
+    // Prefer archived seasons; allow active if most fixtures are done
+    const totalFixtures = seasonMatches.length
+    const doneRatio = totalFixtures > 0 ? finished.length / totalFixtures : 0
+    if (season.status !== 'archived' && doneRatio < 0.8) continue
+
+    const standings = computeStandings(seasonTeams, finished)
+    const ranks = new Map<string, number>()
+    for (const row of standings) {
+      for (const player of row.players) {
+        ranks.set(player.poolPlayerId, row.rank)
+      }
+    }
+    seasonFinishes.push({ seasonId: season.id, ranks })
+  }
+
+  const completedMatches = (matches ?? []).filter((m) => m.status === 'completed')
+
+  const matchForTitles = completedMatches.map((match) => {
+    const homeIds = (match.home_pool_player_ids ?? []) as string[]
+    const awayIds = (match.away_pool_player_ids ?? []) as string[]
+    const resolvePlayers = (ids: string[]) =>
+      ids.map((id) => {
+        const skill = ratingById.get(id)
+        return {
+          id,
+          name: nameById.get(id) ?? '?',
+          rating: skill?.rating ?? 1500,
+          rd: skill?.rd ?? 350,
+        }
+      })
+
+    // Fallback to roster if snapshot missing
+    let homePlayers = resolvePlayers(homeIds)
+    let awayPlayers = resolvePlayers(awayIds)
+    if (homePlayers.length === 0 || awayPlayers.length === 0) {
+      const homeTeam = (teams ?? []).find((t) => t.id === match.home_team_id)
+      const awayTeam = (teams ?? []).find((t) => t.id === match.away_team_id)
+      if (homePlayers.length === 0 && homeTeam?.players) {
+        homePlayers = resolvePlayers(homeTeam.players.map((p) => p.pool_player_id))
+      }
+      if (awayPlayers.length === 0 && awayTeam?.players) {
+        awayPlayers = resolvePlayers(awayTeam.players.map((p) => p.pool_player_id))
+      }
+    }
+
+    return {
+      id: match.id,
+      winner_team_id: match.winner_team_id,
+      home_team_id: match.home_team_id,
+      away_team_id: match.away_team_id,
+      home_score: match.home_score,
+      away_score: match.away_score,
+      home_pool_player_ids: match.home_pool_player_ids,
+      away_pool_player_ids: match.away_pool_player_ids,
+      homePlayers,
+      awayPlayers,
+    }
+  })
+
+  const resultByMatchPlayer = new Map<string, 'W' | 'L'>()
+  const partnerByMatchPlayer = new Map<string, string>()
+  const opponentsByMatchPlayer = new Map<string, string[]>()
+
+  for (const match of matchForTitles) {
+    if (!match.winner_team_id) continue
+    const homeIds = match.homePlayers.map((p) => p.id)
+    const awayIds = match.awayPlayers.map((p) => p.id)
+    const homeWon = match.winner_team_id === match.home_team_id
+
+    for (const id of homeIds) {
+      const key = `${match.id}:${id}`
+      resultByMatchPlayer.set(key, homeWon ? 'W' : 'L')
+      partnerByMatchPlayer.set(
+        key,
+        homeIds.filter((x) => x !== id).map((x) => nameById.get(x) ?? '?')[0] ?? '?',
+      )
+      opponentsByMatchPlayer.set(
+        key,
+        awayIds.map((x) => nameById.get(x) ?? '?'),
+      )
+    }
+    for (const id of awayIds) {
+      const key = `${match.id}:${id}`
+      resultByMatchPlayer.set(key, homeWon ? 'L' : 'W')
+      partnerByMatchPlayer.set(
+        key,
+        awayIds.filter((x) => x !== id).map((x) => nameById.get(x) ?? '?')[0] ?? '?',
+      )
+      opponentsByMatchPlayer.set(
+        key,
+        homeIds.map((x) => nameById.get(x) ?? '?'),
+      )
+    }
+  }
+
+  const historyByPlayer = new Map<string, RatingHistoryPoint[]>()
+  for (const row of historyRows ?? []) {
+    const list = historyByPlayer.get(row.pool_player_id) ?? []
+    const key = row.match_id ? `${row.match_id}:${row.pool_player_id}` : null
+    list.push({
+      id: row.id,
+      matchId: row.match_id,
+      rating: row.rating,
+      ratingDeviation: row.rating_deviation,
+      recordedAt: row.recorded_at,
+      sequence: row.sequence,
+      roundNumber: null,
+      seasonId: null,
+      seasonName: null,
+      seasonStartsAt: null,
+      resultRecordedAt: null,
+      result: key ? resultByMatchPlayer.get(key) ?? null : null,
+      partnerName: key ? partnerByMatchPlayer.get(key) ?? null : null,
+      opponentNames: key ? opponentsByMatchPlayer.get(key) ?? [] : [],
+      scoreLabel: null,
+    })
+    historyByPlayer.set(row.pool_player_id, list)
+  }
+
+  const stats = poolRows.map((player) =>
+    buildTitlePlayerStats({
+      id: player.id,
+      name: player.name,
+      rating: player.rating,
+      initialRating: player.initial_rating,
+      history: historyByPlayer.get(player.id) ?? [],
+      matches: matchForTitles,
+      seasonFinishes,
+    }),
+  )
+
+  const assigned = assignPlayerTitles(stats)
+  const publicMap = new Map<string, PlayerTitle>()
+  for (const [id, title] of assigned) {
+    publicMap.set(id, toPublicTitle(title)!)
+  }
+  return publicMap
 }
 
 export async function fetchPlayerProfile(poolPlayerId: string): Promise<PlayerProfile> {
@@ -91,6 +323,7 @@ export async function fetchPlayerProfile(poolPlayerId: string): Promise<PlayerPr
 
   const rankings = await fetchPlayerRankings()
   const rank = rankings.find((row) => row.id === poolPlayerId)?.rank ?? rankings.length + 1
+  const title = rankings.find((row) => row.id === poolPlayerId)?.title ?? null
 
   const { data: historyRows, error: historyError } = await supabase
     .from('rating_history')
@@ -114,10 +347,58 @@ export async function fetchPlayerProfile(poolPlayerId: string): Promise<PlayerPr
     .order('result_recorded_at')
   if (resultError) throw resultError
 
+  const teamIds = [
+    ...new Set(
+      (resultMatches ?? []).flatMap((match) => [
+        match.home_team_id,
+        match.away_team_id,
+      ]),
+    ),
+  ]
+  const rosterByTeam = new Map<
+    string,
+    { name: string; pool_player_id: string }[]
+  >()
+  if (teamIds.length > 0) {
+    const { data: rosterRows, error: rosterError } = await supabase
+      .from('players')
+      .select('team_id, name, pool_player_id')
+      .in('team_id', teamIds)
+    if (rosterError) throw rosterError
+    for (const row of rosterRows ?? []) {
+      const list = rosterByTeam.get(row.team_id) ?? []
+      list.push({ name: row.name, pool_player_id: row.pool_player_id })
+      rosterByTeam.set(row.team_id, list)
+    }
+  }
+
+  const resolveIds = (match: {
+    home_team_id: string
+    away_team_id: string
+    home_pool_player_ids: string[] | null
+    away_pool_player_ids: string[] | null
+  }) => {
+    const homeFromSnap = match.home_pool_player_ids ?? []
+    const awayFromSnap = match.away_pool_player_ids ?? []
+    return {
+      homeIds:
+        homeFromSnap.length > 0
+          ? homeFromSnap
+          : (rosterByTeam.get(match.home_team_id) ?? []).map(
+              (player) => player.pool_player_id,
+            ),
+      awayIds:
+        awayFromSnap.length > 0
+          ? awayFromSnap
+          : (rosterByTeam.get(match.away_team_id) ?? []).map(
+              (player) => player.pool_player_id,
+            ),
+    }
+  }
+
   const playerMatches = (resultMatches ?? [])
     .filter((match) => {
-      const homeIds = match.home_pool_player_ids ?? []
-      const awayIds = match.away_pool_player_ids ?? []
+      const { homeIds, awayIds } = resolveIds(match)
       return homeIds.includes(poolPlayerId) || awayIds.includes(poolPlayerId)
     })
     .slice()
@@ -154,8 +435,7 @@ export async function fetchPlayerProfile(poolPlayerId: string): Promise<PlayerPr
   >()
 
   for (const match of playerMatches) {
-    const homeIds = (match.home_pool_player_ids ?? []) as string[]
-    const awayIds = (match.away_pool_player_ids ?? []) as string[]
+    const { homeIds, awayIds } = resolveIds(match)
     const onHome = homeIds.includes(poolPlayerId)
     const won =
       (onHome && match.winner_team_id === match.home_team_id) ||
@@ -220,6 +500,72 @@ export async function fetchPlayerProfile(poolPlayerId: string): Promise<PlayerPr
   const played = wins + losses
   const startRating = history[0]?.rating ?? player.initial_rating
 
+  // Rivalries: use MatchWithTeams-shaped rows with snapshot or roster fallback
+  const rivalryMatches = (resultMatches ?? []).map((match) => {
+    const seasonJoin = match.seasons as
+      | { name: string; starts_at: string }
+      | { name: string; starts_at: string }[]
+      | null
+    const season = Array.isArray(seasonJoin) ? seasonJoin[0] : seasonJoin
+    const homeSnap = match.home_pool_player_ids ?? []
+    const awaySnap = match.away_pool_player_ids ?? []
+    const homePlayers =
+      homeSnap.length > 0
+        ? homeSnap.map((id: string) => ({
+            name: nameById.get(id) ?? '?',
+            pool_player_id: id,
+          }))
+        : (rosterByTeam.get(match.home_team_id) ?? [])
+    const awayPlayers =
+      awaySnap.length > 0
+        ? awaySnap.map((id: string) => ({
+            name: nameById.get(id) ?? '?',
+            pool_player_id: id,
+          }))
+        : (rosterByTeam.get(match.away_team_id) ?? [])
+    return {
+      ...match,
+      status: 'completed' as const,
+      round_number: match.round_number,
+      created_at: '',
+      home_team: {
+        id: match.home_team_id,
+        name: '',
+        color: '',
+        players: homePlayers,
+      },
+      away_team: {
+        id: match.away_team_id,
+        name: '',
+        color: '',
+        players: awayPlayers,
+      },
+      winner: null,
+      seasons: season,
+    } as MatchWithTeams
+  })
+
+  const seasonNameById = new Map<string, string>()
+  for (const match of resultMatches ?? []) {
+    const seasonJoin = match.seasons as
+      | { name: string }
+      | { name: string }[]
+      | null
+    const season = Array.isArray(seasonJoin) ? seasonJoin[0] : seasonJoin
+    if (season?.name) seasonNameById.set(match.season_id, season.name)
+  }
+
+  const rivalryEvents = buildPlayerMatchEvents({
+    poolPlayerId,
+    matches: rivalryMatches,
+    nameById,
+    seasonNameById,
+  })
+  const rivalries = computePlayerRivalries({
+    events: rivalryEvents,
+    nameById,
+  })
+
   return {
     id: player.id,
     name: player.name,
@@ -235,6 +581,8 @@ export async function fetchPlayerProfile(poolPlayerId: string): Promise<PlayerPr
     ratingDelta: player.rating - startRating,
     history,
     funStats: computePlayerFunStats(history),
+    title,
+    rivalries,
   }
 }
 
@@ -688,6 +1036,56 @@ export async function fetchMatches(seasonId: string): Promise<MatchWithTeams[]> 
       })),
     },
   }))
+}
+
+export async function fetchSeasonRecap(seasonId: string): Promise<SeasonRecap> {
+  const { data: season, error: seasonError } = await supabase
+    .from('seasons')
+    .select('*')
+    .eq('id', seasonId)
+    .single()
+  if (seasonError) throw seasonError
+
+  const [teams, matches, poolNames, historyResult] = await Promise.all([
+    fetchTeamsWithPlayers(seasonId),
+    fetchMatches(seasonId),
+    supabase.from('player_pool').select('id, name'),
+    supabase
+      .from('rating_history')
+      .select('pool_player_id, match_id, rating, rating_deviation, sequence')
+      .order('sequence'),
+  ])
+
+  if (poolNames.error) throw poolNames.error
+  if (historyResult.error) throw historyResult.error
+
+  const nameById = new Map((poolNames.data ?? []).map((row) => [row.id, row.name]))
+
+  // Filter history to this season's matches + initial rows (match_id null)
+  const seasonMatchIds = new Set(matches.map((match) => match.id))
+  const ratingHistory: RatingHistoryRow[] = (historyResult.data ?? []).filter(
+    (row) => row.match_id == null || seasonMatchIds.has(row.match_id),
+  )
+
+  // Also include history rows that precede season matches for the same players
+  // (needed for pre-match start ratings). Fetch any missing prior rows per player.
+  const rosterIds = new Set(
+    teams.flatMap((team) => team.players.map((player) => player.pool_player_id)),
+  )
+  const { data: fullHistory, error: fullHistoryError } = await supabase
+    .from('rating_history')
+    .select('pool_player_id, match_id, rating, rating_deviation, sequence')
+    .in('pool_player_id', [...rosterIds])
+    .order('sequence')
+  if (fullHistoryError) throw fullHistoryError
+
+  return computeSeasonRecap({
+    season,
+    teams,
+    matches,
+    ratingHistory: (fullHistory ?? ratingHistory) as RatingHistoryRow[],
+    nameById,
+  })
 }
 
 export async function createSeasonMatches(seasonId: string): Promise<number> {

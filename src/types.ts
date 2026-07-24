@@ -28,6 +28,11 @@ export interface PoolPlayer {
   created_at: string
 }
 
+export interface PlayerTitle {
+  id: string
+  whyParams: Record<string, string | number>
+}
+
 export interface PlayerRankingRow {
   rank: number
   id: string
@@ -35,6 +40,7 @@ export interface PlayerRankingRow {
   rating: number
   ratingDeviation: number
   volatility: number
+  title: PlayerTitle | null
 }
 
 export interface RatingHistoryPoint {
@@ -63,7 +69,95 @@ export interface PlayerFunStats {
     lossesAgainst: number
     played: number
   } | null
-  biggestSwing: { delta: number } | null
+  biggestSwing: {
+    delta: number
+    result: 'W' | 'L' | null
+    partnerName: string | null
+    opponentNames: string[]
+    scoreLabel: string | null
+    seasonName: string | null
+    resultRecordedAt: string | null
+  } | null
+}
+
+export interface PlayerMatchEvent {
+  matchId: string
+  seasonId: string
+  seasonName: string | null
+  result: 'W' | 'L'
+  partnerPoolId: string | null
+  partnerName: string | null
+  opponentPoolIds: string[]
+  opponentNames: string[]
+  scoreLabel: string | null
+  resultRecordedAt: string | null
+  homeTeamId: string
+  awayTeamId: string
+  winnerTeamId: string
+  onHome: boolean
+}
+
+export interface PlayerRivalry {
+  opponentId: string
+  opponentName: string
+  wins: number
+  losses: number
+  played: number
+  winRate: number
+  longestWinStreak: number
+  latestMeeting: {
+    matchId: string
+    result: 'W' | 'L'
+    date: string | null
+    partnerName: string | null
+    scoreLabel: string | null
+    seasonName: string | null
+  }
+}
+
+export interface PlayerRivalries {
+  nemesis: PlayerRivalry | null
+  favoriteOpponent: PlayerRivalry | null
+  byOpponent: PlayerRivalry[]
+}
+
+export interface SeasonRecapTeamAward {
+  teamId: string
+  teamName: string
+  color: string
+  rank: number
+  wins: number
+  losses: number
+  points: number
+  playerNames: string[]
+  players: { name: string; poolPlayerId: string }[]
+}
+
+export interface SeasonRecapPlayerAward {
+  playerId: string
+  playerName: string
+  detailParams: Record<string, string | number>
+}
+
+export interface SeasonRecapUpset {
+  matchId: string
+  winnerTeamName: string
+  loserTeamName: string
+  scoreLabel: string | null
+  winnerPercent: number
+  resultRecordedAt: string | null
+}
+
+export interface SeasonRecap {
+  seasonId: string
+  seasonName: string
+  isPartial: boolean
+  champions: SeasonRecapTeamAward[]
+  runnersUp: SeasonRecapTeamAward[]
+  biggestUpset: SeasonRecapUpset | null
+  mostImproved: SeasonRecapPlayerAward | null
+  bestPartnership: SeasonRecapTeamAward | null
+  mvp: SeasonRecapPlayerAward | null
 }
 
 export interface PlayerProfile {
@@ -81,6 +175,8 @@ export interface PlayerProfile {
   ratingDelta: number
   history: RatingHistoryPoint[]
   funStats: PlayerFunStats
+  title: PlayerTitle | null
+  rivalries: PlayerRivalries
 }
 
 export interface Player {
