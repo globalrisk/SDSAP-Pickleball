@@ -1,5 +1,6 @@
 export type MatchStatus = 'scheduled' | 'completed' | 'forfeit'
 export type SeasonStatus = 'active' | 'archived'
+export type PoolPlayerStatus = 'active' | 'inactive'
 
 export interface Season {
   id: string
@@ -21,6 +22,7 @@ export interface Team {
 export interface PoolPlayer {
   id: string
   name: string
+  status: PoolPlayerStatus
   rating: number
   rating_deviation: number
   volatility: number

@@ -9,10 +9,12 @@ import {
   createSeason,
   createTeamWithPlayers,
   deletePoolPlayer,
+  fetchAssignedPoolPlayerIds,
   fetchMatches,
   resetSeasonTeams,
   saveTeamWithPlayers,
   updatePoolPlayer,
+  updatePoolPlayerStatus,
 } from '../lib/api'
 import { generateBalancedTeams } from '../lib/balanceTeams'
 import { roundRating } from '../lib/ratings'
@@ -54,6 +56,7 @@ function poolOptionsForSlot(
   return pool.filter((player) => {
     if (player.id === slotValue || player.id === otherSlotValue) return true
     if (teamPoolIds.has(player.id)) return true
+    if (player.status !== 'active') return false
     return !assignedIds.has(player.id)
   })
 }
@@ -61,15 +64,23 @@ function poolOptionsForSlot(
 function PoolPlayerRow({
   player,
   isAssigned,
+  isOnActiveSeasonTeam,
   isSaving,
+  isStatusSaving,
+  activeCount,
   onSave,
   onDelete,
+  onToggleStatus,
 }: {
   player: PoolPlayer
   isAssigned: boolean
+  isOnActiveSeasonTeam: boolean
   isSaving: boolean
+  isStatusSaving: boolean
+  activeCount: number
   onSave: (id: string, name: string) => void
   onDelete: (id: string, name: string) => void
+  onToggleStatus: (id: string, status: 'active' | 'inactive') => void
 }) {
   const { t } = useTranslation()
   const [name, setName] = useState(player.name)
@@ -80,14 +91,24 @@ function PoolPlayerRow({
 
   const trimmed = name.trim()
   const isDirty = trimmed !== player.name
+  const isActive = player.status === 'active'
+  const canActivate = !isActive && activeCount < 12
+  const cannotDeactivate = isActive && isOnActiveSeasonTeam
 
   return (
-    <li className="flex flex-col gap-2 rounded-lg border border-green-100 bg-green-50 px-3 py-3 sm:flex-row sm:items-center">
+    <li className="flex flex-col gap-2 rounded-lg border border-green-100 bg-green-50 px-3 py-3 sm:flex-row sm:flex-wrap sm:items-center">
       <input
         value={name}
         onChange={(e) => setName(e.target.value)}
         className="min-h-11 flex-1 rounded-lg border border-green-200 bg-white px-3 py-2 text-base sm:text-sm"
       />
+      <span
+        className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${
+          isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-200 text-gray-700'
+        }`}
+      >
+        {isActive ? t('pool.statusActive') : t('pool.statusInactive')}
+      </span>
       <span
         className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${
           isAssigned ? 'bg-amber-100 text-amber-800' : 'bg-green-100 text-green-800'
@@ -100,6 +121,38 @@ function PoolPlayerRow({
           {t('pool.ratingBadge', { rating: roundRating(player.rating) })}
         </Link>
       </span>
+      <div className="flex min-w-0 flex-col gap-1">
+        <button
+          type="button"
+          onClick={() =>
+            onToggleStatus(player.id, isActive ? 'inactive' : 'active')
+          }
+          disabled={
+            isStatusSaving ||
+            cannotDeactivate ||
+            (isActive ? false : !canActivate)
+          }
+          title={
+            cannotDeactivate
+              ? t('pool.cannotDeactivateOnTeam')
+              : !isActive && !canActivate
+                ? t('pool.activeCapReached', { count: activeCount, max: 12 })
+                : undefined
+          }
+          className="min-h-11 rounded-lg border border-green-300 bg-white px-3 py-2 text-sm font-medium text-green-800 hover:bg-green-100 disabled:opacity-50"
+        >
+          {isStatusSaving
+            ? t('pool.saving')
+            : isActive
+              ? t('pool.setInactive')
+              : t('pool.setActive')}
+        </button>
+        {cannotDeactivate ? (
+          <p className="max-w-[14rem] text-[11px] leading-snug text-amber-800">
+            {t('pool.cannotDeactivateOnTeam')}
+          </p>
+        ) : null}
+      </div>
       <button
         type="button"
         onClick={() => onSave(player.id, trimmed)}
@@ -111,7 +164,7 @@ function PoolPlayerRow({
       <button
         type="button"
         onClick={() => onDelete(player.id, player.name)}
-        disabled={isSaving}
+        disabled={isSaving || isStatusSaving}
         className="min-h-11 rounded-lg border border-red-200 px-3 py-2 text-sm text-red-700 hover:bg-red-50 disabled:opacity-50"
       >
         {t('pool.deleteButton')}
@@ -254,14 +307,23 @@ export function SetupPage() {
   const { data: teams, isError, error } = useTeamsWithPlayers()
   const { data: pool = [], isError: poolError, error: poolQueryError } = usePlayerPool()
   const { data: assignedPoolIds = [] } = useAssignedPoolPlayerIds()
+  const { data: activeSeasonAssignedIds = [] } = useQuery({
+    queryKey: ['assigned-pool-players', activeSeason?.id],
+    queryFn: () => fetchAssignedPoolPlayerIds(activeSeason!.id),
+    enabled: !!activeSeason,
+  })
   const { data: activeSeasonMatches } = useQuery({
     queryKey: ['matches', activeSeason?.id],
     queryFn: () => fetchMatches(activeSeason!.id),
     enabled: !!activeSeason,
   })
-  const [saved, setSaved] = useState<string | null>(null)
+  const [feedback, setFeedback] = useState<{
+    text: string
+    tone: 'ok' | 'error'
+  } | null>(null)
   const [newSeasonName, setNewSeasonName] = useState('')
   const [newPoolName, setNewPoolName] = useState('')
+  const [newPoolRating, setNewPoolRating] = useState('1500')
   const [newTeam, setNewTeam] = useState({
     name: '',
     poolPlayerId1: '',
@@ -269,9 +331,20 @@ export function SetupPage() {
   })
 
   const assignedIds = useMemo(() => new Set(assignedPoolIds), [assignedPoolIds])
-  const availablePool = useMemo(
-    () => pool.filter((player) => !assignedIds.has(player.id)),
+  const activeSeasonAssigned = useMemo(
+    () => new Set(activeSeasonAssignedIds),
+    [activeSeasonAssignedIds],
+  )
+  const activeUnassigned = useMemo(
+    () =>
+      pool.filter(
+        (player) => player.status === 'active' && !assignedIds.has(player.id),
+      ),
     [pool, assignedIds],
+  )
+  const activeCount = useMemo(
+    () => pool.filter((player) => player.status === 'active').length,
+    [pool],
   )
 
   const recordedCount = (activeSeasonMatches ?? []).filter(
@@ -287,31 +360,79 @@ export function SetupPage() {
   }
 
   const addPoolMutation = useMutation({
-    mutationFn: (name: string) => createPoolPlayer(name),
+    mutationFn: ({ name, rating }: { name: string; rating: number }) =>
+      createPoolPlayer(name, rating),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['player-pool'] })
       setNewPoolName('')
-      setSaved(t('pool.added'))
+      setNewPoolRating('1500')
+      setFeedback({ text: t('pool.added'), tone: 'ok' })
     },
-    onError: (err: Error) => setSaved(t('pool.saveFailed', { message: err.message })),
+    onError: (err: Error) =>
+      setFeedback({
+        text: t('pool.saveFailed', { message: err.message }),
+        tone: 'error',
+      }),
   })
 
   const updatePoolMutation = useMutation({
     mutationFn: ({ id, name }: { id: string; name: string }) => updatePoolPlayer(id, name),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['player-pool'] })
-      setSaved(t('pool.updated'))
+      setFeedback({ text: t('pool.updated'), tone: 'ok' })
     },
-    onError: (err: Error) => setSaved(t('pool.saveFailed', { message: err.message })),
+    onError: (err: Error) =>
+      setFeedback({
+        text: t('pool.saveFailed', { message: err.message }),
+        tone: 'error',
+      }),
+  })
+
+  const updatePoolStatusMutation = useMutation({
+    mutationFn: ({
+      id,
+      status,
+    }: {
+      id: string
+      status: 'active' | 'inactive'
+    }) => updatePoolPlayerStatus(id, status),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['player-pool'] })
+      setFeedback({
+        text:
+          variables.status === 'active'
+            ? t('pool.statusSetActive')
+            : t('pool.statusSetInactive'),
+        tone: 'ok',
+      })
+    },
+    onError: (err: Error) => {
+      if (err.message.includes('At most 12 active')) {
+        setFeedback({ text: t('pool.activeCapError'), tone: 'error' })
+        return
+      }
+      if (err.message.includes('cannot be set inactive')) {
+        setFeedback({ text: t('pool.cannotDeactivateOnTeam'), tone: 'error' })
+        return
+      }
+      setFeedback({
+        text: t('pool.saveFailed', { message: err.message }),
+        tone: 'error',
+      })
+    },
   })
 
   const deletePoolMutation = useMutation({
     mutationFn: (id: string) => deletePoolPlayer(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['player-pool'] })
-      setSaved(t('pool.deleted'))
+      setFeedback({ text: t('pool.deleted'), tone: 'ok' })
     },
-    onError: (err: Error) => setSaved(t('pool.deleteFailed', { message: err.message })),
+    onError: (err: Error) =>
+      setFeedback({
+        text: t('pool.deleteFailed', { message: err.message }),
+        tone: 'error',
+      }),
   })
 
   const archiveMutation = useMutation({
@@ -319,10 +440,10 @@ export function SetupPage() {
     onSuccess: (season) => {
       invalidateSeasonData()
       setSelectedSeasonId(season.id)
-      setSaved(t('setup.archiveSuccess', { name: season.name }))
+      setFeedback({ text: t('setup.archiveSuccess', { name: season.name }), tone: 'ok' })
     },
     onError: (err: Error) =>
-      setSaved(t('setup.archiveFailed', { message: err.message })),
+      setFeedback({ text: t('setup.archiveFailed', { message: err.message }), tone: 'error' }),
   })
 
   const createSeasonMutation = useMutation({
@@ -331,10 +452,10 @@ export function SetupPage() {
       invalidateSeasonData()
       setSelectedSeasonId(season.id)
       setNewSeasonName('')
-      setSaved(t('setup.newSeasonSuccess', { name: season.name }))
+      setFeedback({ text: t('setup.newSeasonSuccess', { name: season.name }), tone: 'ok' })
     },
     onError: (err: Error) =>
-      setSaved(t('setup.newSeasonFailed', { message: err.message })),
+      setFeedback({ text: t('setup.newSeasonFailed', { message: err.message }), tone: 'error' }),
   })
 
   const createTeamMutation = useMutation({
@@ -348,10 +469,13 @@ export function SetupPage() {
       queryClient.invalidateQueries({ queryKey: ['teams-with-players'] })
       queryClient.invalidateQueries({ queryKey: ['assigned-pool-players'] })
       setNewTeam({ name: '', poolPlayerId1: '', poolPlayerId2: '' })
-      setSaved(t('setup.teamCreated'))
+      setFeedback({ text: t('setup.teamCreated'), tone: 'ok' })
     },
     onError: (err: Error) =>
-      setSaved(t('setup.createTeamFailed', { message: err.message })),
+      setFeedback({
+        text: t('setup.createTeamFailed', { message: err.message }),
+        tone: 'error',
+      }),
   })
 
   const balanceTeamsMutation = useMutation({
@@ -364,10 +488,13 @@ export function SetupPage() {
       queryClient.invalidateQueries({ queryKey: ['teams'] })
       queryClient.invalidateQueries({ queryKey: ['teams-with-players'] })
       queryClient.invalidateQueries({ queryKey: ['assigned-pool-players'] })
-      setSaved(t('setup.balancedTeamsCreated', { count }))
+      setFeedback({ text: t('setup.balancedTeamsCreated', { count }), tone: 'ok' })
     },
     onError: (err: Error) =>
-      setSaved(t('setup.balancedTeamsFailed', { message: err.message })),
+      setFeedback({
+        text: t('setup.balancedTeamsFailed', { message: err.message }),
+        tone: 'error',
+      }),
   })
 
   const resetTeamsMutation = useMutation({
@@ -378,10 +505,13 @@ export function SetupPage() {
     }[]) => resetSeasonTeams(selectedSeason!.id, payload),
     onSuccess: (count) => {
       invalidateSeasonData()
-      setSaved(t('setup.resetTeamsSuccess', { count }))
+      setFeedback({ text: t('setup.resetTeamsSuccess', { count }), tone: 'ok' })
     },
     onError: (err: Error) =>
-      setSaved(t('setup.resetTeamsFailed', { message: err.message })),
+      setFeedback({
+        text: t('setup.resetTeamsFailed', { message: err.message }),
+        tone: 'error',
+      }),
   })
 
   function handleArchiveSeason() {
@@ -404,7 +534,12 @@ export function SetupPage() {
     e.preventDefault()
     const name = newPoolName.trim()
     if (!name) return
-    addPoolMutation.mutate(name)
+    const rating = Number(newPoolRating)
+    if (!Number.isFinite(rating) || rating < 800 || rating > 2500) {
+      setFeedback({ text: t('pool.ratingInvalid'), tone: 'error' })
+      return
+    }
+    addPoolMutation.mutate({ name, rating })
   }
 
   function handleCreateTeam(e: React.FormEvent) {
@@ -419,13 +554,13 @@ export function SetupPage() {
 
   function handleGenerateBalancedTeams() {
     if (!selectedSeason) return
-    if (availablePool.length < 2 || availablePool.length % 2 !== 0) {
-      setSaved(t('setup.balancedTeamsNeedEven'))
+    if (activeUnassigned.length < 2 || activeUnassigned.length % 2 !== 0) {
+      setFeedback({ text: t('setup.balancedTeamsNeedEven'), tone: 'error' })
       return
     }
 
     const balanced = generateBalancedTeams(
-      availablePool.map((player) => ({
+      activeUnassigned.map((player) => ({
         id: player.id,
         name: player.name,
         rating: player.rating,
@@ -471,7 +606,7 @@ export function SetupPage() {
       }))
 
     if (ratedPlayers.length < 2 || ratedPlayers.length % 2 !== 0) {
-      setSaved(t('setup.resetTeamsNeedEven'))
+      setFeedback({ text: t('setup.resetTeamsNeedEven'), tone: 'error' })
       return
     }
 
@@ -513,10 +648,10 @@ export function SetupPage() {
     deletePoolMutation.mutate(id)
   }
 
-  const createSlot1Options = availablePool.filter(
+  const createSlot1Options = activeUnassigned.filter(
     (player) => player.id !== newTeam.poolPlayerId2,
   )
-  const createSlot2Options = availablePool.filter(
+  const createSlot2Options = activeUnassigned.filter(
     (player) => player.id !== newTeam.poolPlayerId1,
   )
 
@@ -529,17 +664,26 @@ export function SetupPage() {
       <ArchivedSeasonBanner />
       <PageHeader title={t('setup.title')} subtitle={t('setup.subtitle')} />
 
-      {saved && (
-        <p className="mb-4 rounded-lg bg-green-100 px-3 py-2 text-sm text-green-800">
-          {saved}
+      {feedback && (
+        <p
+          className={`mb-4 rounded-lg px-3 py-2 text-sm ${
+            feedback.tone === 'error'
+              ? 'border border-red-200 bg-red-50 text-red-800'
+              : 'bg-green-100 text-green-800'
+          }`}
+        >
+          {feedback.text}
         </p>
       )}
 
       <section className="mb-8 rounded-xl border border-green-200 bg-white p-5 shadow-sm">
         <h2 className="text-lg font-semibold text-green-900">{t('pool.title')}</h2>
         <p className="mt-1 text-sm text-gray-600">{t('pool.description')}</p>
+        <p className="mt-2 text-sm font-medium text-green-800">
+          {t('pool.activeCount', { count: activeCount, max: 12 })}
+        </p>
 
-        <form onSubmit={handleAddPoolPlayer} className="mt-4 flex flex-col gap-3 sm:flex-row">
+        <form onSubmit={handleAddPoolPlayer} className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
           <input
             value={newPoolName}
             onChange={(e) => setNewPoolName(e.target.value)}
@@ -547,6 +691,19 @@ export function SetupPage() {
             className="min-h-11 flex-1 rounded-lg border border-green-200 px-3 py-2 text-base sm:text-sm"
             required
           />
+          <label className="flex w-full flex-col gap-1 sm:w-36">
+            <span className="text-xs font-medium text-gray-600">{t('pool.ratingLabel')}</span>
+            <input
+              type="number"
+              min={800}
+              max={2500}
+              step={1}
+              value={newPoolRating}
+              onChange={(e) => setNewPoolRating(e.target.value)}
+              className="min-h-11 w-full rounded-lg border border-green-200 px-3 py-2 text-base sm:text-sm"
+              required
+            />
+          </label>
           <button
             type="submit"
             disabled={addPoolMutation.isPending}
@@ -565,12 +722,21 @@ export function SetupPage() {
                 key={player.id}
                 player={player}
                 isAssigned={assignedIds.has(player.id)}
+                isOnActiveSeasonTeam={activeSeasonAssigned.has(player.id)}
                 isSaving={
                   updatePoolMutation.isPending &&
                   updatePoolMutation.variables?.id === player.id
                 }
+                isStatusSaving={
+                  updatePoolStatusMutation.isPending &&
+                  updatePoolStatusMutation.variables?.id === player.id
+                }
+                activeCount={activeCount}
                 onSave={(id, name) => updatePoolMutation.mutate({ id, name })}
                 onDelete={handleDeletePoolPlayer}
+                onToggleStatus={(id, status) =>
+                  updatePoolStatusMutation.mutate({ id, status })
+                }
               />
             ))}
           </ul>
@@ -627,7 +793,7 @@ export function SetupPage() {
         <section className="mb-8 rounded-xl border border-green-200 bg-white p-5 shadow-sm">
           <h2 className="text-lg font-semibold text-green-900">{t('setup.createTeamTitle')}</h2>
           <p className="mt-1 text-sm text-gray-600">{t('setup.createTeamDescription')}</p>
-          {availablePool.length < 2 && (
+          {activeUnassigned.length < 2 && (
             <p className="mt-2 text-sm text-amber-700">{t('setup.notEnoughPlayers')}</p>
           )}
 
@@ -636,7 +802,7 @@ export function SetupPage() {
               {t('setup.balancedTeamsTitle')}
             </h3>
             <p className="mt-1 text-sm text-blue-800">{t('setup.balancedTeamsDescription')}</p>
-            {availablePool.length % 2 !== 0 && availablePool.length > 0 && (
+            {activeUnassigned.length % 2 !== 0 && activeUnassigned.length > 0 && (
               <p className="mt-2 text-sm text-amber-700">{t('setup.balancedTeamsNeedEven')}</p>
             )}
             <button
@@ -645,14 +811,16 @@ export function SetupPage() {
               disabled={
                 balanceTeamsMutation.isPending ||
                 resetTeamsMutation.isPending ||
-                availablePool.length < 2 ||
-                availablePool.length % 2 !== 0
+                activeUnassigned.length < 2 ||
+                activeUnassigned.length % 2 !== 0
               }
               className="mt-3 min-h-11 w-full rounded-lg bg-blue-600 px-4 py-3 text-sm font-medium text-white hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 sm:w-auto sm:py-2"
             >
               {balanceTeamsMutation.isPending
                 ? t('setup.balancedTeamsGenerating')
-                : t('setup.balancedTeamsButton', { count: Math.floor(availablePool.length / 2) })}
+                : t('setup.balancedTeamsButton', {
+                    count: Math.floor(activeUnassigned.length / 2),
+                  })}
             </button>
             {(teams ?? []).length > 0 && (
               <button
@@ -718,7 +886,7 @@ export function SetupPage() {
               type="submit"
               disabled={
                 createTeamMutation.isPending ||
-                availablePool.length < 2 ||
+                activeUnassigned.length < 2 ||
                 !newTeam.poolPlayerId1 ||
                 !newTeam.poolPlayerId2 ||
                 newTeam.poolPlayerId1 === newTeam.poolPlayerId2
@@ -746,8 +914,8 @@ export function SetupPage() {
               seasonId={selectedSeason!.id}
               pool={pool}
               assignedIds={assignedIds}
-              onSaved={setSaved}
-              onError={setSaved}
+              onSaved={(message) => setFeedback({ text: message, tone: 'ok' })}
+              onError={(message) => setFeedback({ text: message, tone: 'error' })}
             />
           ) : (
             <div

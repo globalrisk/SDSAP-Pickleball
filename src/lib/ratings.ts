@@ -19,8 +19,14 @@ export const TRUESKILL_SIGMA = 25 / 3
  */
 export const INITIAL_SIGMA = TRUESKILL_SIGMA * 0.55
 
-/** Dynamics factor for inactivity (TrueSkill tau ≈ sigma/100). */
+/** Dynamics factor for within-season sit-outs (TrueSkill tau ≈ sigma/100). */
 const TAU = TRUESKILL_SIGMA / 100
+
+/** Flat RD added per season a known player is absent from the roster. */
+export const SKIP_SEASON_RD_BOOST = 75
+
+/** Cap after skip-season RD boosts (full TrueSkill prior ≈ 500). */
+export const SKIP_SEASON_RD_CAP = TRUESKILL_SIGMA * TRUESKILL_SCALE
 
 export interface SkillRating {
   /** Display-scaled TrueSkill mu */
@@ -135,6 +141,26 @@ export function applyInactivityToPlayers(
       rd: Math.sqrt(current.rd * current.rd + tauDisplay * tauDisplay),
     })
   }
+}
+
+/**
+ * Boost RD for players who skip a season (not on that season's roster).
+ * Flat +SKIP_SEASON_RD_BOOST per season, capped at SKIP_SEASON_RD_CAP.
+ */
+export function applySkipSeasonRdBoost(
+  ratings: Map<string, SkillRating>,
+  playerIds: Iterable<string>,
+): string[] {
+  const boosted: string[] = []
+  for (const playerId of playerIds) {
+    const current = ratings.get(playerId)
+    if (!current) continue
+    const nextRd = Math.min(SKIP_SEASON_RD_CAP, current.rd + SKIP_SEASON_RD_BOOST)
+    if (nextRd === current.rd) continue
+    ratings.set(playerId, { ...current, rd: nextRd })
+    boosted.push(playerId)
+  }
+  return boosted
 }
 
 /**

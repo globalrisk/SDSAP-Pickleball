@@ -1,7 +1,7 @@
 import { supabase } from './supabase'
 import {
   applyDoublesMatchToRatings,
-  applyInactivityToPlayers,
+  applySkipSeasonRdBoost,
   buildRankingRows,
   createInitialRatingsMap,
   TRUESKILL_DEFAULTS,
@@ -771,6 +771,7 @@ export async function recomputeAllRatings(): Promise<void> {
 
   let sequence = 0
   const now = new Date().toISOString()
+  const hasPlayed = new Set<string>()
 
   for (const row of poolRows) {
     const initial = ratings.get(row.id)!
@@ -788,8 +789,27 @@ export async function recomputeAllRatings(): Promise<void> {
 
   for (const match of finishedMatches) {
     if (previousSeasonId && match.season_id !== previousSeasonId) {
-      const previousPool = seasonRosterCache.get(previousSeasonId)
-      if (previousPool) applyInactivityToPlayers(ratings, previousPool)
+      let seasonPoolIds = seasonRosterCache.get(match.season_id)
+      if (!seasonPoolIds) {
+        seasonPoolIds = await fetchSeasonPoolPlayerIds(match.season_id)
+        seasonRosterCache.set(match.season_id, seasonPoolIds)
+      }
+      const onRoster = new Set(seasonPoolIds)
+      const skippers = [...hasPlayed].filter((id) => !onRoster.has(id))
+      const boosted = applySkipSeasonRdBoost(ratings, skippers)
+      const skipRecordedAt = match.season_starts_at || now
+      for (const playerId of boosted) {
+        const skill = ratings.get(playerId)
+        if (!skill) continue
+        historyRows.push({
+          pool_player_id: playerId,
+          match_id: null,
+          rating: skill.rating,
+          rating_deviation: skill.rd,
+          sequence: sequence++,
+          recorded_at: skipRecordedAt,
+        })
+      }
     }
 
     let seasonPoolIds = seasonRosterCache.get(match.season_id)
@@ -808,6 +828,7 @@ export async function recomputeAllRatings(): Promise<void> {
 
     const recordedAt = match.result_recorded_at ?? now
     for (const playerId of [...doubles.winnerPoolIds, ...doubles.loserPoolIds]) {
+      hasPlayed.add(playerId)
       const skill = ratings.get(playerId)
       if (!skill) continue
       historyRows.push({
@@ -874,14 +895,66 @@ export async function fetchPlayerPool(): Promise<PoolPlayer[]> {
   return data ?? []
 }
 
-export async function createPoolPlayer(name: string): Promise<PoolPlayer> {
+const MAX_ACTIVE_POOL_PLAYERS = 12
+
+async function countActivePoolPlayers(excludeId?: string): Promise<number> {
+  let query = supabase
+    .from('player_pool')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', 'active')
+
+  if (excludeId) {
+    query = query.neq('id', excludeId)
+  }
+
+  const { count, error } = await query
+  if (error) throw error
+  return count ?? 0
+}
+
+export async function createPoolPlayer(
+  name: string,
+  initialRating: number = TRUESKILL_DEFAULTS.rating,
+): Promise<PoolPlayer> {
+  const activeCount = await countActivePoolPlayers()
+  const status = activeCount < MAX_ACTIVE_POOL_PLAYERS ? 'active' : 'inactive'
+  const rating = Math.round(
+    Math.min(2500, Math.max(800, Number.isFinite(initialRating) ? initialRating : 1500)),
+  )
+
   const { data, error } = await supabase
     .from('player_pool')
-    .insert({ name: name.trim() })
+    .insert({
+      name: name.trim(),
+      status,
+      rating,
+      initial_rating: rating,
+      rating_deviation: TRUESKILL_DEFAULTS.rd,
+      volatility: TRUESKILL_DEFAULTS.volatility,
+    })
     .select()
     .single()
 
   if (error) throw error
+
+  const { data: maxSeqRows, error: seqError } = await supabase
+    .from('rating_history')
+    .select('sequence')
+    .order('sequence', { ascending: false })
+    .limit(1)
+  if (seqError) throw seqError
+
+  const nextSequence = ((maxSeqRows?.[0]?.sequence as number | undefined) ?? -1) + 1
+  const { error: historyError } = await supabase.from('rating_history').insert({
+    pool_player_id: data.id,
+    match_id: null,
+    rating,
+    rating_deviation: TRUESKILL_DEFAULTS.rd,
+    sequence: nextSequence,
+    recorded_at: new Date().toISOString(),
+  })
+  if (historyError) throw historyError
+
   return data
 }
 
@@ -889,6 +962,47 @@ export async function updatePoolPlayer(id: string, name: string): Promise<void> 
   const { error } = await supabase
     .from('player_pool')
     .update({ name: name.trim() })
+    .eq('id', id)
+
+  if (error) throw error
+}
+
+export async function updatePoolPlayerStatus(
+  id: string,
+  status: 'active' | 'inactive',
+): Promise<void> {
+  if (status === 'active') {
+    const activeCount = await countActivePoolPlayers(id)
+    if (activeCount >= MAX_ACTIVE_POOL_PLAYERS) {
+      throw new Error('At most 12 active players are allowed')
+    }
+  } else {
+    const { data: activeSeasons, error: seasonError } = await supabase
+      .from('seasons')
+      .select('id')
+      .eq('status', 'active')
+    if (seasonError) throw seasonError
+
+    const activeSeasonIds = (activeSeasons ?? []).map((season) => season.id)
+    if (activeSeasonIds.length > 0) {
+      const { data: assignedRows, error: assignedError } = await supabase
+        .from('players')
+        .select('id, teams!inner(season_id)')
+        .eq('pool_player_id', id)
+        .in('teams.season_id', activeSeasonIds)
+
+      if (assignedError) throw assignedError
+      if ((assignedRows ?? []).length > 0) {
+        throw new Error(
+          'Player is on a team in the current season and cannot be set inactive',
+        )
+      }
+    }
+  }
+
+  const { error } = await supabase
+    .from('player_pool')
+    .update({ status })
     .eq('id', id)
 
   if (error) throw error
@@ -948,8 +1062,12 @@ async function assertPoolPlayersAvailable(
 
   const poolById = await loadPoolPlayersByIds(poolPlayerIds)
   for (const id of poolPlayerIds) {
-    if (!poolById.has(id)) {
+    const player = poolById.get(id)
+    if (!player) {
       throw new Error('One or more selected players were not found in the pool')
+    }
+    if (player.status !== 'active') {
+      throw new Error('Only active players can be assigned to teams')
     }
   }
 
