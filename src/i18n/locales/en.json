@@ -158,6 +158,7 @@
     "rating": "Rating",
     "rd": "Confidence",
     "viewProfile": "View {{name}}'s profile",
+    "inactive": "Inactive",
     "empty": "No players in the pool yet."
   },
   "titles": {

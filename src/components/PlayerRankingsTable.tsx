@@ -54,13 +54,23 @@ export function PlayerRankingsTable({ rows }: PlayerRankingsTableProps) {
         </thead>
         <tbody>
           {rows.map((row) => {
-            const podium = getPodiumStyles(row.rank)
+            const isInactive = row.status === 'inactive'
+            const podium = isInactive
+              ? { row: 'bg-gray-50/80', rankBadge: 'bg-gray-200 text-gray-500' }
+              : getPodiumStyles(row.rank)
             return (
-              <tr key={row.id} className={`border-b border-green-50 last:border-0 ${podium.row}`}>
+              <tr
+                key={row.id}
+                className={`border-b border-green-50 last:border-0 ${podium.row} ${
+                  isInactive ? 'opacity-60' : ''
+                }`}
+              >
                 <td className="p-0" colSpan={5}>
                   <Link
                     to={`/players/${row.id}`}
-                    className="flex min-h-12 items-center gap-0 active:bg-green-50/80"
+                    className={`flex min-h-12 items-center gap-0 ${
+                      isInactive ? 'active:bg-gray-100/80' : 'active:bg-green-50/80'
+                    }`}
                     aria-label={t('rankings.viewProfile', { name: row.name })}
                   >
                     <span className="px-4 py-3">
@@ -70,17 +80,40 @@ export function PlayerRankingsTable({ rows }: PlayerRankingsTableProps) {
                         {row.rank}
                       </span>
                     </span>
-                    <span className="min-w-0 flex-1 px-4 py-3 font-semibold text-green-800">
+                    <span
+                      className={`min-w-0 flex-1 px-4 py-3 font-semibold ${
+                        isInactive ? 'text-gray-500' : 'text-green-800'
+                      }`}
+                    >
                       <span className="block">{row.name}</span>
-                      {row.title ? <PlayerTitleBadge title={row.title} /> : null}
+                      {isInactive ? (
+                        <span className="mt-0.5 block text-xs font-normal text-gray-400">
+                          {t('rankings.inactive')}
+                        </span>
+                      ) : row.title ? (
+                        <PlayerTitleBadge title={row.title} />
+                      ) : null}
                     </span>
-                    <span className="w-16 shrink-0 px-2 py-3 text-right font-bold text-green-800 sm:w-20 sm:px-4">
+                    <span
+                      className={`w-16 shrink-0 px-2 py-3 text-right font-bold sm:w-20 sm:px-4 ${
+                        isInactive ? 'text-gray-500' : 'text-green-800'
+                      }`}
+                    >
                       {roundRating(row.rating)}
                     </span>
-                    <span className="hidden w-20 shrink-0 px-4 py-3 text-right text-gray-600 sm:block">
+                    <span
+                      className={`hidden w-20 shrink-0 px-4 py-3 text-right sm:block ${
+                        isInactive ? 'text-gray-400' : 'text-gray-600'
+                      }`}
+                    >
                       {roundRating(row.ratingDeviation)}
                     </span>
-                    <span className="shrink-0 px-3 py-3 text-green-600" aria-hidden>
+                    <span
+                      className={`shrink-0 px-3 py-3 ${
+                        isInactive ? 'text-gray-400' : 'text-green-600'
+                      }`}
+                      aria-hidden
+                    >
                       <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                       </svg>

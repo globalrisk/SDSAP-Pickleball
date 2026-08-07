@@ -85,7 +85,7 @@ export async function archiveSeason(seasonId: string): Promise<Season> {
 export async function fetchPlayerRankings(): Promise<PlayerRankingRow[]> {
   const { data, error } = await supabase
     .from('player_pool')
-    .select('id, name, rating, rating_deviation, volatility')
+    .select('id, name, status, rating, rating_deviation, volatility')
     .order('rating', { ascending: false })
 
   if (error) throw error

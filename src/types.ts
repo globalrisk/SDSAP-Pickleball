@@ -39,6 +39,7 @@ export interface PlayerRankingRow {
   rank: number
   id: string
   name: string
+  status: PoolPlayerStatus
   rating: number
   ratingDeviation: number
   volatility: number

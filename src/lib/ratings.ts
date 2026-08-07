@@ -231,7 +231,14 @@ export function teamWinProbability(
 }
 
 export function buildRankingRows(
-  pool: { id: string; name: string; rating: number; rating_deviation: number; volatility: number }[],
+  pool: {
+    id: string
+    name: string
+    status?: 'active' | 'inactive'
+    rating: number
+    rating_deviation: number
+    volatility: number
+  }[],
 ): PlayerRankingRow[] {
   const sorted = [...pool].sort((a, b) => {
     if (b.rating !== a.rating) return b.rating - a.rating
@@ -245,6 +252,7 @@ export function buildRankingRows(
     rank: index + 1,
     id: player.id,
     name: player.name,
+    status: player.status === 'inactive' ? 'inactive' : 'active',
     rating: player.rating,
     ratingDeviation: player.rating_deviation,
     volatility: player.volatility,
