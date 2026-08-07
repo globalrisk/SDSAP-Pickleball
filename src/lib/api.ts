@@ -895,29 +895,10 @@ export async function fetchPlayerPool(): Promise<PoolPlayer[]> {
   return data ?? []
 }
 
-const MAX_ACTIVE_POOL_PLAYERS = 12
-
-async function countActivePoolPlayers(excludeId?: string): Promise<number> {
-  let query = supabase
-    .from('player_pool')
-    .select('id', { count: 'exact', head: true })
-    .eq('status', 'active')
-
-  if (excludeId) {
-    query = query.neq('id', excludeId)
-  }
-
-  const { count, error } = await query
-  if (error) throw error
-  return count ?? 0
-}
-
 export async function createPoolPlayer(
   name: string,
   initialRating: number = TRUESKILL_DEFAULTS.rating,
 ): Promise<PoolPlayer> {
-  const activeCount = await countActivePoolPlayers()
-  const status = activeCount < MAX_ACTIVE_POOL_PLAYERS ? 'active' : 'inactive'
   const rating = Math.round(
     Math.min(2500, Math.max(800, Number.isFinite(initialRating) ? initialRating : 1500)),
   )
@@ -926,7 +907,7 @@ export async function createPoolPlayer(
     .from('player_pool')
     .insert({
       name: name.trim(),
-      status,
+      status: 'active',
       rating,
       initial_rating: rating,
       rating_deviation: TRUESKILL_DEFAULTS.rd,
@@ -971,12 +952,7 @@ export async function updatePoolPlayerStatus(
   id: string,
   status: 'active' | 'inactive',
 ): Promise<void> {
-  if (status === 'active') {
-    const activeCount = await countActivePoolPlayers(id)
-    if (activeCount >= MAX_ACTIVE_POOL_PLAYERS) {
-      throw new Error('At most 12 active players are allowed')
-    }
-  } else {
+  if (status === 'inactive') {
     const { data: activeSeasons, error: seasonError } = await supabase
       .from('seasons')
       .select('id')
@@ -1417,15 +1393,33 @@ export async function createManyTeamsWithPlayers(
   return teams.length
 }
 
-/** Wipe season fixtures + teams, then create the given team list (e.g. rebalanced). */
-export async function resetSeasonTeams(
-  seasonId: string,
-  teams: {
-    name: string
-    color: string
-    poolPlayerIds: [string, string]
-  }[],
-): Promise<number> {
+/**
+ * Delete all fixtures and teams for a season that has no recorded results yet.
+ * Blocked once any completed or forfeit match exists.
+ */
+export async function deleteAllSeasonTeams(seasonId: string): Promise<void> {
+  const { data: season, error: seasonError } = await supabase
+    .from('seasons')
+    .select('id, status')
+    .eq('id', seasonId)
+    .single()
+  if (seasonError) throw seasonError
+  if (season.status !== 'active') {
+    throw new Error('Only the active season can have its teams deleted')
+  }
+
+  const { count: recordedCount, error: recordedError } = await supabase
+    .from('matches')
+    .select('id', { count: 'exact', head: true })
+    .eq('season_id', seasonId)
+    .in('status', ['completed', 'forfeit'])
+  if (recordedError) throw recordedError
+  if ((recordedCount ?? 0) > 0) {
+    throw new Error(
+      'Cannot delete teams after results have been recorded. Archive the season instead.',
+    )
+  }
+
   const { error: matchError } = await supabase
     .from('matches')
     .delete()
@@ -1434,6 +1428,4 @@ export async function resetSeasonTeams(
 
   const { error: teamError } = await supabase.from('teams').delete().eq('season_id', seasonId)
   if (teamError) throw teamError
-
-  return createManyTeamsWithPlayers(seasonId, teams)
 }

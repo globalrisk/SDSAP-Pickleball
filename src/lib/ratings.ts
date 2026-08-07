@@ -1,4 +1,4 @@
-import { Rating, expose, rate, winProbability } from 'ts-trueskill'
+import { Rating, rate, winProbability } from 'ts-trueskill'
 import type { PlayerRankingRow } from '../types'
 
 /**
@@ -68,11 +68,6 @@ function fromTrueSkill(rating: Rating): SkillRating {
     rd: rating.sigma * TRUESKILL_SCALE,
     volatility: 0,
   }
-}
-
-/** Conservative leaderboard score (mu − 3σ), in display units. */
-export function exposure(rating: SkillRating): number {
-  return expose(toTrueSkill(rating)) * TRUESKILL_SCALE
 }
 
 export function createDefaultRatingsMap(poolIds: string[]): Map<string, SkillRating> {
@@ -238,22 +233,15 @@ export function teamWinProbability(
 export function buildRankingRows(
   pool: { id: string; name: string; rating: number; rating_deviation: number; volatility: number }[],
 ): PlayerRankingRow[] {
-  const withExposure = pool.map((player) => ({
-    player,
-    exposure: exposure({
-      rating: player.rating,
-      rd: player.rating_deviation,
-      volatility: player.volatility,
-    }),
-  }))
-
-  withExposure.sort((a, b) => {
-    if (b.exposure !== a.exposure) return b.exposure - a.exposure
-    if (b.player.rating !== a.player.rating) return b.player.rating - a.player.rating
-    return a.player.name.localeCompare(b.player.name)
+  const sorted = [...pool].sort((a, b) => {
+    if (b.rating !== a.rating) return b.rating - a.rating
+    if (a.rating_deviation !== b.rating_deviation) {
+      return a.rating_deviation - b.rating_deviation
+    }
+    return a.name.localeCompare(b.name)
   })
 
-  return withExposure.map(({ player }, index) => ({
+  return sorted.map((player, index) => ({
     rank: index + 1,
     id: player.id,
     name: player.name,

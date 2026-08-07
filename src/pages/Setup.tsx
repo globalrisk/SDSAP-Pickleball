@@ -8,10 +8,10 @@ import {
   createPoolPlayer,
   createSeason,
   createTeamWithPlayers,
+  deleteAllSeasonTeams,
   deletePoolPlayer,
   fetchAssignedPoolPlayerIds,
   fetchMatches,
-  resetSeasonTeams,
   saveTeamWithPlayers,
   updatePoolPlayer,
   updatePoolPlayerStatus,
@@ -67,7 +67,6 @@ function PoolPlayerRow({
   isOnActiveSeasonTeam,
   isSaving,
   isStatusSaving,
-  activeCount,
   onSave,
   onDelete,
   onToggleStatus,
@@ -77,7 +76,6 @@ function PoolPlayerRow({
   isOnActiveSeasonTeam: boolean
   isSaving: boolean
   isStatusSaving: boolean
-  activeCount: number
   onSave: (id: string, name: string) => void
   onDelete: (id: string, name: string) => void
   onToggleStatus: (id: string, status: 'active' | 'inactive') => void
@@ -92,7 +90,6 @@ function PoolPlayerRow({
   const trimmed = name.trim()
   const isDirty = trimmed !== player.name
   const isActive = player.status === 'active'
-  const canActivate = !isActive && activeCount < 12
   const cannotDeactivate = isActive && isOnActiveSeasonTeam
 
   return (
@@ -127,18 +124,8 @@ function PoolPlayerRow({
           onClick={() =>
             onToggleStatus(player.id, isActive ? 'inactive' : 'active')
           }
-          disabled={
-            isStatusSaving ||
-            cannotDeactivate ||
-            (isActive ? false : !canActivate)
-          }
-          title={
-            cannotDeactivate
-              ? t('pool.cannotDeactivateOnTeam')
-              : !isActive && !canActivate
-                ? t('pool.activeCapReached', { count: activeCount, max: 12 })
-                : undefined
-          }
+          disabled={isStatusSaving || cannotDeactivate}
+          title={cannotDeactivate ? t('pool.cannotDeactivateOnTeam') : undefined}
           className="min-h-11 rounded-lg border border-green-300 bg-white px-3 py-2 text-sm font-medium text-green-800 hover:bg-green-100 disabled:opacity-50"
         >
           {isStatusSaving
@@ -346,6 +333,7 @@ export function SetupPage() {
     () => pool.filter((player) => player.status === 'active').length,
     [pool],
   )
+  const maxTeamCount = Math.floor(activeUnassigned.length / 2)
 
   const recordedCount = (activeSeasonMatches ?? []).filter(
     (m) => m.status === 'completed' || m.status === 'forfeit',
@@ -407,10 +395,6 @@ export function SetupPage() {
       })
     },
     onError: (err: Error) => {
-      if (err.message.includes('At most 12 active')) {
-        setFeedback({ text: t('pool.activeCapError'), tone: 'error' })
-        return
-      }
       if (err.message.includes('cannot be set inactive')) {
         setFeedback({ text: t('pool.cannotDeactivateOnTeam'), tone: 'error' })
         return
@@ -497,21 +481,23 @@ export function SetupPage() {
       }),
   })
 
-  const resetTeamsMutation = useMutation({
-    mutationFn: (payload: {
-      name: string
-      color: string
-      poolPlayerIds: [string, string]
-    }[]) => resetSeasonTeams(selectedSeason!.id, payload),
-    onSuccess: (count) => {
+  const deleteTeamsMutation = useMutation({
+    mutationFn: () => deleteAllSeasonTeams(selectedSeason!.id),
+    onSuccess: () => {
       invalidateSeasonData()
-      setFeedback({ text: t('setup.resetTeamsSuccess', { count }), tone: 'ok' })
+      queryClient.invalidateQueries({ queryKey: ['player-pool'] })
+      setFeedback({ text: t('setup.deleteTeamsSuccess'), tone: 'ok' })
     },
-    onError: (err: Error) =>
+    onError: (err: Error) => {
+      if (err.message.includes('results have been recorded')) {
+        setFeedback({ text: t('setup.deleteTeamsBlocked'), tone: 'error' })
+        return
+      }
       setFeedback({
-        text: t('setup.resetTeamsFailed', { message: err.message }),
+        text: t('setup.deleteTeamsFailed', { message: err.message }),
         tone: 'error',
-      }),
+      })
+    },
   })
 
   function handleArchiveSeason() {
@@ -554,18 +540,24 @@ export function SetupPage() {
 
   function handleGenerateBalancedTeams() {
     if (!selectedSeason) return
-    if (activeUnassigned.length < 2 || activeUnassigned.length % 2 !== 0) {
-      setFeedback({ text: t('setup.balancedTeamsNeedEven'), tone: 'error' })
+    if (maxTeamCount < 1) {
+      setFeedback({ text: t('setup.notEnoughPlayers'), tone: 'error' })
       return
     }
 
-    const balanced = generateBalancedTeams(
-      activeUnassigned.map((player) => ({
+    const selectedPlayers = [...activeUnassigned]
+      .sort((a, b) => {
+        if (b.rating !== a.rating) return b.rating - a.rating
+        return a.name.localeCompare(b.name)
+      })
+      .slice(0, maxTeamCount * 2)
+      .map((player) => ({
         id: player.id,
         name: player.name,
         rating: player.rating,
-      })),
-    )
+      }))
+
+    const balanced = generateBalancedTeams(selectedPlayers)
 
     const preview = balanced
       .map(
@@ -574,7 +566,20 @@ export function SetupPage() {
       )
       .join('\n')
 
-    if (!confirm(`${t('setup.balancedTeamsConfirm', { count: balanced.length })}\n\n${preview}`)) {
+    const confirmKey =
+      selectedPlayers.length < activeUnassigned.length
+        ? 'setup.balancedTeamsConfirmSubset'
+        : 'setup.balancedTeamsConfirm'
+
+    if (
+      !confirm(
+        `${t(confirmKey, {
+          count: balanced.length,
+          players: selectedPlayers.length,
+          available: activeUnassigned.length,
+        })}\n\n${preview}`,
+      )
+    ) {
       return
     }
 
@@ -592,55 +597,14 @@ export function SetupPage() {
     balanceTeamsMutation.mutate(payloads)
   }
 
-  function handleResetAndRebalanceTeams() {
+  function handleDeleteAllTeams() {
     if (!selectedSeason) return
-    const roster = (teams ?? []).flatMap((team) => team.players)
-    const uniqueIds = [...new Set(roster.map((player) => player.pool_player_id))]
-    const ratedPlayers = uniqueIds
-      .map((id) => pool.find((player) => player.id === id))
-      .filter((player): player is NonNullable<typeof player> => player != null)
-      .map((player) => ({
-        id: player.id,
-        name: player.name,
-        rating: player.rating,
-      }))
-
-    if (ratedPlayers.length < 2 || ratedPlayers.length % 2 !== 0) {
-      setFeedback({ text: t('setup.resetTeamsNeedEven'), tone: 'error' })
+    if ((recordedCount ?? 0) > 0) {
+      setFeedback({ text: t('setup.deleteTeamsBlocked'), tone: 'error' })
       return
     }
-
-    const balanced = generateBalancedTeams(ratedPlayers)
-    const preview = balanced
-      .map(
-        (team, index) =>
-          `${index + 1}. ${team.playerNames[0]} + ${team.playerNames[1]} (${roundRating(team.teamRating / 2)} avg)`,
-      )
-      .join('\n')
-
-    const matchCount = (activeSeasonMatches ?? []).length
-    const confirmMessage =
-      matchCount > 0
-        ? t('setup.resetTeamsConfirmWithMatches', {
-            count: balanced.length,
-            matches: matchCount,
-          })
-        : t('setup.resetTeamsConfirm', { count: balanced.length })
-
-    if (!confirm(`${confirmMessage}\n\n${preview}`)) return
-
-    const usedColors: string[] = []
-    const payloads = balanced.map((team) => {
-      const color = pickNextTeamColor(usedColors)
-      usedColors.push(color)
-      return {
-        name: `${team.playerNames[0]} / ${team.playerNames[1]}`,
-        color,
-        poolPlayerIds: team.poolPlayerIds,
-      }
-    })
-
-    resetTeamsMutation.mutate(payloads)
+    if (!confirm(t('setup.deleteTeamsConfirm'))) return
+    deleteTeamsMutation.mutate()
   }
 
   function handleDeletePoolPlayer(id: string, name: string) {
@@ -680,7 +644,7 @@ export function SetupPage() {
         <h2 className="text-lg font-semibold text-green-900">{t('pool.title')}</h2>
         <p className="mt-1 text-sm text-gray-600">{t('pool.description')}</p>
         <p className="mt-2 text-sm font-medium text-green-800">
-          {t('pool.activeCount', { count: activeCount, max: 12 })}
+          {t('pool.activeCount', { count: activeCount })}
         </p>
 
         <form onSubmit={handleAddPoolPlayer} className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
@@ -731,7 +695,6 @@ export function SetupPage() {
                   updatePoolStatusMutation.isPending &&
                   updatePoolStatusMutation.variables?.id === player.id
                 }
-                activeCount={activeCount}
                 onSave={(id, name) => updatePoolMutation.mutate({ id, name })}
                 onDelete={handleDeletePoolPlayer}
                 onToggleStatus={(id, status) =>
@@ -802,44 +765,49 @@ export function SetupPage() {
               {t('setup.balancedTeamsTitle')}
             </h3>
             <p className="mt-1 text-sm text-blue-800">{t('setup.balancedTeamsDescription')}</p>
-            {activeUnassigned.length % 2 !== 0 && activeUnassigned.length > 0 && (
-              <p className="mt-2 text-sm text-amber-700">{t('setup.balancedTeamsNeedEven')}</p>
+            {maxTeamCount > 0 && maxTeamCount * 2 < activeUnassigned.length && (
+              <p className="mt-2 text-xs text-blue-800">
+                {t('setup.balancedTeamsSubsetHint', {
+                  players: maxTeamCount * 2,
+                  available: activeUnassigned.length,
+                })}
+              </p>
             )}
             <button
               type="button"
               onClick={handleGenerateBalancedTeams}
               disabled={
                 balanceTeamsMutation.isPending ||
-                resetTeamsMutation.isPending ||
-                activeUnassigned.length < 2 ||
-                activeUnassigned.length % 2 !== 0
+                deleteTeamsMutation.isPending ||
+                maxTeamCount < 1
               }
               className="mt-3 min-h-11 w-full rounded-lg bg-blue-600 px-4 py-3 text-sm font-medium text-white hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 sm:w-auto sm:py-2"
             >
               {balanceTeamsMutation.isPending
                 ? t('setup.balancedTeamsGenerating')
                 : t('setup.balancedTeamsButton', {
-                    count: Math.floor(activeUnassigned.length / 2),
+                    count: maxTeamCount,
                   })}
             </button>
             {(teams ?? []).length > 0 && (
               <button
                 type="button"
-                onClick={handleResetAndRebalanceTeams}
+                onClick={handleDeleteAllTeams}
                 disabled={
-                  resetTeamsMutation.isPending ||
+                  deleteTeamsMutation.isPending ||
                   balanceTeamsMutation.isPending ||
-                  createTeamMutation.isPending
+                  createTeamMutation.isPending ||
+                  recordedCount > 0
                 }
-                className="mt-2 min-h-11 w-full rounded-lg border border-blue-300 bg-white px-4 py-3 text-sm font-medium text-blue-800 hover:bg-blue-50 active:bg-blue-100 disabled:opacity-50 sm:w-auto sm:py-2"
+                className="mt-2 min-h-11 w-full rounded-lg border border-red-300 bg-white px-4 py-3 text-sm font-medium text-red-700 hover:bg-red-50 active:bg-red-100 disabled:opacity-50 sm:w-auto sm:py-2"
               >
-                {resetTeamsMutation.isPending
-                  ? t('setup.resetTeamsWorking')
-                  : t('setup.resetTeamsButton')}
+                {deleteTeamsMutation.isPending
+                  ? t('setup.deleteTeamsWorking')
+                  : t('setup.deleteTeamsButton')}
               </button>
             )}
             {(teams ?? []).length > 0 && (
-              <p className="mt-2 text-xs text-blue-700">{t('setup.resetTeamsHint')}</p>
+              <p className="mt-2 text-xs text-blue-700">{t('setup.deleteTeamsHint')}</p>
             )}
           </div>
 
