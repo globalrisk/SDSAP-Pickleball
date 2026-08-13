@@ -2,10 +2,6 @@ import type { MatchWithTeams, StandingRow, Team, TeamWithPlayers } from '../type
 
 const FINISHED_STATUSES = new Set(['completed', 'forfeit'])
 
-interface HeadToHeadResult {
-  winnerId: string
-}
-
 interface TeamStats {
   team: Team
   playerNames: string[]
@@ -16,56 +12,69 @@ interface TeamStats {
   points: number
 }
 
-function pairKey(teamAId: string, teamBId: string): string {
-  return teamAId < teamBId ? `${teamAId}:${teamBId}` : `${teamBId}:${teamAId}`
-}
+/**
+ * Split a points-tied group into ordered rank blocks using only matches played
+ * within that group. Mini-table wins are compared first, followed by point
+ * differential from scored matches in the same group. Equal results are
+ * reapplied to the smaller subgroup; if no split is possible, every team in
+ * the group shares a rank.
+ */
+function resolveTieGroup(group: TeamStats[], matches: MatchWithTeams[]): TeamStats[][] {
+  if (group.length <= 1) return [group]
 
-function buildHeadToHeadMap(matches: MatchWithTeams[]): Map<string, HeadToHeadResult> {
-  const map = new Map<string, HeadToHeadResult>()
+  const teamIds = new Set(group.map((row) => row.team.id))
+  const headToHeadWins = new Map(group.map((row) => [row.team.id, 0]))
+  const headToHeadDifferential = new Map(group.map((row) => [row.team.id, 0]))
 
   for (const match of matches) {
     if (!FINISHED_STATUSES.has(match.status) || !match.winner_team_id) continue
+    if (!teamIds.has(match.home_team_id) || !teamIds.has(match.away_team_id)) continue
 
-    map.set(pairKey(match.home_team_id, match.away_team_id), {
-      winnerId: match.winner_team_id,
+    headToHeadWins.set(
+      match.winner_team_id,
+      (headToHeadWins.get(match.winner_team_id) ?? 0) + 1,
+    )
+
+    if (match.home_score != null && match.away_score != null) {
+      const margin = match.home_score - match.away_score
+      headToHeadDifferential.set(
+        match.home_team_id,
+        (headToHeadDifferential.get(match.home_team_id) ?? 0) + margin,
+      )
+      headToHeadDifferential.set(
+        match.away_team_id,
+        (headToHeadDifferential.get(match.away_team_id) ?? 0) - margin,
+      )
+    }
+  }
+
+  const groupsByRecord = new Map<string, TeamStats[]>()
+  for (const row of group) {
+    const wins = headToHeadWins.get(row.team.id) ?? 0
+    const differential = headToHeadDifferential.get(row.team.id) ?? 0
+    const key = `${wins}:${differential}`
+    const partition = groupsByRecord.get(key) ?? []
+    partition.push(row)
+    groupsByRecord.set(key, partition)
+  }
+
+  if (groupsByRecord.size === 1) {
+    return [[...group].sort((a, b) => a.team.id.localeCompare(b.team.id))]
+  }
+
+  return [...groupsByRecord.values()]
+    .sort((groupA, groupB) => {
+      const teamAId = groupA[0].team.id
+      const teamBId = groupB[0].team.id
+      const winsDifference =
+        (headToHeadWins.get(teamBId) ?? 0) - (headToHeadWins.get(teamAId) ?? 0)
+      if (winsDifference !== 0) return winsDifference
+      return (
+        (headToHeadDifferential.get(teamBId) ?? 0) -
+        (headToHeadDifferential.get(teamAId) ?? 0)
+      )
     })
-  }
-
-  return map
-}
-
-function getHeadToHead(
-  teamAId: string,
-  teamBId: string,
-  headToHeadMap: Map<string, HeadToHeadResult>,
-): HeadToHeadResult | null {
-  return headToHeadMap.get(pairKey(teamAId, teamBId)) ?? null
-}
-
-function compareTeams(
-  a: TeamStats,
-  b: TeamStats,
-  headToHeadMap: Map<string, HeadToHeadResult>,
-): number {
-  if (b.points !== a.points) return b.points - a.points
-
-  const headToHead = getHeadToHead(a.team.id, b.team.id, headToHeadMap)
-  if (headToHead) {
-    if (headToHead.winnerId === a.team.id) return -1
-    if (headToHead.winnerId === b.team.id) return 1
-  }
-
-  if (b.wins !== a.wins) return b.wins - a.wins
-  return a.team.id.localeCompare(b.team.id)
-}
-
-function areStandingsTied(
-  a: TeamStats,
-  b: TeamStats,
-  headToHeadMap: Map<string, HeadToHeadResult>,
-): boolean {
-  if (a.points !== b.points) return false
-  return getHeadToHead(a.team.id, b.team.id, headToHeadMap) === null
+    .flatMap((partition) => resolveTieGroup(partition, matches))
 }
 
 export function computeStandings(
@@ -111,15 +120,21 @@ export function computeStandings(
     }
   }
 
-  const headToHeadMap = buildHeadToHeadMap(matches)
-  const sorted = [...stats.values()].sort((a, b) => compareTeams(a, b, headToHeadMap))
+  const groupsByPoints = new Map<number, TeamStats[]>()
+  for (const row of stats.values()) {
+    const group = groupsByPoints.get(row.points) ?? []
+    group.push(row)
+    groupsByPoints.set(row.points, group)
+  }
 
-  let currentRank = 0
-  return sorted.map((row, index) => {
-    const prev = sorted[index - 1]
-    if (index === 0 || !areStandingsTied(row, prev, headToHeadMap)) {
-      currentRank = index + 1
-    }
-    return { ...row, rank: currentRank }
+  const rankBlocks = [...groupsByPoints.entries()]
+    .sort(([pointsA], [pointsB]) => pointsB - pointsA)
+    .flatMap(([, group]) => resolveTieGroup(group, matches))
+
+  let nextRank = 1
+  return rankBlocks.flatMap((block) => {
+    const rank = nextRank
+    nextRank += block.length
+    return block.map((row) => ({ ...row, rank }))
   })
 }

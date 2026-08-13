@@ -74,7 +74,11 @@ Go to **Setup** in the app to rename teams and players, or edit them directly in
 
 - **Win** = 1 point
 - **Loss or forfeit** = 0 points
-- Ranked by total points; tied teams share the same rank
+- Ranked by total points
+- Teams tied on points are ranked by wins in matches played among the tied teams
+- If those wins are equal, point differential from scored matches among the tied teams is used
+- If part of the tied group remains level, the same rule is reapplied to that subgroup
+- Teams that still cannot be separated share the same rank
 
 ## Scripts
 

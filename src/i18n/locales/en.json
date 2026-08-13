@@ -130,15 +130,14 @@
     "probabilityLabel": "{{homeTeam}} {{homePercent}}% win chance, {{awayTeam}} {{awayPercent}}%",
     "averageRating": "Average player rating",
     "createTitle": "Schedule",
-    "createDescription": "Generate a full round-robin schedule for this season (every team plays every other team).",
+    "createDescription": "Generate a schedule for this season (every team plays every other team).",
     "createButton": "Create Matches",
     "creating": "Creating…",
-    "createConfirm": "Create a round-robin schedule for {{teams}} teams? Matches will be saved for this season.",
+    "createConfirm": "Create a schedule for {{teams}} teams? Matches will be saved for this season.",
     "createSuccess": "Created {{count}} matches",
     "createFailed": "Create matches failed: {{message}}",
     "createAlreadyExists": "This season already has matches.",
-    "createNeedTeams": "Add at least 2 teams in Setup before creating matches.",
-    "createNeedEvenTeams": "Round robin needs an even number of teams."
+    "createNeedTeams": "Add at least 2 teams in Setup before creating matches."
   },
   "record": {
     "title": "Record Result",

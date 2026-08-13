@@ -130,15 +130,14 @@
     "probabilityLabel": "{{homeTeam}} có {{homePercent}}% khả năng thắng, {{awayTeam}} có {{awayPercent}}%",
     "averageRating": "Điểm trung bình của người chơi",
     "createTitle": "Lịch thi đấu",
-    "createDescription": "Tạo lịch vòng tròn cho mùa giải này (mỗi đội đấu với mọi đội khác).",
+    "createDescription": "Tạo lịch cho mùa giải này (mỗi đội đấu với mọi đội khác).",
     "createButton": "Tạo trận đấu",
     "creating": "Đang tạo…",
-    "createConfirm": "Tạo lịch vòng tròn cho {{teams}} đội? Các trận sẽ được lưu cho mùa giải này.",
+    "createConfirm": "Tạo lịch cho {{teams}} đội? Các trận sẽ được lưu cho mùa giải này.",
     "createSuccess": "Đã tạo {{count}} trận",
     "createFailed": "Tạo trận thất bại: {{message}}",
     "createAlreadyExists": "Mùa giải này đã có trận đấu.",
-    "createNeedTeams": "Thêm ít nhất 2 đội trong Cài đặt trước khi tạo trận.",
-    "createNeedEvenTeams": "Vòng tròn cần số đội chẵn."
+    "createNeedTeams": "Thêm ít nhất 2 đội trong Cài đặt trước khi tạo trận."
   },
   "record": {
     "title": "Ghi kết quả",

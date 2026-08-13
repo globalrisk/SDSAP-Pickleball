@@ -1197,9 +1197,6 @@ export async function createSeasonMatches(seasonId: string): Promise<number> {
   if (teams.length < 2) {
     throw new Error('Need at least 2 teams to create matches')
   }
-  if (teams.length % 2 !== 0) {
-    throw new Error('Round robin requires an even number of teams')
-  }
 
   const rows = buildRoundRobinMatches(
     seasonId,

@@ -34,8 +34,7 @@ export function MatchesPage() {
   const canCreateMatches =
     isSelectedSeasonActive &&
     matchCount === 0 &&
-    teamCount >= 2 &&
-    teamCount % 2 === 0
+    teamCount >= 2
 
   const createMatchesMutation = useMutation({
     mutationFn: () => createSeasonMatches(selectedSeason!.id),
@@ -88,9 +87,6 @@ export function MatchesPage() {
               )}
               {matchCount === 0 && teamCount < 2 && (
                 <p className="mt-1 text-sm text-amber-700">{t('matches.createNeedTeams')}</p>
-              )}
-              {matchCount === 0 && teamCount >= 2 && teamCount % 2 !== 0 && (
-                <p className="mt-1 text-sm text-amber-700">{t('matches.createNeedEvenTeams')}</p>
               )}
             </div>
             <button
