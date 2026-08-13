@@ -8,6 +8,7 @@ import {
   type DoublesMatchPlayers,
 } from './ratings'
 import { buildRoundRobinMatches } from './schedule'
+import { validateForfeitTeam, validateMatchResult } from './matchResultValidation'
 import { computePlayerFunStats } from './engagement'
 import {
   assignPlayerTitles,
@@ -130,7 +131,6 @@ export async function fetchPlayerTitlesMap(): Promise<Map<string, PlayerTitle>> 
     .select(
       'id, season_id, status, winner_team_id, home_team_id, away_team_id, home_score, away_score, home_pool_player_ids, away_pool_player_ids, result_recorded_at',
     )
-    .in('status', ['completed', 'forfeit'])
   if (matchError) throw matchError
 
   const { data: teams, error: teamsError } = await supabase
@@ -603,11 +603,25 @@ interface FinishedMatchForRatings {
   away_players: { pool_player_id: string }[]
 }
 
-async function fetchCompletedMatchesForRatings(): Promise<FinishedMatchForRatings[]> {
+interface PendingRatingMatch {
+  matchId: string
+  mode: 'completed' | 'exclude'
+  winnerTeamId?: string
+  homeScore?: number | null
+  awayScore?: number | null
+  homePoolPlayerIds?: string[]
+  awayPoolPlayerIds?: string[]
+  resultRecordedAt?: string | null
+}
+
+async function fetchCompletedMatchesForRatings(
+  pending?: PendingRatingMatch,
+): Promise<FinishedMatchForRatings[]> {
   const { data, error } = await supabase
     .from('matches')
     .select(`
       id,
+      status,
       season_id,
       round_number,
       result_recorded_at,
@@ -626,11 +640,15 @@ async function fetchCompletedMatchesForRatings(): Promise<FinishedMatchForRating
         players(pool_player_id)
       )
     `)
-    .eq('status', 'completed')
 
   if (error) throw error
 
-  const rows = (data ?? []).map((row) => {
+  const relevantRows = (data ?? []).filter((row) => {
+    if (pending && row.id === pending.matchId) return pending.mode === 'completed'
+    return row.status === 'completed'
+  })
+
+  const rows = relevantRows.map((row) => {
     const homeTeam = Array.isArray(row.home_team) ? row.home_team[0] : row.home_team
     const awayTeam = Array.isArray(row.away_team) ? row.away_team[0] : row.away_team
     const seasonJoin = row.seasons as
@@ -639,19 +657,29 @@ async function fetchCompletedMatchesForRatings(): Promise<FinishedMatchForRating
       | null
     const season = Array.isArray(seasonJoin) ? seasonJoin[0] : seasonJoin
 
+    const pendingMatch =
+      pending && row.id === pending.matchId && pending.mode === 'completed'
+        ? pending
+        : null
     return {
       id: row.id,
       season_id: row.season_id,
       round_number: row.round_number,
       season_starts_at: season?.starts_at ?? '',
-      result_recorded_at: row.result_recorded_at,
-      winner_team_id: row.winner_team_id!,
+      result_recorded_at: pendingMatch
+        ? (pendingMatch.resultRecordedAt ?? row.result_recorded_at)
+        : row.result_recorded_at,
+      winner_team_id: pendingMatch ? pendingMatch.winnerTeamId! : row.winner_team_id!,
       home_team_id: row.home_team_id,
       away_team_id: row.away_team_id,
-      home_score: row.home_score,
-      away_score: row.away_score,
-      home_pool_player_ids: row.home_pool_player_ids,
-      away_pool_player_ids: row.away_pool_player_ids,
+      home_score: pendingMatch ? (pendingMatch.homeScore ?? null) : row.home_score,
+      away_score: pendingMatch ? (pendingMatch.awayScore ?? null) : row.away_score,
+      home_pool_player_ids: pendingMatch
+        ? (pendingMatch.homePoolPlayerIds ?? null)
+        : row.home_pool_player_ids,
+      away_pool_player_ids: pendingMatch
+        ? (pendingMatch.awayPoolPlayerIds ?? null)
+        : row.away_pool_player_ids,
       home_players: homeTeam?.players ?? [],
       away_players: awayTeam?.players ?? [],
     }
@@ -749,7 +777,7 @@ async function fetchSeasonPoolPlayerIds(seasonId: string): Promise<string[]> {
   return [...new Set((data ?? []).map((row) => row.pool_player_id))]
 }
 
-export async function recomputeAllRatings(): Promise<void> {
+async function buildRatingsReplacement(pending?: PendingRatingMatch) {
   const { data: pool, error: poolError } = await supabase
     .from('player_pool')
     .select('id, initial_rating')
@@ -757,7 +785,7 @@ export async function recomputeAllRatings(): Promise<void> {
 
   const poolRows = pool ?? []
   const ratings = createInitialRatingsMap(poolRows)
-  const finishedMatches = await fetchCompletedMatchesForRatings()
+  const finishedMatches = await fetchCompletedMatchesForRatings(pending)
   const seasonRosterCache = new Map<string, string[]>()
 
   const historyRows: {
@@ -844,45 +872,30 @@ export async function recomputeAllRatings(): Promise<void> {
     previousSeasonId = match.season_id
   }
 
-  const { error: clearError } = await supabase
-    .from('rating_history')
-    .delete()
-    .not('id', 'is', null)
-  if (clearError) throw clearError
+  const playerRatings = poolRows.map((row) => {
+    const current = ratings.get(row.id) ?? {
+      rating: row.initial_rating,
+      rd: TRUESKILL_DEFAULTS.rd,
+      volatility: TRUESKILL_DEFAULTS.volatility,
+    }
+    return {
+      id: row.id,
+      rating: current.rating,
+      rating_deviation: current.rd,
+      volatility: current.volatility,
+    }
+  })
 
-  // Insert in chunks to avoid payload limits
-  const chunkSize = 200
-  for (let i = 0; i < historyRows.length; i += chunkSize) {
-    const chunk = historyRows.slice(i, i + chunkSize)
-    const { error: insertError } = await supabase.from('rating_history').insert(chunk)
-    if (insertError) throw insertError
-  }
-
-  const results = await Promise.all(
-    poolRows.map((row) => {
-      const current = ratings.get(row.id) ?? {
-        rating: row.initial_rating,
-        rd: TRUESKILL_DEFAULTS.rd,
-        volatility: TRUESKILL_DEFAULTS.volatility,
-      }
-      return supabase
-        .from('player_pool')
-        .update({
-          rating: current.rating,
-          rating_deviation: current.rd,
-          volatility: current.volatility,
-        })
-        .eq('id', row.id)
-    }),
-  )
-
-  for (const result of results) {
-    if (result.error) throw result.error
-  }
+  return { historyRows, playerRatings }
 }
 
-async function afterMatchResultChange(): Promise<void> {
-  await recomputeAllRatings()
+export async function recomputeAllRatings(): Promise<void> {
+  const { historyRows, playerRatings } = await buildRatingsReplacement()
+  const { error } = await supabase.rpc('replace_ratings_atomic', {
+    p_history_rows: historyRows,
+    p_player_ratings: playerRatings,
+  })
+  if (error) throw error
 }
 
 export async function fetchPlayerPool(): Promise<PoolPlayer[]> {
@@ -1183,16 +1196,6 @@ export async function fetchSeasonRecap(seasonId: string): Promise<SeasonRecap> {
 }
 
 export async function createSeasonMatches(seasonId: string): Promise<number> {
-  const { count, error: countError } = await supabase
-    .from('matches')
-    .select('id', { count: 'exact', head: true })
-    .eq('season_id', seasonId)
-
-  if (countError) throw countError
-  if ((count ?? 0) > 0) {
-    throw new Error('This season already has matches')
-  }
-
   const teams = await fetchTeams(seasonId)
   if (teams.length < 2) {
     throw new Error('Need at least 2 teams to create matches')
@@ -1203,9 +1206,16 @@ export async function createSeasonMatches(seasonId: string): Promise<number> {
     teams.map((team) => team.id),
   )
 
-  const { data, error } = await supabase.from('matches').insert(rows).select('id')
+  const { data, error } = await supabase.rpc('create_season_matches_atomic', {
+    p_season_id: seasonId,
+    p_matches: rows.map((row) => ({
+      home_team_id: row.home_team_id,
+      away_team_id: row.away_team_id,
+      round_number: row.round_number,
+    })),
+  })
   if (error) throw error
-  return data?.length ?? rows.length
+  return data as number
 }
 
 export async function recordResult(
@@ -1218,31 +1228,55 @@ export async function recordResult(
 ): Promise<void> {
   const { data: match, error: matchError } = await supabase
     .from('matches')
-    .select('home_team_id, away_team_id, result_recorded_at')
+    .select(
+      'home_team_id, away_team_id, home_pool_player_ids, away_pool_player_ids, result_recorded_at',
+    )
     .eq('id', matchId)
     .single()
   if (matchError) throw matchError
 
-  const { homeIds, awayIds } = await fetchTeamPoolPlayerIds(
-    match.home_team_id,
-    match.away_team_id,
-  )
+  validateMatchResult({
+    homeTeamId: match.home_team_id,
+    awayTeamId: match.away_team_id,
+    winnerTeamId: payload.winnerTeamId,
+    homeScore: payload.homeScore,
+    awayScore: payload.awayScore,
+  })
 
-  const { error } = await supabase
-    .from('matches')
-    .update({
-      status: 'completed',
-      winner_team_id: payload.winnerTeamId,
-      home_score: payload.homeScore ?? null,
-      away_score: payload.awayScore ?? null,
-      home_pool_player_ids: homeIds,
-      away_pool_player_ids: awayIds,
-      result_recorded_at: match.result_recorded_at ?? new Date().toISOString(),
-    })
-    .eq('id', matchId)
+  let homeIds = match.home_pool_player_ids ?? []
+  let awayIds = match.away_pool_player_ids ?? []
+  if (homeIds.length !== 2 || awayIds.length !== 2) {
+    const current = await fetchTeamPoolPlayerIds(match.home_team_id, match.away_team_id)
+    if (homeIds.length !== 2) homeIds = current.homeIds
+    if (awayIds.length !== 2) awayIds = current.awayIds
+  }
+
+  const resultRecordedAt = match.result_recorded_at ?? new Date().toISOString()
+  const { historyRows, playerRatings } = await buildRatingsReplacement({
+    matchId,
+    mode: 'completed',
+    winnerTeamId: payload.winnerTeamId,
+    homeScore: payload.homeScore ?? null,
+    awayScore: payload.awayScore ?? null,
+    homePoolPlayerIds: homeIds,
+    awayPoolPlayerIds: awayIds,
+    resultRecordedAt,
+  })
+
+  const { error } = await supabase.rpc('save_match_and_ratings_atomic', {
+    p_match_id: matchId,
+    p_status: 'completed',
+    p_winner_team_id: payload.winnerTeamId,
+    p_home_score: payload.homeScore ?? null,
+    p_away_score: payload.awayScore ?? null,
+    p_home_pool_player_ids: homeIds,
+    p_away_pool_player_ids: awayIds,
+    p_result_recorded_at: resultRecordedAt,
+    p_history_rows: historyRows,
+    p_player_ratings: playerRatings,
+  })
 
   if (error) throw error
-  await afterMatchResultChange()
 }
 
 export async function recordForfeit(
@@ -1251,53 +1285,71 @@ export async function recordForfeit(
   homeTeamId: string,
   awayTeamId: string,
 ): Promise<void> {
-  const winnerTeamId =
-    forfeitTeamId === homeTeamId ? awayTeamId : homeTeamId
-
   const { data: match, error: matchError } = await supabase
     .from('matches')
-    .select('result_recorded_at')
+    .select(
+      'home_team_id, away_team_id, home_pool_player_ids, away_pool_player_ids, result_recorded_at',
+    )
     .eq('id', matchId)
     .single()
   if (matchError) throw matchError
 
-  const { homeIds, awayIds } = await fetchTeamPoolPlayerIds(homeTeamId, awayTeamId)
+  if (match.home_team_id !== homeTeamId || match.away_team_id !== awayTeamId) {
+    throw new Error('Match teams changed; refresh and try again')
+  }
+  validateForfeitTeam(forfeitTeamId, match.home_team_id, match.away_team_id)
+  const winnerTeamId =
+    forfeitTeamId === match.home_team_id ? match.away_team_id : match.home_team_id
 
-  const { error } = await supabase
-    .from('matches')
-    .update({
-      status: 'forfeit',
-      winner_team_id: winnerTeamId,
-      home_score: null,
-      away_score: null,
-      home_pool_player_ids: homeIds,
-      away_pool_player_ids: awayIds,
-      result_recorded_at: match.result_recorded_at ?? new Date().toISOString(),
-    })
-    .eq('id', matchId)
+  let homeIds = match.home_pool_player_ids ?? []
+  let awayIds = match.away_pool_player_ids ?? []
+  if (homeIds.length !== 2 || awayIds.length !== 2) {
+    const current = await fetchTeamPoolPlayerIds(match.home_team_id, match.away_team_id)
+    if (homeIds.length !== 2) homeIds = current.homeIds
+    if (awayIds.length !== 2) awayIds = current.awayIds
+  }
+
+  const resultRecordedAt = match.result_recorded_at ?? new Date().toISOString()
+  const { historyRows, playerRatings } = await buildRatingsReplacement({
+    matchId,
+    mode: 'exclude',
+  })
+
+  const { error } = await supabase.rpc('save_match_and_ratings_atomic', {
+    p_match_id: matchId,
+    p_status: 'forfeit',
+    p_winner_team_id: winnerTeamId,
+    p_home_score: null,
+    p_away_score: null,
+    p_home_pool_player_ids: homeIds,
+    p_away_pool_player_ids: awayIds,
+    p_result_recorded_at: resultRecordedAt,
+    p_history_rows: historyRows,
+    p_player_ratings: playerRatings,
+  })
 
   if (error) throw error
-  // Forfeits do not affect TrueSkill ratings, but still trigger a recompute
-  // so clearing a prior completed result restores ratings correctly.
-  await afterMatchResultChange()
 }
 
 export async function revertMatchToScheduled(matchId: string): Promise<void> {
-  const { error } = await supabase
-    .from('matches')
-    .update({
-      status: 'scheduled',
-      winner_team_id: null,
-      home_score: null,
-      away_score: null,
-      home_pool_player_ids: null,
-      away_pool_player_ids: null,
-      result_recorded_at: null,
-    })
-    .eq('id', matchId)
+  const { historyRows, playerRatings } = await buildRatingsReplacement({
+    matchId,
+    mode: 'exclude',
+  })
+  const { error } = await supabase.rpc('save_match_and_ratings_atomic', {
+    p_match_id: matchId,
+    p_status: 'scheduled',
+    p_winner_team_id: null,
+    p_home_score: null,
+    p_away_score: null,
+    p_home_pool_player_ids: null,
+    p_away_pool_player_ids: null,
+    p_result_recorded_at: null,
+    p_history_rows: historyRows,
+    p_player_ratings: playerRatings,
+  })
 
   if (error) throw error
-  await afterMatchResultChange()
 }
 
 export async function saveTeamWithPlayers(
@@ -1310,29 +1362,21 @@ export async function saveTeamWithPlayers(
     throw new Error('A team must have exactly 2 players')
   }
 
-  const poolById = await assertPoolPlayersAvailable(
+  await assertPoolPlayersAvailable(
     seasonId,
     players.map((player) => player.poolPlayerId),
     teamId,
   )
 
-  const { error: teamError } = await supabase
-    .from('teams')
-    .update({ name: teamName.trim() })
-    .eq('id', teamId)
-  if (teamError) throw teamError
-
-  for (const player of players) {
-    const poolPlayer = poolById.get(player.poolPlayerId)!
-    const { error } = await supabase
-      .from('players')
-      .update({
-        pool_player_id: player.poolPlayerId,
-        name: poolPlayer.name,
-      })
-      .eq('id', player.id)
-    if (error) throw error
-  }
+  const { error } = await supabase.rpc('save_season_teams_atomic', {
+    p_season_id: seasonId,
+    p_teams: [{
+      id: teamId,
+      name: teamName.trim(),
+      poolPlayerIds: players.map((player) => player.poolPlayerId),
+    }],
+  })
+  if (error) throw error
 }
 
 export async function createTeamWithPlayers(
@@ -1343,37 +1387,28 @@ export async function createTeamWithPlayers(
     poolPlayerIds: [string, string]
   },
 ): Promise<TeamWithPlayers> {
-  const poolById = await assertPoolPlayersAvailable(seasonId, payload.poolPlayerIds)
+  await assertPoolPlayersAvailable(seasonId, payload.poolPlayerIds)
 
-  const { data: team, error: teamError } = await supabase
-    .from('teams')
-    .insert({
-      season_id: seasonId,
+  const { data: teamIds, error } = await supabase.rpc('save_season_teams_atomic', {
+    p_season_id: seasonId,
+    p_teams: [{
       name: payload.name.trim(),
       color: payload.color,
-    })
-    .select()
+      poolPlayerIds: payload.poolPlayerIds,
+    }],
+  })
+  if (error) throw error
+
+  const teamId = (teamIds as string[] | null)?.[0]
+  if (!teamId) throw new Error('Team was created but no ID was returned')
+
+  const { data: team, error: fetchError } = await supabase
+    .from('teams')
+    .select('*, players(*)')
+    .eq('id', teamId)
     .single()
-
-  if (teamError) throw teamError
-
-  const { data: players, error: playersError } = await supabase
-    .from('players')
-    .insert(
-      payload.poolPlayerIds.map((poolPlayerId) => ({
-        name: poolById.get(poolPlayerId)!.name,
-        team_id: team.id,
-        pool_player_id: poolPlayerId,
-      })),
-    )
-    .select()
-
-  if (playersError) throw playersError
-
-  return {
-    ...team,
-    players: players ?? [],
-  }
+  if (fetchError) throw fetchError
+  return team as TeamWithPlayers
 }
 
 export async function createManyTeamsWithPlayers(
@@ -1384,10 +1419,18 @@ export async function createManyTeamsWithPlayers(
     poolPlayerIds: [string, string]
   }[],
 ): Promise<number> {
-  for (const team of teams) {
-    await createTeamWithPlayers(seasonId, team)
-  }
-  return teams.length
+  if (teams.length === 0) return 0
+
+  const { data, error } = await supabase.rpc('save_season_teams_atomic', {
+    p_season_id: seasonId,
+    p_teams: teams.map((team) => ({
+      name: team.name.trim(),
+      color: team.color,
+      poolPlayerIds: team.poolPlayerIds,
+    })),
+  })
+  if (error) throw error
+  return (data as string[] | null)?.length ?? 0
 }
 
 /**
@@ -1395,34 +1438,8 @@ export async function createManyTeamsWithPlayers(
  * Blocked once any completed or forfeit match exists.
  */
 export async function deleteAllSeasonTeams(seasonId: string): Promise<void> {
-  const { data: season, error: seasonError } = await supabase
-    .from('seasons')
-    .select('id, status')
-    .eq('id', seasonId)
-    .single()
-  if (seasonError) throw seasonError
-  if (season.status !== 'active') {
-    throw new Error('Only the active season can have its teams deleted')
-  }
-
-  const { count: recordedCount, error: recordedError } = await supabase
-    .from('matches')
-    .select('id', { count: 'exact', head: true })
-    .eq('season_id', seasonId)
-    .in('status', ['completed', 'forfeit'])
-  if (recordedError) throw recordedError
-  if ((recordedCount ?? 0) > 0) {
-    throw new Error(
-      'Cannot delete teams after results have been recorded. Archive the season instead.',
-    )
-  }
-
-  const { error: matchError } = await supabase
-    .from('matches')
-    .delete()
-    .eq('season_id', seasonId)
-  if (matchError) throw matchError
-
-  const { error: teamError } = await supabase.from('teams').delete().eq('season_id', seasonId)
-  if (teamError) throw teamError
+  const { error } = await supabase.rpc('delete_all_season_teams_atomic', {
+    p_season_id: seasonId,
+  })
+  if (error) throw error
 }
