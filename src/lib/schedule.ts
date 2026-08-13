@@ -1,17 +1,26 @@
-/** Circle-method round robin for an even number of teams. */
+/**
+ * Circle-method round robin for any number of teams.
+ *
+ * Odd-sized leagues are padded with a virtual bye. Pairings that contain the
+ * bye are omitted, leaving each real team with one bye round while still
+ * scheduling every pair of teams exactly once.
+ */
 export function generateRoundRobinPairings(teamCount: number): [number, number][][] {
-  if (teamCount % 2 !== 0) {
-    throw new Error('Round robin requires an even number of teams')
+  if (!Number.isInteger(teamCount) || teamCount < 2) {
+    throw new Error('Need at least 2 teams to create matches')
   }
 
-  const teams = Array.from({ length: teamCount }, (_, i) => i)
+  const rotationSize = teamCount + (teamCount % 2)
+  const byeIndex = teamCount
+  const teams = Array.from({ length: rotationSize }, (_, i) => i)
   const rounds: [number, number][][] = []
 
-  for (let round = 0; round < teamCount - 1; round++) {
+  for (let round = 0; round < rotationSize - 1; round++) {
     const pairings: [number, number][] = []
-    for (let i = 0; i < teamCount / 2; i++) {
+    for (let i = 0; i < rotationSize / 2; i++) {
       const home = teams[i]
-      const away = teams[teamCount - 1 - i]
+      const away = teams[rotationSize - 1 - i]
+      if (home === byeIndex || away === byeIndex) continue
       pairings.push([home, away])
     }
     rounds.push(pairings)
@@ -39,9 +48,6 @@ export function buildRoundRobinMatches(
 ): GeneratedMatchRow[] {
   if (teamIds.length < 2) {
     throw new Error('Need at least 2 teams to create matches')
-  }
-  if (teamIds.length % 2 !== 0) {
-    throw new Error('Round robin requires an even number of teams')
   }
 
   const rounds = generateRoundRobinPairings(teamIds.length)
