@@ -9,6 +9,13 @@ interface RecordResultFormProps {
   match: MatchWithTeams
   editing?: boolean
   onDone?: () => void
+  compact?: boolean
+  onSaved?: (result: SavedMatchResult) => void
+}
+
+export interface SavedMatchResult {
+  type: 'result' | 'forfeit' | 'revert'
+  winnerTeamId: string | null
 }
 
 const btnPrimary =
@@ -20,7 +27,13 @@ const btnGhost =
 const inputClass =
   'min-h-11 w-full rounded-lg border border-green-200 px-3 py-2 text-base sm:text-sm'
 
-export function RecordResultForm({ match, editing = false, onDone }: RecordResultFormProps) {
+export function RecordResultForm({
+  match,
+  editing = false,
+  onDone,
+  compact = false,
+  onSaved,
+}: RecordResultFormProps) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const { selectedSeason } = useSeason()
@@ -59,12 +72,23 @@ export function RecordResultForm({ match, editing = false, onDone }: RecordResul
         })
       }
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['matches', selectedSeason?.id] })
-      queryClient.invalidateQueries({ queryKey: ['player-rankings'] })
-      queryClient.invalidateQueries({ queryKey: ['player-pool'] })
-      queryClient.invalidateQueries({ queryKey: ['player-profile'] })
+    onSuccess: async (_data, payload) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['matches', selectedSeason?.id] }),
+        queryClient.invalidateQueries({ queryKey: ['player-rankings'] }),
+        queryClient.invalidateQueries({ queryKey: ['player-pool'] }),
+        queryClient.invalidateQueries({ queryKey: ['player-profile'] }),
+      ])
       setError(null)
+      const winnerTeamId =
+        payload.type === 'result'
+          ? payload.winnerTeamId ?? null
+          : payload.type === 'forfeit'
+            ? payload.forfeitTeamId === match.home_team_id
+              ? match.away_team_id
+              : match.home_team_id
+            : null
+      onSaved?.({ type: payload.type, winnerTeamId })
       onDone?.()
     },
     onError: (err: Error) => setError(err.message),
@@ -85,7 +109,13 @@ export function RecordResultForm({ match, editing = false, onDone }: RecordResul
   }
 
   return (
-    <div className="mt-4 rounded-lg border border-dashed border-green-300 bg-green-50 p-3 sm:p-4">
+    <div
+      className={
+        compact
+          ? 'mt-4 border-t border-green-100 pt-4'
+          : 'mt-4 rounded-lg border border-dashed border-green-300 bg-green-50 p-3 sm:p-4'
+      }
+    >
       <div className="mb-3 flex items-center justify-between gap-2">
         <p className="text-xs font-semibold uppercase tracking-wide text-green-800">
           {editing ? t('record.editTitle') : t('record.title')}

@@ -21,6 +21,7 @@ import { computeSeasonRecap, type RatingHistoryRow } from './seasonRecap'
 import { computeStandings } from './standings'
 import type {
   MatchWithTeams,
+  MatchLiveStatus,
   PlayerProfile,
   PlayerRankingRow,
   PlayerTitle,
@@ -34,8 +35,8 @@ import type {
 
 const MATCH_SELECT = `
   *,
-  home_team:teams!matches_home_team_id_fkey(id, name, color, players(name, pool_player_id)),
-  away_team:teams!matches_away_team_id_fkey(id, name, color, players(name, pool_player_id)),
+  home_team:teams!matches_home_team_id_fkey(id, name, color, players(name, pool_player_id, is_present)),
+  away_team:teams!matches_away_team_id_fkey(id, name, color, players(name, pool_player_id, is_present)),
   winner:teams!matches_winner_team_id_fkey(id, name, color)
 `
 
@@ -526,6 +527,8 @@ export async function fetchPlayerProfile(poolPlayerId: string): Promise<PlayerPr
     return {
       ...match,
       status: 'completed' as const,
+      live_status: 'available' as const,
+      live_court_number: null,
       round_number: match.round_number,
       created_at: '',
       home_team: {
@@ -1349,6 +1352,41 @@ export async function revertMatchToScheduled(matchId: string): Promise<void> {
     p_player_ratings: playerRatings,
   })
 
+  if (error) throw error
+}
+
+export async function setMatchLiveStatus(
+  matchId: string,
+  liveStatus: MatchLiveStatus,
+): Promise<void> {
+  const { error } = await supabase.rpc('set_match_live_status', {
+    p_match_id: matchId,
+    p_live_status: liveStatus,
+  })
+  if (error) throw error
+}
+
+export async function setPlayerPresence(playerId: string, isPresent: boolean): Promise<void> {
+  const { error } = await supabase.rpc('set_player_presence', {
+    p_player_id: playerId,
+    p_is_present: isPresent,
+  })
+  if (error) throw error
+}
+
+export async function seedMatchUpNext(matchId: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc('seed_match_up_next', {
+    p_match_id: matchId,
+  })
+  if (error) throw error
+  return data as boolean
+}
+
+export async function setLiveCourtCount(seasonId: string, courtCount: number): Promise<void> {
+  const { error } = await supabase.rpc('set_live_court_count', {
+    p_season_id: seasonId,
+    p_court_count: courtCount,
+  })
   if (error) throw error
 }
 

@@ -11,6 +11,7 @@ import { RankingsPage } from './pages/Rankings'
 import { PlayerProfilePage } from './pages/PlayerProfile'
 import { SeasonRecapPage } from './pages/SeasonRecap'
 import { SetupPage } from './pages/Setup'
+import { LiveTournamentPage } from './pages/LiveTournament'
 import './i18n'
 import './index.css'
 
@@ -31,6 +32,7 @@ createRoot(document.getElementById('root')!).render(
           <Routes>
             <Route element={<AppLayout />}>
             <Route index element={<Dashboard />} />
+            <Route path="live" element={<LiveTournamentPage />} />
             <Route path="standings" element={<StandingsPage />} />
             <Route path="matches" element={<MatchesPage />} />
             <Route path="rankings" element={<RankingsPage />} />

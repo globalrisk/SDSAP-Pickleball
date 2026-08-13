@@ -1,4 +1,5 @@
 export type MatchStatus = 'scheduled' | 'completed' | 'forfeit'
+export type MatchLiveStatus = 'available' | 'playing' | 'up_next'
 export type SeasonStatus = 'active' | 'archived'
 export type PoolPlayerStatus = 'active' | 'inactive'
 
@@ -9,6 +10,7 @@ export interface Season {
   starts_at: string
   ends_at: string | null
   created_at: string
+  live_court_count: number
 }
 
 export interface Team {
@@ -188,6 +190,7 @@ export interface Player {
   team_id: string
   pool_player_id: string
   created_at: string
+  is_present: boolean
 }
 
 export interface TeamWithPlayers extends Team {
@@ -200,6 +203,8 @@ export interface Match {
   home_team_id: string
   away_team_id: string
   status: MatchStatus
+  live_status: MatchLiveStatus
+  live_court_number: number | null
   home_score: number | null
   away_score: number | null
   winner_team_id: string | null
@@ -212,13 +217,13 @@ export interface Match {
 
 export interface MatchWithTeams extends Match {
   home_team: Pick<Team, 'id' | 'name' | 'color'> & {
-    players?: (Pick<Player, 'name' | 'pool_player_id'> & {
+    players?: (Pick<Player, 'name' | 'pool_player_id' | 'is_present'> & {
       rating?: number
       ratingDeviation?: number
     })[]
   }
   away_team: Pick<Team, 'id' | 'name' | 'color'> & {
-    players?: (Pick<Player, 'name' | 'pool_player_id'> & {
+    players?: (Pick<Player, 'name' | 'pool_player_id' | 'is_present'> & {
       rating?: number
       ratingDeviation?: number
     })[]

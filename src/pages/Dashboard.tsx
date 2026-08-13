@@ -51,7 +51,7 @@ export function Dashboard() {
         })}
         action={
           isSelectedSeasonActive
-            ? { label: t('dashboard.recordResult'), to: '/matches' }
+            ? { label: t('dashboard.liveMode'), to: '/live' }
             : undefined
         }
       />
