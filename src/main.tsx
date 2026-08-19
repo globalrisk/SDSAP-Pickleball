@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { AppLayout } from './App'
 import { SeasonProvider } from './context/SeasonContext'
+import { UndoResultProvider } from './context/UndoResultContext'
 import { Dashboard } from './pages/Dashboard'
 import { StandingsPage } from './pages/Standings'
 import { MatchesPage } from './pages/Matches'
@@ -27,22 +28,24 @@ const queryClient = new QueryClient({
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <SeasonProvider>
-        <BrowserRouter>
-          <Routes>
-            <Route element={<AppLayout />}>
-            <Route index element={<Dashboard />} />
-            <Route path="live" element={<LiveTournamentPage />} />
-            <Route path="standings" element={<StandingsPage />} />
-            <Route path="matches" element={<MatchesPage />} />
-            <Route path="rankings" element={<RankingsPage />} />
-            <Route path="players/:playerId" element={<PlayerProfilePage />} />
-            <Route path="seasons/:seasonId/recap" element={<SeasonRecapPage />} />
-            <Route path="setup" element={<SetupPage />} />
-          </Route>
-          </Routes>
-        </BrowserRouter>
-      </SeasonProvider>
+      <UndoResultProvider>
+        <SeasonProvider>
+          <BrowserRouter>
+            <Routes>
+              <Route element={<AppLayout />}>
+                <Route index element={<Dashboard />} />
+                <Route path="live" element={<LiveTournamentPage />} />
+                <Route path="standings" element={<StandingsPage />} />
+                <Route path="matches" element={<MatchesPage />} />
+                <Route path="rankings" element={<RankingsPage />} />
+                <Route path="players/:playerId" element={<PlayerProfilePage />} />
+                <Route path="seasons/:seasonId/recap" element={<SeasonRecapPage />} />
+                <Route path="setup" element={<SetupPage />} />
+              </Route>
+            </Routes>
+          </BrowserRouter>
+        </SeasonProvider>
+      </UndoResultProvider>
     </QueryClientProvider>
   </StrictMode>,
 )

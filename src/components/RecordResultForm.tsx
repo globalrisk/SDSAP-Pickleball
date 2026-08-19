@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { recordForfeit, recordResult, revertMatchToScheduled } from '../lib/api'
 import { useSeason } from '../context/SeasonContext'
+import { useUndoResult } from '../context/undoResult'
 import type { MatchWithTeams } from '../types'
 
 interface RecordResultFormProps {
@@ -37,6 +38,7 @@ export function RecordResultForm({
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const { selectedSeason } = useSeason()
+  const { offerUndo } = useUndoResult()
   const [homeScore, setHomeScore] = useState(
     match.home_score != null ? String(match.home_score) : '',
   )
@@ -88,6 +90,16 @@ export function RecordResultForm({
               ? match.away_team_id
               : match.home_team_id
             : null
+      if (winnerTeamId) {
+        const winnerName =
+          winnerTeamId === match.home_team_id
+            ? match.home_team.name
+            : match.away_team.name
+        offerUndo({
+          matchId: match.id,
+          message: t('record.savedWinner', { name: winnerName }),
+        })
+      }
       onSaved?.({ type: payload.type, winnerTeamId })
       onDone?.()
     },
@@ -133,24 +145,34 @@ export function RecordResultForm({
       )}
 
       <div className="mb-3 grid grid-cols-2 gap-2">
-        <input
-          type="number"
-          inputMode="numeric"
-          min="0"
-          placeholder={t('record.teamPts', { name: match.home_team.name })}
-          value={homeScore}
-          onChange={(e) => setHomeScore(e.target.value)}
-          className={inputClass}
-        />
-        <input
-          type="number"
-          inputMode="numeric"
-          min="0"
-          placeholder={t('record.teamPts', { name: match.away_team.name })}
-          value={awayScore}
-          onChange={(e) => setAwayScore(e.target.value)}
-          className={inputClass}
-        />
+        <label className="min-w-0">
+          <span className="mb-1 block truncate text-xs font-semibold text-green-900">
+            {match.home_team.name}
+          </span>
+          <input
+            type="number"
+            inputMode="numeric"
+            min="0"
+            placeholder={t('record.scorePlaceholder')}
+            value={homeScore}
+            onChange={(e) => setHomeScore(e.target.value)}
+            className={inputClass}
+          />
+        </label>
+        <label className="min-w-0">
+          <span className="mb-1 block truncate text-xs font-semibold text-green-900">
+            {match.away_team.name}
+          </span>
+          <input
+            type="number"
+            inputMode="numeric"
+            min="0"
+            placeholder={t('record.scorePlaceholder')}
+            value={awayScore}
+            onChange={(e) => setAwayScore(e.target.value)}
+            className={inputClass}
+          />
+        </label>
       </div>
 
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -202,7 +224,7 @@ export function RecordResultForm({
         </button>
       )}
 
-      {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
+      {error && <p className="mt-2 text-xs text-red-600" role="alert">{error}</p>}
     </div>
   )
 }

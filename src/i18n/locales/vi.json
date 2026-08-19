@@ -9,7 +9,8 @@
     "standings": "Bảng xếp hạng",
     "matches": "Trận đấu",
     "rankings": "Xếp hạng",
-    "setup": "Cài đặt"
+    "setup": "Cài đặt",
+    "more": "Thêm"
   },
   "language": {
     "label": "Ngôn ngữ",
@@ -22,6 +23,9 @@
     "save": "Lưu",
     "cancel": "Hủy",
     "loading": "Đang tải…",
+    "refreshing": "Đang cập nhật dữ liệu…",
+    "undo": "Hoàn tác",
+    "close": "Đóng",
     "pts": "điểm"
   },
   "status": {
@@ -117,7 +121,18 @@
     "mustWatchDetail": "{{home}} cửa {{percent}}% — ngang ngửa",
     "upsetLabel": "Ngựa ô",
     "upsetTitle": "{{winner}} hạ {{loser}}",
-    "upsetDetail": "Cửa chỉ {{percent}}% · {{score}}{{date}}"
+    "upsetDetail": "Cửa chỉ {{percent}}% · {{score}}{{date}}",
+    "getStartedEyebrow": "Thiết lập giải",
+    "getStartedTitle": "Chuẩn bị mùa giải",
+    "getStartedDescription": "Hoàn tất các bước này, sau đó điều hành toàn bộ giải trong chế độ Trực tiếp.",
+    "stepPlayers": "Thêm người chơi",
+    "stepPlayersDetail": "Tạo danh sách người chơi cho mùa này.",
+    "stepTeams": "Tạo đội",
+    "stepTeamsDetail": "Ghép thủ công hoặc tự động tạo đội cân bằng.",
+    "stepSchedule": "Tạo lịch thi đấu",
+    "stepScheduleDetail": "Tạo toàn bộ các trận vòng tròn.",
+    "stepDone": "Đã xong",
+    "stepAction": "Tiếp tục"
   },
   "matches": {
     "title": "Trận đấu",
@@ -149,7 +164,11 @@
     "teamForfeit": "{{name}} bỏ cuộc",
     "clearResult": "Xóa kết quả (đánh dấu chưa đấu)",
     "confirmForfeit": "Đánh dấu đội này bỏ cuộc?",
-    "confirmRevert": "Xóa kết quả và đánh dấu trận là chưa đấu?"
+    "confirmRevert": "Xóa kết quả và đánh dấu trận là chưa đấu?",
+    "scorePlaceholder": "Điểm (không bắt buộc)",
+    "savedWinner": "Đã ghi {{name}} thắng.",
+    "undoing": "Đang hoàn tác…",
+    "undoFailed": "Không thể hoàn tác kết quả. Hãy sửa lại trận đấu."
   },
   "live": {
     "badge": "TRỰC TIẾP",
@@ -214,13 +233,21 @@
   },
   "rankings": {
     "title": "Xếp hạng người chơi",
-    "subtitle": "Xếp theo Elo · Độ tin cho biết độ chắc của điểm (càng thấp càng tốt)",
+    "subtitle": "Người chơi Active đã có ít nhất 5 trận tính điểm",
+    "methodNote": "Người chơi được xếp theo điểm và độ tin cậy, nên mức điểm có nhiều kết quả thi đấu làm căn cứ sẽ có trọng lượng cao hơn. Hoàn thành 5 trận tính điểm để vào bảng xếp hạng. Cách biệt điểm không ảnh hưởng và trận bỏ cuộc không được tính.",
     "rank": "Hạng",
     "player": "Người chơi",
     "rating": "Điểm",
-    "rd": "Độ tin",
+    "reliability": "Độ tin cậy",
+    "reliabilityLabel": "Độ tin cậy: {{level}}",
+    "reliabilityLevels": {
+      "high": "Cao",
+      "medium": "Trung bình",
+      "low": "Thấp"
+    },
     "viewProfile": "Xem hồ sơ {{name}}",
-    "inactive": "Inactive",
+    "inactive": "Không hoạt động",
+    "provisional": "Tạm xếp · {{count}}/5 trận tính điểm",
     "empty": "Chưa có người chơi trong danh sách."
   },
   "titles": {
@@ -276,6 +303,8 @@
   "profile": {
     "title": "Hồ sơ người chơi",
     "subtitle": "Hạng #{{rank}} · Hồ sơ TrueSkill",
+    "provisionalSubtitle": "Tạm xếp · Hồ sơ TrueSkill",
+    "unrankedSubtitle": "Chưa xếp hạng · Hồ sơ TrueSkill",
     "backToRankings": "Quay lại bảng xếp hạng",
     "rating": "Điểm",
     "change": "Thay đổi từ đầu",
@@ -311,6 +340,14 @@
   "setup": {
     "title": "Cài đặt",
     "subtitle": "Quản lý danh sách người chơi, mùa giải và đội",
+    "sectionsLabel": "Các mục cài đặt",
+    "section": {
+      "players": "Người chơi",
+      "teams": "Đội",
+      "season": "Mùa giải"
+    },
+    "teamNameLabel": "Tên đội",
+    "dangerZone": "Khu vực nguy hiểm",
     "saveTeam": "Lưu đội",
     "teamUpdated": "Đã lưu đội",
     "teamCreated": "Đã tạo đội",
@@ -344,13 +381,24 @@
     "creatingTeam": "Đang tạo…",
     "createTeamManual": "Hoặc tạo từng đội thủ công",
     "balancedTeamsTitle": "Xếp đội cân bằng",
-    "balancedTeamsDescription": "Ghép người chơi Active còn trống theo điểm số để các đội đều sức nhất (mạnh + yếu).",
-    "balancedTeamsSubsetHint": "Số người Active còn trống là số lẻ — sẽ dùng {{players}} người điểm cao nhất trong {{available}}.",
-    "balancedTeamsButton": "Tạo {{count}} đội cân bằng",
+    "balancedTeamsDescription": "So sánh ba phương án dựa trên độ cân bằng dự kiến, độ tin cậy của điểm và các cặp đã từng chung đội. Phần trăm cân bằng càng cao thì trận lệch nhất càng gần tỷ lệ 50/50.",
+    "balancedTeamsPreviewButton": "Xem trước {{count}} đội",
+    "balancedTeamsLoadingHistory": "Đang tải lịch sử ghép đội…",
+    "balancedTeamsRegenerate": "Tính lại phương án",
     "balancedTeamsGenerating": "Đang tạo…",
-    "balancedTeamsNeedEven": "Cần số người chơi Active còn trống là số chẵn (2, 4, 6…).",
-    "balancedTeamsConfirm": "Tạo {{count}} đội cân bằng từ {{players}} người Active còn trống?",
-    "balancedTeamsConfirmSubset": "Tạo {{count}} đội cân bằng với {{players}} người điểm cao nhất trong {{available}} Active còn trống?",
+    "balancedTeamsSitOutLabel": "Ai sẽ nghỉ mùa này?",
+    "balancedTeamsSitOutPlaceholder": "Chọn một người chơi",
+    "balancedTeamsSitOutHint": "Đội hình số lẻ cần chọn rõ một người nghỉ. Nên luân phiên lựa chọn này giữa các mùa.",
+    "balancedTeamsNeedFour": "Cần ít nhất 4 người chơi còn trống để tạo các trận cân bằng.",
+    "balancedTeamsChooseOption": "Chọn phương án ban đầu",
+    "balancedTeamsOption": "Phương án {{number}}",
+    "balancedTeamsOptionStats": "Cân bằng {{fairness}}% · Cặp cũ {{repeats}}",
+    "balancedTeamsPreviewTitle": "Xem và điều chỉnh đội",
+    "balancedTeamsSwapHint": "Đổi một người sẽ tự động hoán đổi với người được chọn.",
+    "balancedTeamsTeam": "Đội {{number}}",
+    "balancedTeamsAverage": "Điểm trung bình {{rating}}",
+    "balancedTeamsPlayerSlot": "Đội {{team}}, người chơi {{slot}}",
+    "balancedTeamsCreateButton": "Tạo {{count}} đội",
     "balancedTeamsCreated": "Đã tạo {{count}} đội cân bằng",
     "balancedTeamsFailed": "Xếp đội thất bại: {{message}}",
     "deleteTeamsButton": "Xóa tất cả đội",
@@ -365,8 +413,9 @@
     "title": "Danh sách người chơi",
     "description": "Danh sách chung toàn giải. Đánh dấu người chơi Active cho đội hình, rồi xếp vào đội mỗi mùa.",
     "addPlaceholder": "Tên người chơi",
-    "ratingLabel": "Elo ban đầu",
-    "ratingInvalid": "Elo phải từ 800 đến 2500.",
+    "playerNameLabel": "Tên người chơi: {{name}}",
+    "ratingLabel": "Điểm TrueSkill ban đầu",
+    "ratingInvalid": "Điểm ban đầu phải từ 800 đến 2500.",
     "addButton": "Thêm người chơi",
     "adding": "Đang thêm…",
     "added": "Đã thêm vào danh sách",

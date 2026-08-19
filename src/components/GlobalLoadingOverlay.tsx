@@ -1,14 +1,13 @@
 import { useEffect, useState } from 'react'
-import { useIsFetching, useIsMutating } from '@tanstack/react-query'
+import { useIsFetching } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 
 export function GlobalLoadingOverlay() {
   const { t } = useTranslation()
-  const isMutating = useIsMutating()
   const isFetching = useIsFetching()
   const [visible, setVisible] = useState(false)
 
-  const active = isMutating > 0 || isFetching > 0
+  const active = isFetching > 0
 
   useEffect(() => {
     if (!active) {
@@ -16,7 +15,7 @@ export function GlobalLoadingOverlay() {
       return
     }
 
-    const timer = setTimeout(() => setVisible(true), 120)
+    const timer = setTimeout(() => setVisible(true), 350)
     return () => clearTimeout(timer)
   }, [active])
 
@@ -24,15 +23,15 @@ export function GlobalLoadingOverlay() {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-green-950/25 backdrop-blur-[2px]"
+      className="pointer-events-none fixed inset-x-0 top-0 z-50"
       role="status"
       aria-live="polite"
       aria-busy="true"
     >
-      <div className="mx-4 flex flex-col items-center gap-4 rounded-2xl border border-green-200 bg-white px-8 py-7 shadow-lg">
-        <div className="h-10 w-10 animate-spin rounded-full border-4 border-green-200 border-t-green-600" />
-        <p className="text-sm font-medium text-green-900">{t('common.loading')}</p>
+      <div className="h-1 w-full overflow-hidden bg-green-100">
+        <div className="h-full w-1/3 animate-[loading-bar_1.1s_ease-in-out_infinite] rounded-full bg-green-600" />
       </div>
+      <span className="sr-only">{t('common.refreshing')}</span>
     </div>
   )
 }

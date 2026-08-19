@@ -9,7 +9,8 @@
     "standings": "Standings",
     "matches": "Matches",
     "rankings": "Rankings",
-    "setup": "Setup"
+    "setup": "Setup",
+    "more": "More"
   },
   "language": {
     "label": "Language",
@@ -22,6 +23,9 @@
     "save": "Save",
     "cancel": "Cancel",
     "loading": "Loading…",
+    "refreshing": "Refreshing data…",
+    "undo": "Undo",
+    "close": "Close",
     "pts": "pts"
   },
   "status": {
@@ -117,7 +121,18 @@
     "mustWatchDetail": "{{home}} at {{percent}}% — basically a coin flip",
     "upsetLabel": "Plot twist",
     "upsetTitle": "{{winner}} stunned {{loser}}",
-    "upsetDetail": "Only a {{percent}}% chance · {{score}}{{date}}"
+    "upsetDetail": "Only a {{percent}}% chance · {{score}}{{date}}",
+    "getStartedEyebrow": "League setup",
+    "getStartedTitle": "Get your season ready",
+    "getStartedDescription": "Complete these steps, then run the whole tournament from Live Mode.",
+    "stepPlayers": "Add players",
+    "stepPlayersDetail": "Build the player pool for this season.",
+    "stepTeams": "Create teams",
+    "stepTeamsDetail": "Pair players manually or generate balanced teams.",
+    "stepSchedule": "Create the schedule",
+    "stepScheduleDetail": "Generate every round-robin fixture.",
+    "stepDone": "Complete",
+    "stepAction": "Continue"
   },
   "matches": {
     "title": "Matches",
@@ -149,7 +164,11 @@
     "teamForfeit": "{{name}} forfeit",
     "clearResult": "Clear result (mark not played)",
     "confirmForfeit": "Mark this team as forfeit?",
-    "confirmRevert": "Clear this result and mark the match as not played?"
+    "confirmRevert": "Clear this result and mark the match as not played?",
+    "scorePlaceholder": "Score (optional)",
+    "savedWinner": "{{name}} recorded as winner.",
+    "undoing": "Undoing…",
+    "undoFailed": "Could not undo the result. Please edit the match instead."
   },
   "live": {
     "badge": "LIVE",
@@ -215,13 +234,21 @@
   },
   "rankings": {
     "title": "Player Rankings",
-    "subtitle": "Ranked by Elo · Confidence shows how sure the rating is (lower is better)",
+    "subtitle": "Active players with at least 5 rated matches",
+    "methodNote": "Players are ordered by rating and reliability, so ratings backed by more match evidence carry more weight. Complete 5 rated matches to join the ladder. Point margin does not affect ratings, and forfeits are excluded.",
     "rank": "Rank",
     "player": "Player",
     "rating": "Rating",
-    "rd": "Confidence",
+    "reliability": "Reliability",
+    "reliabilityLabel": "Reliability: {{level}}",
+    "reliabilityLevels": {
+      "high": "High",
+      "medium": "Medium",
+      "low": "Low"
+    },
     "viewProfile": "View {{name}}'s profile",
     "inactive": "Inactive",
+    "provisional": "Provisional · {{count}}/5 rated matches",
     "empty": "No players in the pool yet."
   },
   "titles": {
@@ -277,6 +304,8 @@
   "profile": {
     "title": "Player Profile",
     "subtitle": "Rank #{{rank}} · TrueSkill profile",
+    "provisionalSubtitle": "Provisional · TrueSkill profile",
+    "unrankedSubtitle": "Unranked · TrueSkill profile",
     "backToRankings": "Back to rankings",
     "rating": "Rating",
     "change": "Change since start",
@@ -312,6 +341,14 @@
   "setup": {
     "title": "Setup",
     "subtitle": "Manage player pool, seasons, and teams",
+    "sectionsLabel": "Setup sections",
+    "section": {
+      "players": "Players",
+      "teams": "Teams",
+      "season": "Season"
+    },
+    "teamNameLabel": "Team name",
+    "dangerZone": "Danger zone",
     "saveTeam": "Save Team",
     "teamUpdated": "Team saved",
     "teamCreated": "Team created",
@@ -345,13 +382,24 @@
     "creatingTeam": "Creating…",
     "createTeamManual": "Or create one team manually",
     "balancedTeamsTitle": "Auto-balance teams",
-    "balancedTeamsDescription": "Pair Active available players by rating so team strengths are as even as possible (strong + weak).",
-    "balancedTeamsSubsetHint": "Odd number of Active available players — will use the {{players}} highest-rated out of {{available}}.",
-    "balancedTeamsButton": "Generate {{count}} balanced teams",
+    "balancedTeamsDescription": "Compare three options using projected match fairness, rating reliability, and previous partnerships. A higher match-balance percentage means the least-even matchup is closer to 50/50.",
+    "balancedTeamsPreviewButton": "Preview {{count}} teams",
+    "balancedTeamsLoadingHistory": "Loading partnership history…",
+    "balancedTeamsRegenerate": "Recalculate options",
     "balancedTeamsGenerating": "Generating…",
-    "balancedTeamsNeedEven": "Need an even number of Active available players (2, 4, 6…).",
-    "balancedTeamsConfirm": "Create {{count}} balanced teams from {{players}} Active available players?",
-    "balancedTeamsConfirmSubset": "Create {{count}} balanced teams using the {{players}} highest-rated of {{available}} Active available players?",
+    "balancedTeamsSitOutLabel": "Who will sit out this season?",
+    "balancedTeamsSitOutPlaceholder": "Choose one player",
+    "balancedTeamsSitOutHint": "An odd roster needs one explicit sit-out. Rotate this choice between seasons for fairness.",
+    "balancedTeamsNeedFour": "At least 4 available players are needed to create balanced matches.",
+    "balancedTeamsChooseOption": "Choose a starting option",
+    "balancedTeamsOption": "Option {{number}}",
+    "balancedTeamsOptionStats": "Match balance {{fairness}}% · Repeat partners {{repeats}}",
+    "balancedTeamsPreviewTitle": "Review and adjust teams",
+    "balancedTeamsSwapHint": "Changing a player automatically swaps them with the selected player.",
+    "balancedTeamsTeam": "Team {{number}}",
+    "balancedTeamsAverage": "Average rating {{rating}}",
+    "balancedTeamsPlayerSlot": "Team {{team}}, player {{slot}}",
+    "balancedTeamsCreateButton": "Create {{count}} teams",
     "balancedTeamsCreated": "Created {{count}} balanced teams",
     "balancedTeamsFailed": "Balanced teams failed: {{message}}",
     "deleteTeamsButton": "Delete all teams",
@@ -366,8 +414,9 @@
     "title": "Player Pool",
     "description": "Global list of players. Mark players as Active for the league roster, then assign them to teams each season.",
     "addPlaceholder": "Player name",
-    "ratingLabel": "Starting Elo",
-    "ratingInvalid": "Elo must be between 800 and 2500.",
+    "playerNameLabel": "Player name: {{name}}",
+    "ratingLabel": "Starting TrueSkill rating",
+    "ratingInvalid": "Starting rating must be between 800 and 2500.",
     "addButton": "Add Player",
     "adding": "Adding…",
     "added": "Player added to pool",

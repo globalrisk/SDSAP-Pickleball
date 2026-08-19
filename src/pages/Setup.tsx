@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -12,18 +12,26 @@ import {
   deletePoolPlayer,
   fetchAssignedPoolPlayerIds,
   fetchMatches,
+  fetchPartnershipCounts,
   saveTeamWithPlayers,
   updatePoolPlayer,
   updatePoolPlayerStatus,
 } from '../lib/api'
-import { generateBalancedTeams } from '../lib/balanceTeams'
+import type { BalancedTeam } from '../lib/balanceTeams'
 import { roundRating } from '../lib/ratings'
 import { ArchivedSeasonBanner } from '../components/ArchivedSeasonBanner'
+import { BalancedTeamsBuilder } from '../components/BalancedTeamsBuilder'
 import { ErrorState, PageHeader, SetupBanner } from '../components/Layout'
 import { useSeason } from '../context/SeasonContext'
 import { useAssignedPoolPlayerIds, usePlayerPool } from '../hooks/usePlayerPool'
 import { useTeamsWithPlayers } from '../hooks/useTeams'
 import type { PoolPlayer, TeamWithPlayers } from '../types'
+
+type SetupSection = 'players' | 'teams' | 'season'
+
+function isSetupSection(value: string | null): value is SetupSection {
+  return value === 'players' || value === 'teams' || value === 'season'
+}
 
 const TEAM_COLORS = [
   '#ef4444',
@@ -35,6 +43,8 @@ const TEAM_COLORS = [
   '#ec4899',
   '#14b8a6',
 ]
+
+const EMPTY_PARTNERSHIP_COUNTS = new Map<string, number>()
 
 function pickNextTeamColor(usedColors: string[]): string {
   const used = new Set(usedColors)
@@ -96,6 +106,7 @@ function PoolPlayerRow({
     <li className="flex flex-col gap-2 rounded-lg border border-green-100 bg-green-50 px-3 py-3 sm:flex-row sm:flex-wrap sm:items-center">
       <input
         value={name}
+        aria-label={t('pool.playerNameLabel', { name: player.name })}
         onChange={(e) => setName(e.target.value)}
         className="min-h-11 flex-1 rounded-lg border border-green-200 bg-white px-3 py-2 text-base sm:text-sm"
       />
@@ -232,6 +243,7 @@ function TeamEditForm({
     >
       <input
         value={teamName}
+        aria-label={t('setup.teamNameLabel')}
         onChange={(e) => setTeamName(e.target.value)}
         className="mb-4 min-h-11 w-full rounded-lg border border-green-200 px-3 py-2 text-base font-medium sm:text-sm"
         required
@@ -244,6 +256,7 @@ function TeamEditForm({
             setPoolPlayerIds(([_, second]) => [e.target.value, second])
           }
           className={selectClass}
+          aria-label={t('setup.pickPlayer1')}
           required
         >
           <option value="">{t('setup.pickPlayer1')}</option>
@@ -259,6 +272,7 @@ function TeamEditForm({
             setPoolPlayerIds(([first]) => [first, e.target.value])
           }
           className={selectClass}
+          aria-label={t('setup.pickPlayer2')}
           required
         >
           <option value="">{t('setup.pickPlayer2')}</option>
@@ -288,12 +302,20 @@ function TeamEditForm({
 
 export function SetupPage() {
   const { t } = useTranslation()
+  const [searchParams, setSearchParams] = useSearchParams()
   const queryClient = useQueryClient()
   const { selectedSeason, activeSeason, isSelectedSeasonActive, setSelectedSeasonId } =
     useSeason()
   const { data: teams, isError, error } = useTeamsWithPlayers()
   const { data: pool = [], isError: poolError, error: poolQueryError } = usePlayerPool()
   const { data: assignedPoolIds = [] } = useAssignedPoolPlayerIds()
+  const {
+    data: partnershipCounts = EMPTY_PARTNERSHIP_COUNTS,
+    isLoading: isPartnershipHistoryLoading,
+  } = useQuery({
+    queryKey: ['partnership-counts'],
+    queryFn: fetchPartnershipCounts,
+  })
   const { data: activeSeasonAssignedIds = [] } = useQuery({
     queryKey: ['assigned-pool-players', activeSeason?.id],
     queryFn: () => fetchAssignedPoolPlayerIds(activeSeason!.id),
@@ -309,6 +331,10 @@ export function SetupPage() {
     tone: 'ok' | 'error'
   } | null>(null)
   const [newSeasonName, setNewSeasonName] = useState('')
+  const requestedSection = searchParams.get('section')
+  const activeSection: SetupSection = isSetupSection(requestedSection)
+    ? requestedSection
+    : 'players'
   const [newPoolName, setNewPoolName] = useState('')
   const [newPoolRating, setNewPoolRating] = useState('1500')
   const [newTeam, setNewTeam] = useState({
@@ -333,8 +359,6 @@ export function SetupPage() {
     () => pool.filter((player) => player.status === 'active').length,
     [pool],
   )
-  const maxTeamCount = Math.floor(activeUnassigned.length / 2)
-
   const recordedCount = (activeSeasonMatches ?? []).filter(
     (m) => m.status === 'completed' || m.status === 'forfeit',
   ).length
@@ -538,50 +562,8 @@ export function SetupPage() {
     })
   }
 
-  function handleGenerateBalancedTeams() {
+  function handleCreateBalancedTeams(balanced: BalancedTeam[]) {
     if (!selectedSeason) return
-    if (maxTeamCount < 1) {
-      setFeedback({ text: t('setup.notEnoughPlayers'), tone: 'error' })
-      return
-    }
-
-    const selectedPlayers = [...activeUnassigned]
-      .sort((a, b) => {
-        if (b.rating !== a.rating) return b.rating - a.rating
-        return a.name.localeCompare(b.name)
-      })
-      .slice(0, maxTeamCount * 2)
-      .map((player) => ({
-        id: player.id,
-        name: player.name,
-        rating: player.rating,
-      }))
-
-    const balanced = generateBalancedTeams(selectedPlayers)
-
-    const preview = balanced
-      .map(
-        (team, index) =>
-          `${index + 1}. ${team.playerNames[0]} + ${team.playerNames[1]} (${roundRating(team.teamRating / 2)} avg)`,
-      )
-      .join('\n')
-
-    const confirmKey =
-      selectedPlayers.length < activeUnassigned.length
-        ? 'setup.balancedTeamsConfirmSubset'
-        : 'setup.balancedTeamsConfirm'
-
-    if (
-      !confirm(
-        `${t(confirmKey, {
-          count: balanced.length,
-          players: selectedPlayers.length,
-          available: activeUnassigned.length,
-        })}\n\n${preview}`,
-      )
-    ) {
-      return
-    }
 
     const usedColors = (teams ?? []).map((team) => team.color)
     const payloads = balanced.map((team) => {
@@ -630,6 +612,7 @@ export function SetupPage() {
 
       {feedback && (
         <p
+          role={feedback.tone === 'error' ? 'alert' : 'status'}
           className={`mb-4 rounded-lg px-3 py-2 text-sm ${
             feedback.tone === 'error'
               ? 'border border-red-200 bg-red-50 text-red-800'
@@ -640,6 +623,30 @@ export function SetupPage() {
         </p>
       )}
 
+      <nav
+        className="sticky top-12 z-10 mb-6 grid grid-cols-3 gap-1 rounded-xl border border-green-200 bg-white/95 p-1.5 shadow-sm backdrop-blur sm:top-14 md:top-28"
+        aria-label={t('setup.sectionsLabel')}
+      >
+        {(['players', 'teams', 'season'] as const).map((section) => (
+          <button
+            key={section}
+            type="button"
+            aria-pressed={activeSection === section}
+            onClick={() => {
+              setSearchParams({ section }, { replace: true })
+            }}
+            className={`min-h-11 rounded-lg px-2 py-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 ${
+              activeSection === section
+                ? 'bg-green-600 text-white'
+                : 'text-green-800 hover:bg-green-50'
+            }`}
+          >
+            {t(`setup.section.${section}`)}
+          </button>
+        ))}
+      </nav>
+
+      {activeSection === 'players' ? (
       <section className="mb-8 rounded-xl border border-green-200 bg-white p-5 shadow-sm">
         <h2 className="text-lg font-semibold text-green-900">{t('pool.title')}</h2>
         <p className="mt-1 text-sm text-gray-600">{t('pool.description')}</p>
@@ -650,6 +657,7 @@ export function SetupPage() {
         <form onSubmit={handleAddPoolPlayer} className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
           <input
             value={newPoolName}
+            aria-label={t('pool.addPlaceholder')}
             onChange={(e) => setNewPoolName(e.target.value)}
             placeholder={t('pool.addPlaceholder')}
             className="min-h-11 flex-1 rounded-lg border border-green-200 px-3 py-2 text-base sm:text-sm"
@@ -705,8 +713,9 @@ export function SetupPage() {
           </ul>
         )}
       </section>
+      ) : null}
 
-      {activeSeason && (
+      {activeSection === 'season' && activeSeason && (
         <section className="mb-8 rounded-xl border border-amber-200 bg-white p-5 shadow-sm">
           <h2 className="text-lg font-semibold text-amber-900">{t('setup.archiveTitle')}</h2>
           <p className="mt-1 text-sm text-gray-600">{t('setup.archiveDescription')}</p>
@@ -727,13 +736,14 @@ export function SetupPage() {
         </section>
       )}
 
-      {!activeSeason && (
+      {activeSection === 'season' && !activeSeason && (
         <section className="mb-8 rounded-xl border border-green-200 bg-white p-5 shadow-sm">
           <h2 className="text-lg font-semibold text-green-900">{t('setup.newSeasonTitle')}</h2>
           <p className="mt-1 text-sm text-gray-600">{t('setup.newSeasonDescription')}</p>
           <form onSubmit={handleStartNewSeason} className="mt-4 flex flex-col gap-3 sm:flex-row">
             <input
               value={newSeasonName}
+              aria-label={t('setup.newSeasonPlaceholder')}
               onChange={(e) => setNewSeasonName(e.target.value)}
               placeholder={t('setup.newSeasonPlaceholder')}
               className="min-h-11 flex-1 rounded-lg border border-green-200 px-3 py-2 text-base sm:text-sm"
@@ -752,7 +762,7 @@ export function SetupPage() {
         </section>
       )}
 
-      {isSelectedSeasonActive && (
+      {activeSection === 'teams' && isSelectedSeasonActive && (
         <section className="mb-8 rounded-xl border border-green-200 bg-white p-5 shadow-sm">
           <h2 className="text-lg font-semibold text-green-900">{t('setup.createTeamTitle')}</h2>
           <p className="mt-1 text-sm text-gray-600">{t('setup.createTeamDescription')}</p>
@@ -765,31 +775,22 @@ export function SetupPage() {
               {t('setup.balancedTeamsTitle')}
             </h3>
             <p className="mt-1 text-sm text-blue-800">{t('setup.balancedTeamsDescription')}</p>
-            {maxTeamCount > 0 && maxTeamCount * 2 < activeUnassigned.length && (
-              <p className="mt-2 text-xs text-blue-800">
-                {t('setup.balancedTeamsSubsetHint', {
-                  players: maxTeamCount * 2,
-                  available: activeUnassigned.length,
-                })}
-              </p>
-            )}
-            <button
-              type="button"
-              onClick={handleGenerateBalancedTeams}
-              disabled={
-                balanceTeamsMutation.isPending ||
-                deleteTeamsMutation.isPending ||
-                maxTeamCount < 1
-              }
-              className="mt-3 min-h-11 w-full rounded-lg bg-blue-600 px-4 py-3 text-sm font-medium text-white hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 sm:w-auto sm:py-2"
-            >
-              {balanceTeamsMutation.isPending
-                ? t('setup.balancedTeamsGenerating')
-                : t('setup.balancedTeamsButton', {
-                    count: maxTeamCount,
-                  })}
-            </button>
-            {(teams ?? []).length > 0 && (
+            <BalancedTeamsBuilder
+              key={activeUnassigned.map((player) => player.id).sort().join(':')}
+              players={activeUnassigned}
+              partnershipCounts={partnershipCounts}
+              isHistoryLoading={isPartnershipHistoryLoading}
+              isPending={balanceTeamsMutation.isPending || deleteTeamsMutation.isPending}
+              onCreate={handleCreateBalancedTeams}
+            />
+          </div>
+
+          {(teams ?? []).length > 0 ? (
+            <div className="mt-6 rounded-lg border border-red-200 bg-red-50 p-4">
+              <h3 className="text-sm font-semibold text-red-900">
+                {t('setup.dangerZone')}
+              </h3>
+              <p className="mt-1 text-xs text-red-800">{t('setup.deleteTeamsHint')}</p>
               <button
                 type="button"
                 onClick={handleDeleteAllTeams}
@@ -799,22 +800,20 @@ export function SetupPage() {
                   createTeamMutation.isPending ||
                   recordedCount > 0
                 }
-                className="mt-2 min-h-11 w-full rounded-lg border border-red-300 bg-white px-4 py-3 text-sm font-medium text-red-700 hover:bg-red-50 active:bg-red-100 disabled:opacity-50 sm:w-auto sm:py-2"
+                className="mt-3 min-h-11 w-full rounded-lg border border-red-300 bg-white px-4 py-3 text-sm font-medium text-red-700 hover:bg-red-100 active:bg-red-200 disabled:opacity-50 sm:w-auto sm:py-2"
               >
                 {deleteTeamsMutation.isPending
                   ? t('setup.deleteTeamsWorking')
                   : t('setup.deleteTeamsButton')}
               </button>
-            )}
-            {(teams ?? []).length > 0 && (
-              <p className="mt-2 text-xs text-blue-700">{t('setup.deleteTeamsHint')}</p>
-            )}
-          </div>
+            </div>
+          ) : null}
 
           <form onSubmit={handleCreateTeam} className="mt-6 space-y-3 border-t border-green-100 pt-6">
             <p className="text-sm font-medium text-green-900">{t('setup.createTeamManual')}</p>
             <input
               value={newTeam.name}
+              aria-label={t('setup.teamNameLabel')}
               onChange={(e) => setNewTeam((prev) => ({ ...prev, name: e.target.value }))}
               placeholder={t('setup.teamNamePlaceholder')}
               className="min-h-11 w-full rounded-lg border border-green-200 px-3 py-2 text-base sm:text-sm"
@@ -826,6 +825,7 @@ export function SetupPage() {
                 setNewTeam((prev) => ({ ...prev, poolPlayerId1: e.target.value }))
               }
               className={selectClass}
+              aria-label={t('setup.pickPlayer1')}
               required
             >
               <option value="">{t('setup.pickPlayer1')}</option>
@@ -841,6 +841,7 @@ export function SetupPage() {
                 setNewTeam((prev) => ({ ...prev, poolPlayerId2: e.target.value }))
               }
               className={selectClass}
+              aria-label={t('setup.pickPlayer2')}
               required
             >
               <option value="">{t('setup.pickPlayer2')}</option>
@@ -869,6 +870,7 @@ export function SetupPage() {
         </section>
       )}
 
+      {activeSection === 'teams' ? (
       <div className="space-y-6">
         {(teams ?? []).length === 0 && (
           <p className="text-sm text-gray-500">{t('setup.noTeams')}</p>
@@ -905,6 +907,7 @@ export function SetupPage() {
           ),
         )}
       </div>
+      ) : null}
     </div>
   )
 }

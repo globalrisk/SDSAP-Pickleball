@@ -28,6 +28,14 @@ export const SKIP_SEASON_RD_BOOST = 75
 /** Cap after skip-season RD boosts (full TrueSkill prior ≈ 500). */
 export const SKIP_SEASON_RD_CAP = TRUESKILL_SIGMA * TRUESKILL_SCALE
 
+/** Active players need this many rated matches before joining the ladder. */
+export const PROVISIONAL_MATCH_COUNT = 5
+
+/** TrueSkill's standard conservative leaderboard score (mu - 3 sigma). */
+export function conservativeRating(rating: number, rd: number): number {
+  return rating - 3 * rd
+}
+
 export interface SkillRating {
   /** Display-scaled TrueSkill mu */
   rating: number
@@ -239,8 +247,20 @@ export function buildRankingRows(
     rating_deviation: number
     volatility: number
   }[],
+  matchesPlayedByPlayer: ReadonlyMap<string, number> = new Map(),
 ): PlayerRankingRow[] {
   const sorted = [...pool].sort((a, b) => {
+    const aStatus = a.status === 'inactive' ? 'inactive' : 'active'
+    const bStatus = b.status === 'inactive' ? 'inactive' : 'active'
+    const aProvisional = (matchesPlayedByPlayer.get(a.id) ?? 0) < PROVISIONAL_MATCH_COUNT
+    const bProvisional = (matchesPlayedByPlayer.get(b.id) ?? 0) < PROVISIONAL_MATCH_COUNT
+    const aGroup = aStatus === 'inactive' ? 2 : aProvisional ? 1 : 0
+    const bGroup = bStatus === 'inactive' ? 2 : bProvisional ? 1 : 0
+    if (aGroup !== bGroup) return aGroup - bGroup
+    const exposureDiff =
+      conservativeRating(b.rating, b.rating_deviation) -
+      conservativeRating(a.rating, a.rating_deviation)
+    if (exposureDiff !== 0) return exposureDiff
     if (b.rating !== a.rating) return b.rating - a.rating
     if (a.rating_deviation !== b.rating_deviation) {
       return a.rating_deviation - b.rating_deviation
@@ -248,16 +268,26 @@ export function buildRankingRows(
     return a.name.localeCompare(b.name)
   })
 
-  return sorted.map((player, index) => ({
-    rank: index + 1,
+  let ladderRank = 0
+  return sorted.map((player) => {
+    const status = player.status === 'inactive' ? 'inactive' : 'active'
+    const matchesPlayed = matchesPlayedByPlayer.get(player.id) ?? 0
+    const provisional = matchesPlayed < PROVISIONAL_MATCH_COUNT
+    const ranked = status === 'active' && !provisional
+    if (ranked) ladderRank += 1
+    return {
+    rank: ranked ? ladderRank : null,
     id: player.id,
     name: player.name,
-    status: player.status === 'inactive' ? 'inactive' : 'active',
+    status,
     rating: player.rating,
     ratingDeviation: player.rating_deviation,
+    conservativeRating: conservativeRating(player.rating, player.rating_deviation),
+    matchesPlayed,
+    provisional,
     volatility: player.volatility,
     title: null,
-  }))
+  }})
 }
 
 export function roundRating(value: number): number {

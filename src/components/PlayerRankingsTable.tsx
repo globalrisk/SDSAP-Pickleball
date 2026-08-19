@@ -8,7 +8,13 @@ interface PlayerRankingsTableProps {
   rows: PlayerRankingRow[]
 }
 
-function getPodiumStyles(rank: number) {
+function getReliabilityKey(ratingDeviation: number) {
+  if (ratingDeviation <= 100) return 'high'
+  if (ratingDeviation <= 200) return 'medium'
+  return 'low'
+}
+
+function getPodiumStyles(rank: number | null) {
   if (rank === 1) {
     return {
       row: 'bg-yellow-50 ring-2 ring-inset ring-yellow-300',
@@ -48,14 +54,20 @@ export function PlayerRankingsTable({ rows }: PlayerRankingsTableProps) {
             <th className="px-4 py-3">{t('rankings.rank')}</th>
             <th className="px-4 py-3">{t('rankings.player')}</th>
             <th className="px-4 py-3 text-right">{t('rankings.rating')}</th>
-            <th className="hidden px-4 py-3 text-right sm:table-cell">{t('rankings.rd')}</th>
+            <th className="hidden px-4 py-3 text-right sm:table-cell">
+              {t('rankings.reliability')}
+            </th>
             <th className="w-8 px-2 py-3" aria-hidden />
           </tr>
         </thead>
         <tbody>
           {rows.map((row) => {
             const isInactive = row.status === 'inactive'
-            const podium = isInactive
+            const isUnranked = isInactive || row.provisional
+            const reliability = t(
+              `rankings.reliabilityLevels.${getReliabilityKey(row.ratingDeviation)}`,
+            )
+            const podium = isUnranked
               ? { row: 'bg-gray-50/80', rankBadge: 'bg-gray-200 text-gray-500' }
               : getPodiumStyles(row.rank)
             return (
@@ -77,7 +89,7 @@ export function PlayerRankingsTable({ rows }: PlayerRankingsTableProps) {
                       <span
                         className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${podium.rankBadge}`}
                       >
-                        {row.rank}
+                        {row.rank ?? '—'}
                       </span>
                     </span>
                     <span
@@ -90,9 +102,22 @@ export function PlayerRankingsTable({ rows }: PlayerRankingsTableProps) {
                         <span className="mt-0.5 block text-xs font-normal text-gray-400">
                           {t('rankings.inactive')}
                         </span>
-                      ) : row.title ? (
-                        <PlayerTitleBadge title={row.title} />
-                      ) : null}
+                      ) : (
+                        <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-normal">
+                          {row.provisional ? (
+                            <span className="text-amber-700">
+                              {t('rankings.provisional', {
+                                count: row.matchesPlayed,
+                              })}
+                            </span>
+                          ) : row.title ? (
+                            <PlayerTitleBadge title={row.title} />
+                          ) : null}
+                          <span className="text-gray-500 sm:hidden">
+                            {t('rankings.reliabilityLabel', { level: reliability })}
+                          </span>
+                        </span>
+                      )}
                     </span>
                     <span
                       className={`w-16 shrink-0 px-2 py-3 text-right font-bold sm:w-20 sm:px-4 ${
@@ -106,7 +131,7 @@ export function PlayerRankingsTable({ rows }: PlayerRankingsTableProps) {
                         isInactive ? 'text-gray-400' : 'text-gray-600'
                       }`}
                     >
-                      {roundRating(row.ratingDeviation)}
+                      {reliability}
                     </span>
                     <span
                       className={`shrink-0 px-3 py-3 ${

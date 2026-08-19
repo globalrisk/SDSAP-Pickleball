@@ -38,12 +38,15 @@ export interface PlayerTitle {
 }
 
 export interface PlayerRankingRow {
-  rank: number
+  rank: number | null
   id: string
   name: string
   status: PoolPlayerStatus
   rating: number
   ratingDeviation: number
+  conservativeRating: number
+  matchesPlayed: number
+  provisional: boolean
   volatility: number
   title: PlayerTitle | null
 }
@@ -171,7 +174,8 @@ export interface PlayerProfile {
   rating: number
   ratingDeviation: number
   initialRating: number
-  rank: number
+  rank: number | null
+  provisional: boolean
   played: number
   wins: number
   losses: number

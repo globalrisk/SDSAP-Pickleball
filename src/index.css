@@ -17,3 +17,27 @@ body {
   min-height: 100vh;
   min-height: 100dvh;
 }
+
+:where(a, button, input, select, textarea):focus-visible {
+  outline: 3px solid #16a34a;
+  outline-offset: 2px;
+}
+
+@keyframes loading-bar {
+  0% {
+    transform: translateX(-110%);
+  }
+  100% {
+    transform: translateX(310%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

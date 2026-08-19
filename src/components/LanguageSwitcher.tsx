@@ -16,6 +16,7 @@ export function LanguageSwitcher() {
     >
       <button
         type="button"
+        aria-pressed={current === 'vi'}
         onClick={() => setLanguage('vi')}
         className={`min-h-8 rounded-md px-2.5 text-xs font-semibold transition-colors ${
           current === 'vi'
@@ -27,6 +28,7 @@ export function LanguageSwitcher() {
       </button>
       <button
         type="button"
+        aria-pressed={current === 'en'}
         onClick={() => setLanguage('en')}
         className={`min-h-8 rounded-md px-2.5 text-xs font-semibold transition-colors ${
           current === 'en'

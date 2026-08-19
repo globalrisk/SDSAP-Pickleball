@@ -1,0 +1,15 @@
+---
+description: Treat mobile usability as the primary UI and UX design priority
+alwaysApply: true
+---
+
+# Mobile-First Design
+
+- Design and implement the mobile experience first; enhance it for wider screens afterward.
+- Never hide essential information or core actions on mobile. If desktop uses extra columns, expose the same important content within the mobile card or row.
+- Optimize primary flows for one-handed use, readable hierarchy, and minimal horizontal scanning.
+- Use touch targets of at least 44 by 44 CSS pixels where practical.
+- Avoid horizontal page scrolling. Tables must adapt into compact rows, cards, or clearly prioritized columns.
+- Keep primary actions visible without requiring hover. Do not rely on tooltips as the only explanation.
+- Verify UI changes at phone widths around 360px and 390px before considering desktop polish complete.
+- Preserve good tablet and desktop layouts, but resolve tradeoffs in favor of mobile usability unless the user says otherwise.

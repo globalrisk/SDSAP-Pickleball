@@ -70,7 +70,11 @@ export function PlayerProfilePage() {
       </div>
       <PageHeader
         title={profile.name}
-        subtitle={t('profile.subtitle', { rank: profile.rank })}
+        subtitle={
+          profile.rank == null
+            ? t(profile.provisional ? 'profile.provisionalSubtitle' : 'profile.unrankedSubtitle')
+            : t('profile.subtitle', { rank: profile.rank })
+        }
       />
       {profile.title ? (
         <div className="mb-6 -mt-2">

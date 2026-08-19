@@ -14,6 +14,10 @@ export function RankingsPage() {
       <SetupBanner />
       <PageHeader title={t('rankings.title')} subtitle={t('rankings.subtitle')} />
 
+      <p className="mb-4 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-900">
+        {t('rankings.methodNote')}
+      </p>
+
       {isLoading ? (
         <p className="text-sm text-gray-500">{t('common.loading')}</p>
       ) : (

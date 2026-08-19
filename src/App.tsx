@@ -1,4 +1,5 @@
-import { NavLink, Outlet } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { GlobalLoadingOverlay } from './components/GlobalLoadingOverlay'
 import { LanguageSwitcher } from './components/LanguageSwitcher'
@@ -13,10 +14,13 @@ const navItems = [
   { to: '/setup', labelKey: 'nav.setup', desktopKey: 'nav.setup' },
 ] as const
 
+const mobilePrimaryItems = navItems.slice(0, 4)
+const mobileMoreItems = navItems.slice(4)
+
 function navClassName(isActive: boolean, mobile = false) {
   const base = mobile
-    ? 'flex flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-2 text-[10px] font-medium transition-colors min-h-11'
-    : 'whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-colors min-h-10 inline-flex items-center'
+    ? 'flex flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-2 text-xs font-medium transition-colors min-h-12 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-1'
+    : 'whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-colors min-h-10 inline-flex items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-1'
 
   return isActive
     ? `${base} ${mobile ? 'bg-green-50 text-green-700' : 'bg-green-600 text-white'}`
@@ -25,6 +29,13 @@ function navClassName(isActive: boolean, mobile = false) {
 
 export function AppLayout() {
   const { t } = useTranslation()
+  const location = useLocation()
+  const [moreOpen, setMoreOpen] = useState(false)
+  const moreActive = mobileMoreItems.some(({ to }) => location.pathname.startsWith(to))
+
+  useEffect(() => {
+    setMoreOpen(false)
+  }, [location.pathname])
 
   return (
     <div className="min-h-dvh bg-gradient-to-b from-green-50 to-green-100">
@@ -61,7 +72,7 @@ export function AppLayout() {
 
       <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-green-200 bg-white/95 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur md:hidden">
         <div className="mx-auto flex max-w-lg items-stretch justify-between gap-1">
-          {navItems.map(({ to, labelKey, ...rest }) => (
+          {mobilePrimaryItems.map(({ to, labelKey, ...rest }) => (
             <NavLink
               key={to}
               to={to}
@@ -72,9 +83,61 @@ export function AppLayout() {
               <span>{t(labelKey)}</span>
             </NavLink>
           ))}
+          <button
+            type="button"
+            className={navClassName(moreActive || moreOpen, true)}
+            aria-expanded={moreOpen}
+            aria-controls="mobile-more-menu"
+            onClick={() => setMoreOpen((open) => !open)}
+          >
+            <MoreIcon />
+            <span>{t('nav.more')}</span>
+          </button>
         </div>
       </nav>
+
+      {moreOpen ? (
+        <>
+          <button
+            type="button"
+            className="fixed inset-0 z-20 bg-green-950/10 md:hidden"
+            aria-label={t('common.close')}
+            onClick={() => setMoreOpen(false)}
+          />
+          <div
+            id="mobile-more-menu"
+            className="fixed inset-x-3 bottom-20 z-30 mx-auto max-w-sm rounded-2xl border border-green-200 bg-white p-2 shadow-xl md:hidden"
+          >
+            {mobileMoreItems.map(({ to, labelKey }) => (
+              <NavLink
+                key={to}
+                to={to}
+                className={({ isActive }) =>
+                  `flex min-h-12 items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 ${
+                    isActive
+                      ? 'bg-green-600 text-white'
+                      : 'text-green-900 hover:bg-green-50'
+                  }`
+                }
+              >
+                <NavIcon to={to} />
+                {t(labelKey)}
+              </NavLink>
+            ))}
+          </div>
+        </>
+      ) : null}
     </div>
+  )
+}
+
+function MoreIcon() {
+  return (
+    <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="5" cy="12" r="1.75" />
+      <circle cx="12" cy="12" r="1.75" />
+      <circle cx="19" cy="12" r="1.75" />
+    </svg>
   )
 }
 
