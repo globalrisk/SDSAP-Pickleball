@@ -1,9 +1,20 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { recordForfeit, recordResult, revertMatchToScheduled } from '../lib/api'
+import {
+  fetchMatchResultSnapshot,
+  recordForfeit,
+  recordResult,
+  revertMatchToScheduled,
+} from '../lib/api'
 import { useSeason } from '../context/SeasonContext'
 import { useUndoResult } from '../context/undoResult'
+import {
+  decideMatchSaveRecovery,
+  isLikelyConnectionError,
+  type MatchResultSnapshot,
+} from '../lib/matchSaveRecovery'
+import { validateMatchResult } from '../lib/matchResultValidation'
 import type { MatchWithTeams } from '../types'
 
 interface RecordResultFormProps {
@@ -18,6 +29,15 @@ export interface SavedMatchResult {
   type: 'result' | 'forfeit' | 'revert'
   winnerTeamId: string | null
 }
+
+interface ResultMutationPayload {
+  type: 'result' | 'forfeit' | 'revert'
+  winnerTeamId?: string
+  forfeitTeamId?: string
+  reconcile?: boolean
+}
+
+class MatchSaveConflictError extends Error {}
 
 const btnPrimary =
   'min-h-11 w-full rounded-lg bg-green-600 px-4 py-3 text-sm font-medium text-white hover:bg-green-700 active:bg-green-800 disabled:opacity-50 sm:py-2'
@@ -35,7 +55,7 @@ export function RecordResultForm({
   compact = false,
   onSaved,
 }: RecordResultFormProps) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const queryClient = useQueryClient()
   const { selectedSeason } = useSeason()
   const { offerUndo } = useUndoResult()
@@ -46,13 +66,58 @@ export function RecordResultForm({
     match.away_score != null ? String(match.away_score) : '',
   )
   const [error, setError] = useState<string | null>(null)
+  const [failedPayload, setFailedPayload] = useState<ResultMutationPayload | null>(
+    null,
+  )
+  const expectedBeforeSave = useRef<MatchResultSnapshot>({
+    status: match.status,
+    winnerTeamId: match.winner_team_id,
+    homeScore: match.home_score,
+    awayScore: match.away_score,
+  })
+
+  function desiredSnapshot(payload: ResultMutationPayload): MatchResultSnapshot {
+    if (payload.type === 'revert') {
+      return {
+        status: 'scheduled',
+        winnerTeamId: null,
+        homeScore: null,
+        awayScore: null,
+      }
+    }
+    if (payload.type === 'forfeit') {
+      return {
+        status: 'forfeit',
+        winnerTeamId:
+          payload.forfeitTeamId === match.home_team_id
+            ? match.away_team_id
+            : match.home_team_id,
+        homeScore: null,
+        awayScore: null,
+      }
+    }
+    return {
+      status: 'completed',
+      winnerTeamId: payload.winnerTeamId ?? null,
+      homeScore: homeScore === '' ? null : Number(homeScore),
+      awayScore: awayScore === '' ? null : Number(awayScore),
+    }
+  }
 
   const mutation = useMutation({
-    mutationFn: async (payload: {
-      type: 'result' | 'forfeit' | 'revert'
-      winnerTeamId?: string
-      forfeitTeamId?: string
-    }) => {
+    mutationFn: async (payload: ResultMutationPayload) => {
+      const desired = desiredSnapshot(payload)
+      if (payload.reconcile) {
+        const current = await fetchMatchResultSnapshot(match.id)
+        const decision = decideMatchSaveRecovery(
+          current,
+          expectedBeforeSave.current,
+          desired,
+        )
+        if (decision === 'already-saved') return
+        if (decision === 'conflict') throw new MatchSaveConflictError()
+      }
+
       if (payload.type === 'revert') {
         await revertMatchToScheduled(match.id)
         return
@@ -82,6 +147,7 @@ export function RecordResultForm({
         queryClient.invalidateQueries({ queryKey: ['player-profile'] }),
       ])
       setError(null)
+      setFailedPayload(null)
       const winnerTeamId =
         payload.type === 'result'
           ? payload.winnerTeamId ?? null
@@ -95,29 +161,78 @@ export function RecordResultForm({
           winnerTeamId === match.home_team_id
             ? match.home_team.name
             : match.away_team.name
+        const savedAt = new Date().toLocaleTimeString(i18n.language, {
+          hour: '2-digit',
+          minute: '2-digit',
+        })
         offerUndo({
           matchId: match.id,
-          message: t('record.savedWinner', { name: winnerName }),
+          message: t('record.savedWinnerAt', { name: winnerName, time: savedAt }),
         })
       }
       onSaved?.({ type: payload.type, winnerTeamId })
       onDone?.()
     },
-    onError: (err: Error) => setError(err.message),
+    onError: (err: Error, payload) => {
+      if (err instanceof MatchSaveConflictError) {
+        setFailedPayload(null)
+        setError(t('record.saveConflict'))
+        void queryClient
+          .invalidateQueries({ queryKey: ['matches', selectedSeason?.id] })
+          .then(() => onDone?.())
+        return
+      }
+      if (isLikelyConnectionError(err)) {
+        setFailedPayload({ ...payload, reconcile: undefined })
+        setError(t('record.saveUnconfirmed'))
+        return
+      }
+      setFailedPayload(null)
+      setError(err.message)
+    },
   })
 
+  function submitPayload(payload: ResultMutationPayload, reconcile = false) {
+    setError(null)
+    if (!navigator.onLine) {
+      setFailedPayload({ ...payload, reconcile: undefined })
+      setError(t('record.offlineNotSaved'))
+      return
+    }
+    mutation.mutate({ ...payload, reconcile })
+  }
+
   function handleWinner(winnerTeamId: string) {
-    mutation.mutate({ type: 'result', winnerTeamId })
+    try {
+      validateMatchResult({
+        homeTeamId: match.home_team_id,
+        awayTeamId: match.away_team_id,
+        winnerTeamId,
+        homeScore: homeScore === '' ? undefined : Number(homeScore),
+        awayScore: awayScore === '' ? undefined : Number(awayScore),
+      })
+    } catch (err) {
+      setFailedPayload(null)
+      setError(err instanceof Error ? err.message : String(err))
+      return
+    }
+    submitPayload(
+      { type: 'result', winnerTeamId },
+      failedPayload !== null,
+    )
   }
 
   function handleForfeit(forfeitTeamId: string) {
     if (!confirm(t('record.confirmForfeit'))) return
-    mutation.mutate({ type: 'forfeit', forfeitTeamId })
+    submitPayload(
+      { type: 'forfeit', forfeitTeamId },
+      failedPayload !== null,
+    )
   }
 
   function handleRevert() {
     if (!confirm(t('record.confirmRevert'))) return
-    mutation.mutate({ type: 'revert' })
+    submitPayload({ type: 'revert' }, failedPayload !== null)
   }
 
   return (
@@ -133,6 +248,35 @@ export function RecordResultForm({
           {editing ? t('record.editTitle') : t('record.title')}
         </p>
       </div>
+
+      {mutation.isPending ? (
+        <p
+          className="mb-3 rounded-lg bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-800"
+          role="status"
+          aria-live="polite"
+        >
+          {t('record.saving')}
+        </p>
+      ) : null}
+
+      {error ? (
+        <div
+          className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800"
+          role="alert"
+        >
+          <p>{error}</p>
+          {failedPayload ? (
+            <button
+              type="button"
+              disabled={mutation.isPending}
+              onClick={() => submitPayload(failedPayload, true)}
+              className="mt-2 min-h-10 rounded-lg bg-red-700 px-3 py-2 font-bold text-white hover:bg-red-800 disabled:opacity-50"
+            >
+              {t('record.retrySave')}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
 
       {editing && onDone && (
         <button
@@ -223,8 +367,6 @@ export function RecordResultForm({
           {t('record.clearResult')}
         </button>
       )}
-
-      {error && <p className="mt-2 text-xs text-red-600" role="alert">{error}</p>}
     </div>
   )
 }

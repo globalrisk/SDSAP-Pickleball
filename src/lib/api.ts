@@ -20,6 +20,7 @@ import { buildPlayerMatchEvents } from './playerMatches'
 import { computePlayerRivalries } from './rivalries'
 import { computeSeasonRecap, type RatingHistoryRow } from './seasonRecap'
 import { computeStandings } from './standings'
+import type { MatchResultSnapshot } from './matchSaveRecovery'
 import type {
   MatchWithTeams,
   MatchLiveStatus,
@@ -1166,6 +1167,24 @@ export async function createSeasonMatches(seasonId: string): Promise<number> {
   })
   if (error) throw error
   return data as number
+}
+
+export async function fetchMatchResultSnapshot(
+  matchId: string,
+): Promise<MatchResultSnapshot> {
+  const { data, error } = await supabase
+    .from('matches')
+    .select('status, winner_team_id, home_score, away_score')
+    .eq('id', matchId)
+    .single()
+
+  if (error) throw error
+  return {
+    status: data.status,
+    winnerTeamId: data.winner_team_id,
+    homeScore: data.home_score,
+    awayScore: data.away_score,
+  }
 }
 
 export async function recordResult(

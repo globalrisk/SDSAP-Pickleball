@@ -1,12 +1,61 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 
+export type TournamentConnectionStatus =
+  | 'connecting'
+  | 'connected'
+  | 'reconnecting'
+  | 'offline'
+
 export function useTournamentRealtime(seasonId: string | undefined) {
   const queryClient = useQueryClient()
+  const [status, setStatus] = useState<TournamentConnectionStatus>(() =>
+    typeof navigator !== 'undefined' && !navigator.onLine ? 'offline' : 'connecting',
+  )
+  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null)
 
   useEffect(() => {
-    if (!seasonId) return
+    if (!seasonId) {
+      setStatus(
+        typeof navigator !== 'undefined' && !navigator.onLine
+          ? 'offline'
+          : 'connecting',
+      )
+      return
+    }
+
+    let disposed = false
+
+    const refreshTournamentData = async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['seasons'] }),
+        queryClient.invalidateQueries({ queryKey: ['matches', seasonId] }),
+        queryClient.invalidateQueries({ queryKey: ['teams-with-players', seasonId] }),
+        queryClient.invalidateQueries({ queryKey: ['player-rankings'] }),
+        queryClient.invalidateQueries({ queryKey: ['player-pool'] }),
+        queryClient.invalidateQueries({ queryKey: ['player-profile'] }),
+      ])
+      if (!disposed) setLastSyncedAt(new Date())
+    }
+
+    const refreshAfterChange = (queryKeys: readonly (readonly unknown[])[]) => {
+      void Promise.all(
+        queryKeys.map((queryKey) => queryClient.invalidateQueries({ queryKey })),
+      ).then(() => {
+        if (!disposed) setLastSyncedAt(new Date())
+      })
+    }
+
+    const handleOffline = () => setStatus('offline')
+    const handleOnline = () => {
+      setStatus('reconnecting')
+      void refreshTournamentData()
+    }
+
+    window.addEventListener('offline', handleOffline)
+    window.addEventListener('online', handleOnline)
+    setStatus(navigator.onLine ? 'connecting' : 'offline')
 
     const channel = supabase
       .channel(`tournament-${seasonId}`)
@@ -19,7 +68,7 @@ export function useTournamentRealtime(seasonId: string | undefined) {
           filter: `id=eq.${seasonId}`,
         },
         () => {
-          void queryClient.invalidateQueries({ queryKey: ['seasons'] })
+          refreshAfterChange([['seasons']])
         },
       )
       .on(
@@ -31,11 +80,11 @@ export function useTournamentRealtime(seasonId: string | undefined) {
           filter: `season_id=eq.${seasonId}`,
         },
         () => {
-          void Promise.all([
-            queryClient.invalidateQueries({ queryKey: ['matches', seasonId] }),
-            queryClient.invalidateQueries({ queryKey: ['player-rankings'] }),
-            queryClient.invalidateQueries({ queryKey: ['player-pool'] }),
-            queryClient.invalidateQueries({ queryKey: ['player-profile'] }),
+          refreshAfterChange([
+            ['matches', seasonId],
+            ['player-rankings'],
+            ['player-pool'],
+            ['player-profile'],
           ])
         },
       )
@@ -48,16 +97,36 @@ export function useTournamentRealtime(seasonId: string | undefined) {
           filter: `season_id=eq.${seasonId}`,
         },
         () => {
-          void Promise.all([
-            queryClient.invalidateQueries({ queryKey: ['teams-with-players', seasonId] }),
-            queryClient.invalidateQueries({ queryKey: ['matches', seasonId] }),
+          refreshAfterChange([
+            ['teams-with-players', seasonId],
+            ['matches', seasonId],
           ])
         },
       )
-      .subscribe()
+      .subscribe((nextStatus, error) => {
+        if (disposed) return
+        if (nextStatus === 'SUBSCRIBED') {
+          setStatus('connected')
+          void refreshTournamentData()
+          return
+        }
+        if (
+          nextStatus === 'CHANNEL_ERROR' ||
+          nextStatus === 'TIMED_OUT' ||
+          nextStatus === 'CLOSED'
+        ) {
+          if (error) console.error('Tournament realtime connection failed', error)
+          setStatus(navigator.onLine ? 'reconnecting' : 'offline')
+        }
+      })
 
     return () => {
+      disposed = true
+      window.removeEventListener('offline', handleOffline)
+      window.removeEventListener('online', handleOnline)
       void supabase.removeChannel(channel)
     }
   }, [queryClient, seasonId])
+
+  return { status, lastSyncedAt }
 }

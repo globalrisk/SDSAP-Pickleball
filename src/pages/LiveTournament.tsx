@@ -10,7 +10,10 @@ import { useSeason } from '../context/SeasonContext'
 import { useMatches } from '../hooks/useMatches'
 import { useStandings } from '../hooks/useStandings'
 import { useTeamsWithPlayers } from '../hooks/useTeams'
-import { useTournamentRealtime } from '../hooks/useTournamentRealtime'
+import {
+  useTournamentRealtime,
+  type TournamentConnectionStatus,
+} from '../hooks/useTournamentRealtime'
 import {
   seedMatchUpNext,
   setLiveCourtCount,
@@ -33,7 +36,7 @@ export function LiveTournamentPage() {
   const teamsQuery = useTeamsWithPlayers()
   const [lastWinnerTeamId, setLastWinnerTeamId] = useState<string | null>(null)
 
-  useTournamentRealtime(selectedSeason?.id)
+  const connection = useTournamentRealtime(selectedSeason?.id)
 
   const tournament = useMemo(
     () => buildTournamentView(matchesQuery.data ?? []),
@@ -166,6 +169,27 @@ export function LiveTournamentPage() {
       <SetupBanner />
       <ArchivedSeasonBanner />
 
+      {connection.status !== 'connected' ? (
+        <div
+          className={`mb-5 rounded-2xl border px-4 py-3 text-sm ${
+            connection.status === 'offline'
+              ? 'border-red-200 bg-red-50 text-red-900'
+              : 'border-amber-200 bg-amber-50 text-amber-900'
+          }`}
+          role="status"
+          aria-live="polite"
+        >
+          <p className="font-bold">{t(`live.connection.${connection.status}`)}</p>
+          <p className="mt-0.5">
+            {t(
+              connection.status === 'offline'
+                ? 'live.connection.offlineMessage'
+                : 'live.connection.reconnectingMessage',
+            )}
+          </p>
+        </div>
+      ) : null}
+
       <section className="relative mb-5 overflow-hidden rounded-3xl bg-gradient-to-br from-green-950 via-green-800 to-emerald-600 px-5 py-6 text-white shadow-lg sm:px-7 sm:py-8">
         <div className="absolute -right-12 -top-16 h-44 w-44 rounded-full bg-lime-300/20 blur-2xl" />
         <div className="relative">
@@ -175,6 +199,10 @@ export function LiveTournamentPage() {
               {t('live.badge')}
             </span>
             {selectedSeason ? <span className="text-sm font-medium text-green-100">{selectedSeason.name}</span> : null}
+            <ConnectionBadge
+              status={connection.status}
+              lastSyncedAt={connection.lastSyncedAt}
+            />
           </div>
           <h1 className="mt-4 text-2xl font-black tracking-tight sm:text-3xl">{t('live.title')}</h1>
           <p className="mt-1 max-w-xl text-sm text-green-100 sm:text-base">{t('live.flexibleCourtSubtitle')}</p>
@@ -375,7 +403,10 @@ export function LiveTournamentPage() {
                 <p className="text-xs font-bold uppercase tracking-wider text-green-700">{t('live.liveStandings')}</p>
                 <h2 className="text-lg font-black text-green-950">{t('standings.title')}</h2>
               </div>
-              <span className="flex items-center gap-1.5 text-[11px] font-semibold text-green-700"><span className="h-2 w-2 animate-pulse rounded-full bg-green-500" />{t('live.synced')}</span>
+              <ConnectionBadge
+                status={connection.status}
+                lastSyncedAt={connection.lastSyncedAt}
+              />
             </div>
             <ol className="divide-y divide-gray-100">
               {standingsQuery.standings.map((standing) => (
@@ -391,5 +422,44 @@ export function LiveTournamentPage() {
         </div>
       ) : null}
     </div>
+  )
+}
+
+function ConnectionBadge({
+  status,
+  lastSyncedAt,
+}: {
+  status: TournamentConnectionStatus
+  lastSyncedAt: Date | null
+}) {
+  const { t, i18n } = useTranslation()
+  const styles = {
+    connected: 'bg-green-50 text-green-800',
+    connecting: 'bg-amber-50 text-amber-800',
+    reconnecting: 'bg-amber-50 text-amber-800',
+    offline: 'bg-red-50 text-red-800',
+  }
+  const dotStyles = {
+    connected: 'bg-green-500',
+    connecting: 'animate-pulse bg-amber-500',
+    reconnecting: 'animate-pulse bg-amber-500',
+    offline: 'bg-red-500',
+  }
+  const time = lastSyncedAt?.toLocaleTimeString(i18n.language, {
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${styles[status]}`}
+      title={time ? t('live.connection.updatedAt', { time }) : undefined}
+    >
+      <span className={`h-2 w-2 rounded-full ${dotStyles[status]}`} />
+      {t(`live.connection.${status}`)}
+      {status === 'connected' && time ? (
+        <span className="hidden font-normal opacity-75 sm:inline">· {time}</span>
+      ) : null}
+    </span>
   )
 }
