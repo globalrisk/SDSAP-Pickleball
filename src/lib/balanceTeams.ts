@@ -1,10 +1,7 @@
-import { teamWinProbability, type SkillRating } from './ratings'
-
 export interface RatedPlayerRef {
   id: string
   name: string
   rating: number
-  ratingDeviation: number
 }
 
 export interface BalancedTeam {
@@ -16,7 +13,7 @@ export interface BalancedTeam {
 export interface BalancedTeamOption {
   id: string
   teams: BalancedTeam[]
-  /** Fairness of the least-even matchup: 100 means exactly 50/50. */
+  /** Weakest team rating as a percentage of the strongest; 100 means equal. */
   fairnessPercent: number
   repeatedPartnerships: number
 }
@@ -28,24 +25,18 @@ export interface TeamBalanceSummary {
 
 interface ScoredPairing {
   pairs: [RatedPlayerRef, RatedPlayerRef][]
-  worstDeviation: number
-  averageDeviation: number
+  ratingSpread: number
+  averageRatingGap: number
   repeatedPartnerships: number
-  uncertaintySpread: number
   ratingVariance: number
 }
-
-const BETA_DISPLAY = 250
 
 export function partnershipKey(a: string, b: string): string {
   return a < b ? `${a}:${b}` : `${b}:${a}`
 }
 
 function teamStats([a, b]: [RatedPlayerRef, RatedPlayerRef]) {
-  return {
-    rating: a.rating + b.rating,
-    variance: a.ratingDeviation ** 2 + b.ratingDeviation ** 2,
-  }
+  return a.rating + b.rating
 }
 
 function scorePairing(
@@ -53,48 +44,39 @@ function scorePairing(
   partnershipCounts: ReadonlyMap<string, number>,
 ): ScoredPairing {
   const teams = pairs.map(teamStats)
-  let worstDeviation = 0
-  let totalDeviation = 0
+  let ratingSpread = 0
+  let totalRatingGap = 0
   let matchupCount = 0
 
   for (let i = 0; i < teams.length; i += 1) {
     for (let j = i + 1; j < teams.length; j += 1) {
-      const a = teams[i]!
-      const b = teams[j]!
-      const denominator = Math.sqrt(
-        4 * BETA_DISPLAY ** 2 + a.variance + b.variance,
-      )
-      const deviation = Math.abs(a.rating - b.rating) / denominator
-      worstDeviation = Math.max(worstDeviation, deviation)
-      totalDeviation += deviation
+      const gap = Math.abs(teams[i]! - teams[j]!)
+      ratingSpread = Math.max(ratingSpread, gap)
+      totalRatingGap += gap
       matchupCount += 1
     }
   }
 
-  const uncertainties = teams.map((team) => Math.sqrt(team.variance))
-  const ratings = teams.map((team) => team.rating)
-  const mean = ratings.reduce((sum, value) => sum + value, 0) / ratings.length
+  const mean = teams.reduce((sum, value) => sum + value, 0) / teams.length
 
   return {
     pairs,
-    worstDeviation,
-    averageDeviation: matchupCount > 0 ? totalDeviation / matchupCount : 0,
+    ratingSpread,
+    averageRatingGap: matchupCount > 0 ? totalRatingGap / matchupCount : 0,
     repeatedPartnerships: pairs.reduce(
       (sum, [a, b]) => sum + (partnershipCounts.get(partnershipKey(a.id, b.id)) ?? 0),
       0,
     ),
-    uncertaintySpread: Math.max(...uncertainties) - Math.min(...uncertainties),
     ratingVariance:
-      ratings.reduce((sum, rating) => sum + (rating - mean) ** 2, 0) / ratings.length,
+      teams.reduce((sum, rating) => sum + (rating - mean) ** 2, 0) / teams.length,
   }
 }
 
 function comparePairings(a: ScoredPairing, b: ScoredPairing): number {
   return (
-    a.worstDeviation - b.worstDeviation ||
-    a.averageDeviation - b.averageDeviation ||
+    a.ratingSpread - b.ratingSpread ||
+    a.averageRatingGap - b.averageRatingGap ||
     a.repeatedPartnerships - b.repeatedPartnerships ||
-    a.uncertaintySpread - b.uncertaintySpread ||
     a.ratingVariance - b.ratingVariance ||
     pairingId(a.pairs).localeCompare(pairingId(b.pairs))
   )
@@ -152,27 +134,14 @@ function toBalancedTeam([a, b]: [RatedPlayerRef, RatedPlayerRef]): BalancedTeam 
 }
 
 function fairnessPercent(pairs: [RatedPlayerRef, RatedPlayerRef][]): number {
-  let worstProbability = 0.5
-  for (let i = 0; i < pairs.length; i += 1) {
-    for (let j = i + 1; j < pairs.length; j += 1) {
-      const toSkill = (player: RatedPlayerRef): SkillRating => ({
-        rating: player.rating,
-        rd: player.ratingDeviation,
-        volatility: 0,
-      })
-      const probability = teamWinProbability(
-        pairs[i]!.map(toSkill),
-        pairs[j]!.map(toSkill),
-      ) ?? 0.5
-      if (Math.abs(probability - 0.5) > Math.abs(worstProbability - 0.5)) {
-        worstProbability = probability
-      }
-    }
-  }
-  return Math.round((1 - 2 * Math.abs(worstProbability - 0.5)) * 100)
+  const teamRatings = pairs.map(teamStats)
+  const strongest = Math.max(...teamRatings)
+  const weakest = Math.min(...teamRatings)
+  if (strongest <= 0) return 100
+  return Math.round((weakest / strongest) * 100)
 }
 
-/** Generate the strongest distinct options for projected round-robin match fairness. */
+/** Generate the strongest distinct options by team-rating balance. */
 export function generateBalancedTeamOptions(
   players: RatedPlayerRef[],
   partnershipCounts: ReadonlyMap<string, number> = new Map(),

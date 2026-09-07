@@ -1434,3 +1434,12 @@ export async function deleteAllSeasonTeams(seasonId: string): Promise<void> {
   })
   if (error) throw error
 }
+
+/** Delete one result-free team and all of its unplayed fixtures. */
+export async function deleteSeasonTeam(seasonId: string, teamId: string): Promise<void> {
+  const { error } = await supabase.rpc('delete_season_team_atomic', {
+    p_season_id: seasonId,
+    p_team_id: teamId,
+  })
+  if (error) throw error
+}

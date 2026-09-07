@@ -1,3 +1,4 @@
+import { Fragment } from 'react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { PlayerTitleBadge } from './PlayerTitleBadge'
@@ -6,12 +7,6 @@ import type { PlayerRankingRow } from '../types'
 
 interface PlayerRankingsTableProps {
   rows: PlayerRankingRow[]
-}
-
-function getReliabilityKey(ratingDeviation: number) {
-  if (ratingDeviation <= 100) return 'high'
-  if (ratingDeviation <= 200) return 'medium'
-  return 'low'
 }
 
 function getPodiumStyles(rank: number | null) {
@@ -54,98 +49,109 @@ export function PlayerRankingsTable({ rows }: PlayerRankingsTableProps) {
             <th className="px-4 py-3">{t('rankings.rank')}</th>
             <th className="px-4 py-3">{t('rankings.player')}</th>
             <th className="px-4 py-3 text-right">{t('rankings.rating')}</th>
-            <th className="hidden px-4 py-3 text-right sm:table-cell">
-              {t('rankings.reliability')}
+            <th className="px-2 py-3 text-right sm:px-4">
+              {t('rankings.matchesPlayed')}
             </th>
             <th className="w-8 px-2 py-3" aria-hidden />
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => {
+          {rows.map((row, index) => {
             const isInactive = row.status === 'inactive'
             const isUnranked = isInactive || row.provisional
-            const reliability = t(
-              `rankings.reliabilityLevels.${getReliabilityKey(row.ratingDeviation)}`,
-            )
+            const previous = rows[index - 1]
+            const sectionLabel =
+              isInactive && previous?.status !== 'inactive'
+                ? t('rankings.inactiveSection')
+                : !isInactive &&
+                    row.provisional &&
+                    !(previous?.status === 'active' && previous.provisional)
+                  ? t('rankings.provisionalSection')
+                  : null
             const podium = isUnranked
               ? { row: 'bg-gray-50/80', rankBadge: 'bg-gray-200 text-gray-500' }
               : getPodiumStyles(row.rank)
             return (
-              <tr
-                key={row.id}
-                className={`border-b border-green-50 last:border-0 ${podium.row} ${
-                  isInactive ? 'opacity-60' : ''
-                }`}
-              >
-                <td className="p-0" colSpan={5}>
-                  <Link
-                    to={`/players/${row.id}`}
-                    className={`flex min-h-12 items-center gap-0 ${
-                      isInactive ? 'active:bg-gray-100/80' : 'active:bg-green-50/80'
-                    }`}
-                    aria-label={t('rankings.viewProfile', { name: row.name })}
-                  >
-                    <span className="px-4 py-3">
-                      <span
-                        className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${podium.rankBadge}`}
-                      >
-                        {row.rank ?? '—'}
+              <Fragment key={row.id}>
+                {sectionLabel ? (
+                  <tr className="border-y border-green-100 bg-green-50/70">
+                    <td
+                      colSpan={5}
+                      className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-green-800"
+                    >
+                      {sectionLabel}
+                    </td>
+                  </tr>
+                ) : null}
+                <tr
+                  className={`border-b border-green-50 last:border-0 ${podium.row} ${
+                    isInactive ? 'opacity-60' : ''
+                  }`}
+                >
+                  <td className="p-0" colSpan={5}>
+                    <Link
+                      to={`/players/${row.id}`}
+                      className={`flex min-h-12 items-center gap-0 ${
+                        isInactive ? 'active:bg-gray-100/80' : 'active:bg-green-50/80'
+                      }`}
+                      aria-label={t('rankings.viewProfile', { name: row.name })}
+                    >
+                      <span className="px-4 py-3">
+                        <span
+                          className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${podium.rankBadge}`}
+                        >
+                          {row.rank ?? '—'}
+                        </span>
                       </span>
-                    </span>
-                    <span
-                      className={`min-w-0 flex-1 px-4 py-3 font-semibold ${
-                        isInactive ? 'text-gray-500' : 'text-green-800'
-                      }`}
-                    >
-                      <span className="block">{row.name}</span>
-                      {isInactive ? (
-                        <span className="mt-0.5 block text-xs font-normal text-gray-400">
-                          {t('rankings.inactive')}
-                        </span>
-                      ) : (
-                        <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-normal">
-                          {row.provisional ? (
-                            <span className="text-amber-700">
-                              {t('rankings.provisional', {
-                                count: row.matchesPlayed,
-                              })}
-                            </span>
-                          ) : row.title ? (
-                            <PlayerTitleBadge title={row.title} />
-                          ) : null}
-                          <span className="text-gray-500 sm:hidden">
-                            {t('rankings.reliabilityLabel', { level: reliability })}
+                      <span
+                        className={`min-w-0 flex-1 px-4 py-3 font-semibold ${
+                          isInactive ? 'text-gray-500' : 'text-green-800'
+                        }`}
+                      >
+                        <span className="block">{row.name}</span>
+                        {isInactive ? (
+                          <span className="mt-0.5 block text-xs font-normal text-gray-400">
+                            {t('rankings.inactive')}
                           </span>
-                        </span>
-                      )}
-                    </span>
-                    <span
-                      className={`w-16 shrink-0 px-2 py-3 text-right font-bold sm:w-20 sm:px-4 ${
-                        isInactive ? 'text-gray-500' : 'text-green-800'
-                      }`}
-                    >
-                      {roundRating(row.rating)}
-                    </span>
-                    <span
-                      className={`hidden w-20 shrink-0 px-4 py-3 text-right sm:block ${
-                        isInactive ? 'text-gray-400' : 'text-gray-600'
-                      }`}
-                    >
-                      {reliability}
-                    </span>
-                    <span
-                      className={`shrink-0 px-3 py-3 ${
-                        isInactive ? 'text-gray-400' : 'text-green-600'
-                      }`}
-                      aria-hidden
-                    >
-                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                      </svg>
-                    </span>
-                  </Link>
-                </td>
-              </tr>
+                        ) : row.provisional ? (
+                          <span className="mt-0.5 block text-xs font-normal text-amber-700">
+                            {t('rankings.provisional', { count: row.matchesPlayed })}
+                          </span>
+                        ) : row.title ? (
+                          <span className="mt-0.5 block text-xs font-normal">
+                            <PlayerTitleBadge title={row.title} />
+                          </span>
+                        ) : null}
+                      </span>
+                      <span
+                        className={`w-16 shrink-0 px-2 py-3 text-right font-bold sm:w-20 sm:px-4 ${
+                          isInactive ? 'text-gray-500' : 'text-green-800'
+                        }`}
+                      >
+                        {roundRating(row.rating)}
+                      </span>
+                      <span
+                        className={`w-14 shrink-0 px-2 py-3 text-right sm:w-20 sm:px-4 ${
+                          isInactive ? 'text-gray-400' : 'text-gray-600'
+                        }`}
+                        title={t('rankings.ratedMatches', { count: row.matchesPlayed })}
+                      >
+                        {row.matchesPlayed}
+                      </span>
+                      <span
+                        className={`shrink-0 px-3 py-3 ${
+                          isInactive ? 'text-gray-400' : 'text-green-600'
+                        }`}
+                        aria-hidden
+                      >
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                        </svg>
+                      </span>
+                    </Link>
+                  </td>
+                </tr>
+              </Fragment>
             )
           })}
         </tbody>

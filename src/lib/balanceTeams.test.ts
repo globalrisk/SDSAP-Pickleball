@@ -5,12 +5,12 @@ import {
   type RatedPlayerRef,
 } from './balanceTeams'
 
-function player(id: string, rating: number, ratingDeviation = 100): RatedPlayerRef {
-  return { id, name: id.toUpperCase(), rating, ratingDeviation }
+function player(id: string, rating: number): RatedPlayerRef {
+  return { id, name: id.toUpperCase(), rating }
 }
 
 describe('balanced team options', () => {
-  it('directly optimizes projected matchup fairness', () => {
+  it('balances teams by their combined player ratings', () => {
     const best = generateBalancedTeamOptions([
       player('a', 1800),
       player('b', 1600),
@@ -22,7 +22,19 @@ describe('balanced team options', () => {
     expect(best.teams.map((team) => team.teamRating)).toEqual([3000, 3000])
   })
 
-  it('avoids repeat partners when projected fairness is tied', () => {
+  it('reports rating balance as weakest team divided by strongest team', () => {
+    const best = generateBalancedTeamOptions([
+      player('a', 1900),
+      player('b', 1700),
+      player('c', 1450),
+      player('d', 1200),
+    ])[0]!
+
+    expect(best.teams.map((team) => team.teamRating)).toEqual([3150, 3100])
+    expect(best.fairnessPercent).toBe(98)
+  })
+
+  it('avoids repeat partners when rating balance is tied', () => {
     const players = ['a', 'b', 'c', 'd'].map((id) => player(id, 1500))
     const best = generateBalancedTeamOptions(
       players,

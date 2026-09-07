@@ -30,7 +30,7 @@ describe('TrueSkill rating model', () => {
 })
 
 describe('leaderboard ordering', () => {
-  it('ranks established active players by conservative score only', () => {
+  it('ranks established active players by displayed rating', () => {
     const rows = buildRankingRows(
       [
         { id: 'uncertain', name: 'Uncertain', status: 'active' as const, rating: 1800, rating_deviation: 200, volatility: 0 },
@@ -41,7 +41,7 @@ describe('leaderboard ordering', () => {
       new Map([['uncertain', 8], ['certain', 8], ['new', 4], ['inactive', 20]]),
     )
 
-    expect(rows.map((row) => row.id)).toEqual(['certain', 'uncertain', 'new', 'inactive'])
+    expect(rows.map((row) => row.id)).toEqual(['uncertain', 'certain', 'new', 'inactive'])
     expect(rows.map((row) => row.rank)).toEqual([1, 2, null, null])
     expect(rows.find((row) => row.id === 'new')?.provisional).toBe(true)
   })

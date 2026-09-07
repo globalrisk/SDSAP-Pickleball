@@ -51,7 +51,6 @@ export function BalancedTeamsBuilder({
         id: player.id,
         name: player.name,
         rating: player.rating,
-        ratingDeviation: player.rating_deviation,
       })),
     [eligiblePlayers],
   )

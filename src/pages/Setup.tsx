@@ -10,6 +10,7 @@ import {
   createTeamWithPlayers,
   deleteAllSeasonTeams,
   deletePoolPlayer,
+  deleteSeasonTeam,
   fetchAssignedPoolPlayerIds,
   fetchMatches,
   fetchPartnershipCounts,
@@ -28,6 +29,7 @@ import { useTeamsWithPlayers } from '../hooks/useTeams'
 import type { PoolPlayer, TeamWithPlayers } from '../types'
 
 type SetupSection = 'players' | 'teams' | 'season'
+type PoolStatusFilter = 'active' | 'inactive' | 'all'
 
 function isSetupSection(value: string | null): value is SetupSection {
   return value === 'players' || value === 'teams' || value === 'season'
@@ -103,7 +105,13 @@ function PoolPlayerRow({
   const cannotDeactivate = isActive && isOnActiveSeasonTeam
 
   return (
-    <li className="flex flex-col gap-2 rounded-lg border border-green-100 bg-green-50 px-3 py-3 sm:flex-row sm:flex-wrap sm:items-center">
+    <li
+      className={`flex flex-col gap-2 rounded-lg border px-3 py-3 sm:flex-row sm:flex-wrap sm:items-center ${
+        isActive
+          ? 'border-emerald-200 bg-emerald-50/70'
+          : 'border-slate-200 bg-slate-50'
+      }`}
+    >
       <input
         value={name}
         aria-label={t('pool.playerNameLabel', { name: player.name })}
@@ -137,7 +145,11 @@ function PoolPlayerRow({
           }
           disabled={isStatusSaving || cannotDeactivate}
           title={cannotDeactivate ? t('pool.cannotDeactivateOnTeam') : undefined}
-          className="min-h-11 rounded-lg border border-green-300 bg-white px-3 py-2 text-sm font-medium text-green-800 hover:bg-green-100 disabled:opacity-50"
+          className={`min-h-11 rounded-lg border bg-white px-3 py-2 text-sm font-medium disabled:opacity-50 ${
+            isActive
+              ? 'border-slate-300 text-slate-700 hover:bg-slate-100'
+              : 'border-emerald-300 text-emerald-800 hover:bg-emerald-100'
+          }`}
         >
           {isStatusSaving
             ? t('pool.saving')
@@ -177,6 +189,7 @@ function TeamEditForm({
   pool,
   assignedIds,
   onSaved,
+  onDeleted,
   onError,
 }: {
   team: TeamWithPlayers
@@ -184,6 +197,7 @@ function TeamEditForm({
   pool: PoolPlayer[]
   assignedIds: Set<string>
   onSaved: (message: string) => void
+  onDeleted: (message: string) => void
   onError: (message: string) => void
 }) {
   const { t } = useTranslation()
@@ -216,6 +230,29 @@ function TeamEditForm({
       onSaved(t('setup.teamUpdated'))
     },
     onError: (err: Error) => onError(t('setup.saveFailed', { message: err.message })),
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteSeasonTeam(seasonId, team.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['teams'] })
+      queryClient.invalidateQueries({ queryKey: ['teams-with-players'] })
+      queryClient.invalidateQueries({ queryKey: ['matches'] })
+      queryClient.invalidateQueries({ queryKey: ['assigned-pool-players'] })
+      queryClient.invalidateQueries({ queryKey: ['player-pool'] })
+      onDeleted(t('setup.deleteTeamSuccess', { name: team.name }))
+    },
+    onError: (err: Error) => {
+      if (err.message.includes('results have been recorded')) {
+        onError(t('setup.deleteTeamBlocked'))
+        return
+      }
+      if (err.message.includes('match in progress')) {
+        onError(t('setup.deleteTeamPlaying'))
+        return
+      }
+      onError(t('setup.deleteTeamFailed', { message: err.message }))
+    },
   })
 
   const slot1Options = poolOptionsForSlot(
@@ -284,18 +321,35 @@ function TeamEditForm({
         </select>
       </div>
 
-      <button
-        type="submit"
-        disabled={
-          saveMutation.isPending ||
-          !poolPlayerIds[0] ||
-          !poolPlayerIds[1] ||
-          poolPlayerIds[0] === poolPlayerIds[1]
-        }
-        className="mt-4 min-h-11 w-full rounded-lg bg-green-600 px-4 py-3 text-sm font-medium text-white hover:bg-green-700 active:bg-green-800 disabled:opacity-50 sm:py-2"
-      >
-        {t('setup.saveTeam')}
-      </button>
+      <div className="mt-4 grid gap-2 sm:grid-cols-[1fr_auto]">
+        <button
+          type="submit"
+          disabled={
+            saveMutation.isPending ||
+            deleteMutation.isPending ||
+            !poolPlayerIds[0] ||
+            !poolPlayerIds[1] ||
+            poolPlayerIds[0] === poolPlayerIds[1]
+          }
+          className="min-h-11 w-full rounded-lg bg-green-600 px-4 py-3 text-sm font-medium text-white hover:bg-green-700 active:bg-green-800 disabled:opacity-50 sm:py-2"
+        >
+          {saveMutation.isPending ? t('setup.savingTeam') : t('setup.saveTeam')}
+        </button>
+        <button
+          type="button"
+          disabled={saveMutation.isPending || deleteMutation.isPending}
+          onClick={() => {
+            if (confirm(t('setup.deleteTeamConfirm', { name: team.name }))) {
+              deleteMutation.mutate()
+            }
+          }}
+          className="min-h-11 rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50 active:bg-red-100 disabled:opacity-50"
+        >
+          {deleteMutation.isPending
+            ? t('setup.deleteTeamWorking')
+            : t('setup.deleteTeamButton')}
+        </button>
+      </div>
     </form>
   )
 }
@@ -337,6 +391,8 @@ export function SetupPage() {
     : 'players'
   const [newPoolName, setNewPoolName] = useState('')
   const [newPoolRating, setNewPoolRating] = useState('1500')
+  const [poolStatusFilter, setPoolStatusFilter] = useState<PoolStatusFilter>('active')
+  const [poolSearch, setPoolSearch] = useState('')
   const [newTeam, setNewTeam] = useState({
     name: '',
     poolPlayerId1: '',
@@ -359,6 +415,14 @@ export function SetupPage() {
     () => pool.filter((player) => player.status === 'active').length,
     [pool],
   )
+  const inactiveCount = pool.length - activeCount
+  const visiblePool = useMemo(() => {
+    const query = poolSearch.trim().toLocaleLowerCase()
+    return pool.filter((player) => {
+      if (poolStatusFilter !== 'all' && player.status !== poolStatusFilter) return false
+      return !query || player.name.toLocaleLowerCase().includes(query)
+    })
+  }, [pool, poolSearch, poolStatusFilter])
   const recordedCount = (activeSeasonMatches ?? []).filter(
     (m) => m.status === 'completed' || m.status === 'forfeit',
   ).length
@@ -650,9 +714,6 @@ export function SetupPage() {
       <section className="mb-8 rounded-xl border border-green-200 bg-white p-5 shadow-sm">
         <h2 className="text-lg font-semibold text-green-900">{t('pool.title')}</h2>
         <p className="mt-1 text-sm text-gray-600">{t('pool.description')}</p>
-        <p className="mt-2 text-sm font-medium text-green-800">
-          {t('pool.activeCount', { count: activeCount })}
-        </p>
 
         <form onSubmit={handleAddPoolPlayer} className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
           <input
@@ -685,11 +746,58 @@ export function SetupPage() {
           </button>
         </form>
 
+        {pool.length > 0 ? (
+          <div className="mt-5 rounded-xl border border-green-100 bg-green-50/40 p-2.5">
+            <div
+              className="grid grid-cols-3 gap-1.5"
+              role="group"
+              aria-label={t('pool.statusFilterLabel')}
+            >
+              {(['active', 'inactive', 'all'] as const).map((status) => {
+                const count = status === 'active'
+                  ? activeCount
+                  : status === 'inactive'
+                    ? inactiveCount
+                    : pool.length
+                return (
+                  <button
+                    key={status}
+                    type="button"
+                    aria-pressed={poolStatusFilter === status}
+                    onClick={() => setPoolStatusFilter(status)}
+                    className={`min-h-11 rounded-lg px-2 py-2 text-sm font-semibold transition-colors ${
+                      poolStatusFilter === status
+                        ? 'bg-green-600 text-white shadow-sm'
+                        : 'bg-white text-green-800 hover:bg-green-100'
+                    }`}
+                  >
+                    {t(`pool.statusFilter.${status}`, { count })}
+                  </button>
+                )
+              })}
+            </div>
+            <label className="mt-2.5 block">
+              <span className="sr-only">{t('pool.searchLabel')}</span>
+              <input
+                type="search"
+                value={poolSearch}
+                onChange={(event) => setPoolSearch(event.target.value)}
+                placeholder={t('pool.searchPlaceholder')}
+                className="min-h-11 w-full rounded-lg border border-green-200 bg-white px-3 py-2 text-base sm:text-sm"
+              />
+            </label>
+          </div>
+        ) : null}
+
         {pool.length === 0 ? (
           <p className="mt-4 text-sm text-gray-500">{t('pool.empty')}</p>
+        ) : visiblePool.length === 0 ? (
+          <p className="mt-4 rounded-lg bg-gray-50 px-3 py-4 text-sm text-gray-600">
+            {t('pool.noFilterResults')}
+          </p>
         ) : (
           <ul className="mt-4 space-y-2">
-            {pool.map((player) => (
+            {visiblePool.map((player) => (
               <PoolPlayerRow
                 key={player.id}
                 player={player}
@@ -885,6 +993,7 @@ export function SetupPage() {
               pool={pool}
               assignedIds={assignedIds}
               onSaved={(message) => setFeedback({ text: message, tone: 'ok' })}
+              onDeleted={(message) => setFeedback({ text: message, tone: 'ok' })}
               onError={(message) => setFeedback({ text: message, tone: 'error' })}
             />
           ) : (

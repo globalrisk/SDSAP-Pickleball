@@ -257,14 +257,7 @@ export function buildRankingRows(
     const aGroup = aStatus === 'inactive' ? 2 : aProvisional ? 1 : 0
     const bGroup = bStatus === 'inactive' ? 2 : bProvisional ? 1 : 0
     if (aGroup !== bGroup) return aGroup - bGroup
-    const exposureDiff =
-      conservativeRating(b.rating, b.rating_deviation) -
-      conservativeRating(a.rating, a.rating_deviation)
-    if (exposureDiff !== 0) return exposureDiff
     if (b.rating !== a.rating) return b.rating - a.rating
-    if (a.rating_deviation !== b.rating_deviation) {
-      return a.rating_deviation - b.rating_deviation
-    }
     return a.name.localeCompare(b.name)
   })
 
