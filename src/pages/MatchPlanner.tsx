@@ -14,6 +14,7 @@ import {
   saveRotationResult,
   startRotationMatch,
 } from '../lib/rotationApi'
+import { createRefreshCoordinator } from '../lib/refreshCoordinator'
 import {
   generateRotationSchedule,
   getNextRotationPlannedRound,
@@ -406,6 +407,7 @@ function PlannerEvent({
   matches,
   event,
   connectionStatus,
+  onRefresh,
   onRegenerate,
   onReset,
 }: {
@@ -413,11 +415,11 @@ function PlannerEvent({
   matches: RotationMatch[]
   event: NonNullable<Awaited<ReturnType<typeof fetchRotationSnapshot>>>['event']
   connectionStatus: ReturnType<typeof useRotationRealtime>['status']
+  onRefresh: () => Promise<void>
   onRegenerate: () => void
   onReset: () => void
 }) {
   const { t } = useTranslation()
-  const queryClient = useQueryClient()
   const [mobileSection, setMobileSection] = useState<MobilePlannerSection>('courts')
   const [showAllQueue, setShowAllQueue] = useState(false)
   const playersById = useMemo(() => new Map(players.map((player) => [player.id, player])), [players])
@@ -461,28 +463,27 @@ function PlannerEvent({
     (court) => !playingMatches.some((match) => match.court_number === court),
   )
 
-  const refresh = () => queryClient.invalidateQueries({ queryKey: rotationSnapshotQueryKey })
   const startRoundMutation = useMutation({
     mutationFn: async (roundStarts: { match: RotationMatch; court: number }[]) => {
       for (const { match, court } of roundStarts) {
         await startRotationMatch(match.id, court, match.revision)
       }
     },
-    onSettled: refresh,
+    onSettled: onRefresh,
   })
   const startMutation = useMutation({
     mutationFn: ({ match, court }: { match: RotationMatch; court: number }) =>
       startRotationMatch(match.id, court, match.revision),
-    onSuccess: refresh,
+    onSuccess: onRefresh,
   })
   const queueMutation = useMutation({
     mutationFn: (match: RotationMatch) => returnRotationMatchToQueue(match.id, match.revision),
-    onSuccess: refresh,
+    onSuccess: onRefresh,
   })
   const scoreMutation = useMutation({
     mutationFn: ({ match, a, b }: { match: RotationMatch; a: number; b: number }) =>
       saveRotationResult(match.id, a, b, match.revision),
-    onSuccess: refresh,
+    onSuccess: onRefresh,
   })
   const actionError =
     startRoundMutation.error ?? startMutation.error ?? queueMutation.error ?? scoreMutation.error
@@ -654,7 +655,17 @@ export function MatchPlannerPage() {
   const queryClient = useQueryClient()
   const [pendingAction, setPendingAction] = useState<'regenerate' | 'reset' | null>(null)
   const snapshotQuery = useQuery({ queryKey: rotationSnapshotQueryKey, queryFn: fetchRotationSnapshot })
-  const connection = useRotationRealtime()
+  const refreshSnapshot = useMemo(
+    () =>
+      createRefreshCoordinator(() =>
+        queryClient.refetchQueries(
+          { queryKey: rotationSnapshotQueryKey, type: 'active' },
+          { cancelRefetch: true },
+        ),
+      ),
+    [queryClient],
+  )
+  const connection = useRotationRealtime(refreshSnapshot)
   const createMutation = useMutation({
     mutationFn: async (input: { name: string; playerNames: string[]; matchesPerPlayer: number; courtCount: number }) => {
       await waitForLoadingPaint()
@@ -697,7 +708,7 @@ export function MatchPlannerPage() {
       </header>
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
         <SetupBanner />
-        {snapshotQuery.isLoading ? <LoadingState /> : snapshotQuery.error ? <ErrorState message={(snapshotQuery.error as Error).message} /> : snapshot ? <PlannerEvent event={snapshot.event} players={snapshot.players} matches={snapshot.matches} connectionStatus={connection.status} onRegenerate={() => setPendingAction('regenerate')} onReset={() => setPendingAction('reset')} /> : <PlannerSetup isSaving={createMutation.isPending} error={createMutation.error as Error | null} onCreate={(input) => createMutation.mutate(input)} />}
+        {snapshotQuery.isLoading ? <LoadingState /> : snapshotQuery.error ? <ErrorState message={(snapshotQuery.error as Error).message} /> : snapshot ? <PlannerEvent event={snapshot.event} players={snapshot.players} matches={snapshot.matches} connectionStatus={connection.status} onRefresh={refreshSnapshot} onRegenerate={() => setPendingAction('regenerate')} onReset={() => setPendingAction('reset')} /> : <PlannerSetup isSaving={createMutation.isPending} error={createMutation.error as Error | null} onCreate={(input) => createMutation.mutate(input)} />}
         {resetMutation.error ? <div className="mt-5"><ErrorState message={(resetMutation.error as Error).message} /></div> : null}
       </main>
       {pendingAction ? (

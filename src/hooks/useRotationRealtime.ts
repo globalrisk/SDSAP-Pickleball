@@ -1,11 +1,8 @@
 import { useEffect, useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
-import { rotationSnapshotQueryKey } from '../lib/rotationApi'
 import { supabase } from '../lib/supabase'
 import type { TournamentConnectionStatus } from './useTournamentRealtime'
 
-export function useRotationRealtime() {
-  const queryClient = useQueryClient()
+export function useRotationRealtime(refreshSnapshot: () => Promise<void>) {
   const [status, setStatus] = useState<TournamentConnectionStatus>(() =>
     typeof navigator !== 'undefined' && !navigator.onLine ? 'offline' : 'connecting',
   )
@@ -14,9 +11,13 @@ export function useRotationRealtime() {
   useEffect(() => {
     let disposed = false
     const refresh = () => {
-      void queryClient.invalidateQueries({ queryKey: rotationSnapshotQueryKey }).then(() => {
-        if (!disposed) setLastSyncedAt(new Date())
-      })
+      void refreshSnapshot()
+        .then(() => {
+          if (!disposed) setLastSyncedAt(new Date())
+        })
+        .catch((error) => {
+          if (!disposed) console.error('Rotation snapshot refresh failed', error)
+        })
     }
     const handleOffline = () => setStatus('offline')
     const handleOnline = () => {
@@ -52,7 +53,7 @@ export function useRotationRealtime() {
       window.removeEventListener('online', handleOnline)
       void supabase.removeChannel(channel)
     }
-  }, [queryClient])
+  }, [refreshSnapshot])
 
   return { status, lastSyncedAt }
 }
