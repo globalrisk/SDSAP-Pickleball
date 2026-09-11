@@ -444,7 +444,9 @@ function PlannerEvent({
     playingMatches.length > 0 &&
     Boolean(plannedRound?.matches.some((match) => match.status === 'completed'))
   const roundMatchesToStart =
-    plannedRound?.matches.filter((match) => match.status === 'available') ?? []
+    plannedRound?.matches
+      .map((match, index) => ({ match, court: index + 1 }))
+      .filter(({ match }) => match.status === 'available') ?? []
   const orderedAvailable = recommended
     ? [recommended, ...available.filter((match) => match.id !== recommended.id)]
     : available
@@ -455,9 +457,9 @@ function PlannerEvent({
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: rotationSnapshotQueryKey })
   const startRoundMutation = useMutation({
-    mutationFn: async (roundMatches: RotationMatch[]) => {
-      for (const [index, match] of roundMatches.entries()) {
-        await startRotationMatch(match.id, index + 1, match.revision)
+    mutationFn: async (roundStarts: { match: RotationMatch; court: number }[]) => {
+      for (const { match, court } of roundStarts) {
+        await startRotationMatch(match.id, court, match.revision)
       }
     },
     onSettled: refresh,
@@ -539,8 +541,8 @@ function PlannerEvent({
         <div className="min-w-0 space-y-6">
           <section className={mobileSection === 'courts' ? 'block' : 'hidden xl:block'} role="tabpanel">
             <div className="mb-3 flex items-end justify-between"><div><p className="text-xs font-black uppercase tracking-wider text-cyan-700">{t('rotation.courtsEyebrow')}</p><h2 className="text-xl font-black text-slate-950">{t('rotation.courts')}</h2></div><span className="text-sm text-slate-500">{t('rotation.flexibleHint')}</span></div>
-            <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-cyan-200 bg-cyan-50 p-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
+            <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-cyan-200 bg-cyan-50 p-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="min-w-0 flex-1">
                 <p className="font-black text-cyan-950">
                   {customRound
                     ? t('rotation.customRound')
@@ -559,6 +561,20 @@ function PlannerEvent({
                           ? t('rotation.roundReady')
                           : t('rotation.noMatchesWaiting')}
                 </p>
+                {plannedRound && !customRound ? (
+                  <div className="mt-3 grid gap-2 md:grid-cols-2">
+                    {plannedRound.matches.map((match, index) => (
+                      <div key={match.id} className="rounded-xl border border-cyan-200 bg-white p-3">
+                        <p className="mb-2 text-xs font-black uppercase tracking-wide text-cyan-700">
+                          {t('rotation.court', { number: index + 1 })}
+                          <span className="mx-1 text-cyan-300">·</span>
+                          {t('rotation.matchNumber', { number: match.sequence_number })}
+                        </p>
+                        <MatchTeams match={match} playersById={playersById} compact />
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
                 {plannedRound ? <p className="mt-1 text-xs font-semibold text-cyan-700">{t('rotation.manualOrderHint')}</p> : null}
               </div>
               {playingMatches.length === 0 && roundMatchesToStart.length > 0 ? (
@@ -569,7 +585,7 @@ function PlannerEvent({
                     startMutation.isPending ||
                     connectionStatus === 'offline' ||
                     roundMatchesToStart.length > emptyCourts.length ||
-                    roundMatchesToStart.some((match) => !startableMatchIds.has(match.id))
+                    roundMatchesToStart.some(({ match }) => !startableMatchIds.has(match.id))
                   }
                   onClick={() => startRoundMutation.mutate(roundMatchesToStart)}
                   className={`${primaryButton} shrink-0`}
@@ -581,10 +597,16 @@ function PlannerEvent({
             <div className="grid gap-4 lg:grid-cols-2">
               {Array.from({ length: event.court_count }, (_, index) => index + 1).map((court) => {
                 const playing = matches.find((match) => match.status === 'playing' && match.court_number === court)
+                const plannedCourtMatch = customRound ? null : plannedRound?.matches[court - 1]
+                const courtRecommendation = waitingForOtherCourt
+                  ? null
+                  : plannedCourtMatch?.status === 'available'
+                    ? plannedCourtMatch
+                    : recommended
                 return (
                   <article key={court} className={`min-h-64 rounded-3xl p-5 shadow-sm ${playing ? 'bg-gradient-to-br from-cyan-800 to-cyan-600' : 'border-2 border-dashed border-cyan-200 bg-cyan-50/50'}`}>
                     <div className="flex items-center justify-between"><h3 className={`text-sm font-black uppercase tracking-wider ${playing ? 'text-cyan-100' : 'text-cyan-800'}`}>{t('rotation.court', { number: court })}</h3>{playing ? <span className="rounded-full bg-red-500 px-2.5 py-1 text-xs font-black text-white">{t('rotation.playing')}</span> : null}</div>
-                    {playing ? <><div className="mt-4"><MatchTeams match={playing} playersById={playersById} /></div><ScoreForm match={playing} playersById={playersById} isSaving={scoreMutation.isPending} onSave={(a, b) => scoreMutation.mutate({ match: playing, a, b })} /><button type="button" disabled={queueMutation.isPending} onClick={() => queueMutation.mutate(playing)} className="mt-2 min-h-10 w-full text-xs font-bold text-cyan-100 underline underline-offset-4 disabled:opacity-50">{t('rotation.returnQueue')}</button></> : recommended ? <><p className="mt-5 text-xs font-bold uppercase tracking-wide text-cyan-700">{t('rotation.recommended')}</p><div className="mt-2"><MatchTeams match={recommended} playersById={playersById} compact /></div><button type="button" disabled={startMutation.isPending || startRoundMutation.isPending || connectionStatus === 'offline'} onClick={() => startMutation.mutate({ match: recommended, court })} className={`${primaryButton} mt-5 w-full`}>{t('rotation.startMatch')}</button></> : <div className="flex min-h-48 items-center justify-center text-center text-sm text-slate-500">{available.length > 0 ? t('rotation.waitingPlayers') : t('rotation.noMatchesWaiting')}</div>}
+                    {playing ? <><div className="mt-4"><MatchTeams match={playing} playersById={playersById} /></div><ScoreForm match={playing} playersById={playersById} isSaving={scoreMutation.isPending} onSave={(a, b) => scoreMutation.mutate({ match: playing, a, b })} /><button type="button" disabled={queueMutation.isPending} onClick={() => queueMutation.mutate(playing)} className="mt-2 min-h-10 w-full text-xs font-bold text-cyan-100 underline underline-offset-4 disabled:opacity-50">{t('rotation.returnQueue')}</button></> : courtRecommendation ? <><p className="mt-5 text-xs font-bold uppercase tracking-wide text-cyan-700">{t('rotation.recommended')}</p><div className="mt-2"><MatchTeams match={courtRecommendation} playersById={playersById} compact /></div><button type="button" disabled={startMutation.isPending || startRoundMutation.isPending || connectionStatus === 'offline'} onClick={() => startMutation.mutate({ match: courtRecommendation, court })} className={`${primaryButton} mt-5 w-full`}>{t('rotation.startMatch')}</button></> : <div className="flex min-h-48 items-center justify-center text-center text-sm text-slate-500">{available.length > 0 ? t('rotation.waitingPlayers') : t('rotation.noMatchesWaiting')}</div>}
                   </article>
                 )
               })}
