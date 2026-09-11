@@ -626,6 +626,14 @@ export function getNextRotationPlannedRound(
   }
 }
 
+export function isRotationPlannedRestRound(
+  matches: readonly RotationMatch[],
+  courtCount: number,
+): boolean {
+  const plannedRound = getNextRotationPlannedRound(matches, courtCount)
+  return Boolean(plannedRound && plannedRound.matches.length < courtCount)
+}
+
 export function getRotationStartableMatchIds(
   matches: readonly RotationMatch[],
   courtCount: number,

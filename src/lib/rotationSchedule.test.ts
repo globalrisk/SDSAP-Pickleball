@@ -3,6 +3,7 @@ import {
   generateRotationSchedule,
   getNextRotationPlannedRound,
   getRotationStartableMatchIds,
+  isRotationPlannedRestRound,
   recommendRotationMatch,
   validateRotationConfiguration,
 } from './rotationSchedule'
@@ -254,6 +255,9 @@ describe('rotation match recommendation', () => {
     expect(
       getNextRotationPlannedRound([first, second, restRound, nextFirst, nextSecond], 2),
     ).toEqual({ roundNumber: 2, matches: [restRound] })
+    expect(
+      isRotationPlannedRestRound([first, second, restRound, nextFirst, nextSecond], 2),
+    ).toBe(true)
 
     expect(
       getNextRotationPlannedRound(
@@ -261,6 +265,12 @@ describe('rotation match recommendation', () => {
         2,
       ),
     ).toEqual({ roundNumber: 3, matches: [nextFirst, nextSecond] })
+    expect(
+      isRotationPlannedRestRound(
+        [first, second, { ...restRound, status: 'completed' }, nextFirst, nextSecond],
+        2,
+      ),
+    ).toBe(false)
   })
 
   it('prevents a first match that would strand another empty court', () => {
