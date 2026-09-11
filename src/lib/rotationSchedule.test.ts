@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   generateRotationSchedule,
+  getRotationStartableMatchIds,
   recommendRotationMatch,
   validateRotationConfiguration,
 } from './rotationSchedule'
@@ -39,11 +40,17 @@ describe('rotation schedule generation', () => {
     expect([...appearances.values()]).toEqual(Array.from({ length: 10 }, () => 6))
   })
 
-  it('opens a two-court schedule with two player-disjoint matches', () => {
-    const matches = generateRotationSchedule(playerIds(10), 6, 2, 20260911)
+  it.each([1, 42, 123, 20260911])(
+    'groups a two-court schedule into player-disjoint rounds for seed %i',
+    (seed) => {
+      const matches = generateRotationSchedule(playerIds(10), 6, 2, seed)
+      const completeRoundMatchCount = matches.length - (matches.length % 2)
 
-    expect(new Set(matches.slice(0, 2).flatMap(matchPlayers))).toHaveLength(8)
-  })
+      for (let index = 0; index < completeRoundMatchCount; index += 2) {
+        expect(new Set(matches.slice(index, index + 2).flatMap(matchPlayers))).toHaveLength(8)
+      }
+    },
+  )
 
   it.each([
     [4, 3, 1],
@@ -51,6 +58,7 @@ describe('rotation schedule generation', () => {
     [6, 2, 1],
     [8, 5, 2],
     [9, 4, 2],
+    [10, 8, 2],
   ])('supports %i players playing %i matches', (count, matchesEach, courts) => {
     const ids = playerIds(count)
     const matches = generateRotationSchedule(ids, matchesEach, courts, 42)
@@ -144,6 +152,26 @@ function rotationMatch(
 }
 
 describe('rotation match recommendation', () => {
+  it('prevents a first match that would strand another empty court', () => {
+    const isolated = rotationMatch('isolated', 1, ['p1', 'p2', 'p3', 'p4'])
+    const firstPair = rotationMatch('first-pair', 2, ['p1', 'p2', 'p5', 'p6'])
+    const secondPair = rotationMatch('second-pair', 3, ['p3', 'p4', 'p7', 'p8'])
+    const startable = getRotationStartableMatchIds(
+      [isolated, firstPair, secondPair],
+      2,
+    )
+
+    expect(startable.has(isolated.id)).toBe(false)
+    expect(startable.has(firstPair.id)).toBe(true)
+    expect(startable.has(secondPair.id)).toBe(true)
+  })
+
+  it('allows progress when no full set of courts can be filled', () => {
+    const onlyMatch = rotationMatch('only', 1, ['p1', 'p2', 'p3', 'p4'])
+
+    expect(getRotationStartableMatchIds([onlyMatch], 2).has(onlyMatch.id)).toBe(true)
+  })
+
   it('starts with a match that leaves another eligible match for the second court', () => {
     const players = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9'].map(rotationPlayer)
     const isolated = rotationMatch('isolated', 1, ['p1', 'p2', 'p3', 'p4'])

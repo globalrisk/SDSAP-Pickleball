@@ -555,6 +555,7 @@
     "bestNext": "Best next",
     "startCourt": "Start on Court {{number}}",
     "playersBusy": "One or more players are currently on court.",
+    "blocksOtherCourts": "Choose another match first to keep every court playable.",
     "showAllMatches": "Show all {{count}} matches",
     "showFewerMatches": "Show fewer matches",
     "completedMatches": "Completed matches ({{count}})",

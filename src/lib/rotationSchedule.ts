@@ -8,6 +8,7 @@ type Partnership = readonly [string, string]
 
 interface CandidateSchedule {
   matches: GeneratedRotationMatch[]
+  idleCourtPenalty: number
   opponentPenalty: number
   consecutivePenalty: number
 }
@@ -53,12 +54,120 @@ function generatedMatchPlayerIds(
   return [...match.teamAPlayerIds, ...match.teamBPlayerIds]
 }
 
-function hasNoPlayersInCommon(
-  firstPlayerIds: readonly string[],
-  secondPlayerIds: readonly string[],
-): boolean {
-  const first = new Set(firstPlayerIds)
-  return secondPlayerIds.every((playerId) => !first.has(playerId))
+function findCompatibleBatch<T>(
+  candidates: readonly T[],
+  targetSize: number,
+  getPlayerIds: (candidate: T) => readonly string[],
+  initialPlayerIds: readonly string[] = [],
+): { batch: T[]; truncated: boolean } {
+  if (targetSize <= 0) return { batch: [], truncated: false }
+
+  const maximumVisits = candidates.length > 100 ? 5_000 : 20_000
+  let visits = 0
+  let truncated = false
+  let best: T[] = []
+  const usedPlayerIds = new Set(initialPlayerIds)
+
+  function search(startIndex: number, batch: T[]): boolean {
+    if (batch.length > best.length) best = [...batch]
+    if (batch.length === targetSize) return true
+    if (batch.length + candidates.length - startIndex < targetSize) return false
+
+    for (let index = startIndex; index < candidates.length; index += 1) {
+      visits += 1
+      if (visits > maximumVisits) {
+        truncated = true
+        return false
+      }
+
+      const candidate = candidates[index]!
+      const playerIds = getPlayerIds(candidate)
+      if (playerIds.some((playerId) => usedPlayerIds.has(playerId))) continue
+
+      for (const playerId of playerIds) usedPlayerIds.add(playerId)
+      batch.push(candidate)
+      if (search(index + 1, batch)) return true
+      batch.pop()
+      for (const playerId of playerIds) usedPlayerIds.delete(playerId)
+    }
+    return false
+  }
+
+  search(0, [])
+  return { batch: best, truncated }
+}
+
+function buildOptimalTwoCourtBatches<T>(
+  candidates: readonly T[],
+  getPlayerIds: (candidate: T) => readonly string[],
+  random: () => number,
+): T[][] | null {
+  if (candidates.length > 20) return null
+
+  const playerSets = candidates.map((candidate) => new Set(getPlayerIds(candidate)))
+  const compatible = candidates.map((_, firstIndex) =>
+    candidates.map((__, secondIndex) =>
+      secondIndex !== firstIndex &&
+      [...playerSets[firstIndex]!].every(
+        (playerId) => !playerSets[secondIndex]!.has(playerId),
+      ),
+    ),
+  )
+  const memo = new Map<bigint, number>()
+
+  function firstSetIndex(mask: bigint): number {
+    for (let index = 0; index < candidates.length; index += 1) {
+      if ((mask & (1n << BigInt(index))) !== 0n) return index
+    }
+    return -1
+  }
+
+  function maximumPairCount(mask: bigint): number {
+    if (mask === 0n) return 0
+    const cached = memo.get(mask)
+    if (cached != null) return cached
+
+    const firstIndex = firstSetIndex(mask)
+    const withoutFirst = mask & ~(1n << BigInt(firstIndex))
+    let best = maximumPairCount(withoutFirst)
+    for (let secondIndex = firstIndex + 1; secondIndex < candidates.length; secondIndex += 1) {
+      const secondBit = 1n << BigInt(secondIndex)
+      if ((withoutFirst & secondBit) === 0n || !compatible[firstIndex]![secondIndex]) continue
+      best = Math.max(best, 1 + maximumPairCount(withoutFirst & ~secondBit))
+    }
+    memo.set(mask, best)
+    return best
+  }
+
+  const batches: T[][] = []
+  let mask = (1n << BigInt(candidates.length)) - 1n
+  while (mask !== 0n) {
+    const firstIndex = firstSetIndex(mask)
+    const withoutFirst = mask & ~(1n << BigInt(firstIndex))
+    const best = maximumPairCount(mask)
+    const partners: number[] = []
+    for (let secondIndex = firstIndex + 1; secondIndex < candidates.length; secondIndex += 1) {
+      const secondBit = 1n << BigInt(secondIndex)
+      if (
+        (withoutFirst & secondBit) !== 0n &&
+        compatible[firstIndex]![secondIndex] &&
+        1 + maximumPairCount(withoutFirst & ~secondBit) === best
+      ) {
+        partners.push(secondIndex)
+      }
+    }
+
+    if (partners.length === 0) {
+      batches.push([candidates[firstIndex]!])
+      mask = withoutFirst
+      continue
+    }
+
+    const secondIndex = partners[Math.floor(random() * partners.length)]!
+    batches.push([candidates[firstIndex]!, candidates[secondIndex]!])
+    mask = withoutFirst & ~(1n << BigInt(secondIndex))
+  }
+  return batches
 }
 
 export function validateRotationConfiguration(
@@ -116,30 +225,38 @@ export function validateRotationConfiguration(
   return { valid: true, code: null, message: null, suggestedMatchesPerPlayer: suggestions }
 }
 
+function createEvenPartnershipRounds(
+  playerIds: readonly string[],
+  matchesPerPlayer: number,
+  random: () => number,
+): Partnership[][] {
+  const players = shuffle(playerIds, random)
+  const rounds: Partnership[][] = []
+  const rotation = [...players]
+  for (let round = 0; round < players.length - 1; round += 1) {
+    const pairs: Partnership[] = []
+    for (let index = 0; index < rotation.length / 2; index += 1) {
+      pairs.push([rotation[index]!, rotation[rotation.length - 1 - index]!])
+    }
+    rounds.push(pairs)
+    const fixed = rotation[0]!
+    const rest = rotation.slice(1)
+    rest.unshift(rest.pop()!)
+    rotation.splice(0, rotation.length, fixed, ...rest)
+  }
+  return shuffle(rounds, random).slice(0, matchesPerPlayer)
+}
+
 function createPartnerships(
   playerIds: readonly string[],
   matchesPerPlayer: number,
   random: () => number,
 ): Partnership[] {
-  const players = shuffle(playerIds, random)
-
-  if (players.length % 2 === 0) {
-    const rounds: Partnership[][] = []
-    const rotation = [...players]
-    for (let round = 0; round < players.length - 1; round += 1) {
-      const pairs: Partnership[] = []
-      for (let index = 0; index < rotation.length / 2; index += 1) {
-        pairs.push([rotation[index]!, rotation[rotation.length - 1 - index]!])
-      }
-      rounds.push(pairs)
-      const fixed = rotation[0]!
-      const rest = rotation.slice(1)
-      rest.unshift(rest.pop()!)
-      rotation.splice(0, rotation.length, fixed, ...rest)
-    }
-    return shuffle(rounds, random).slice(0, matchesPerPlayer).flat()
+  if (playerIds.length % 2 === 0) {
+    return createEvenPartnershipRounds(playerIds, matchesPerPlayer, random).flat()
   }
 
+  const players = shuffle(playerIds, random)
   const distances = shuffle(
     Array.from({ length: (players.length - 1) / 2 }, (_, index) => index + 1),
     random,
@@ -151,6 +268,31 @@ function createPartnerships(
     }
   }
   return pairs
+}
+
+function pairEvenPartnershipRoundsIntoMatches(
+  rounds: readonly Partnership[][],
+  random: () => number,
+): Omit<GeneratedRotationMatch, 'sequenceNumber'>[] | null {
+  const matches: Omit<GeneratedRotationMatch, 'sequenceNumber'>[] = []
+  const leftovers: Partnership[] = []
+
+  for (const round of rounds) {
+    const partnerships = shuffle(round, random)
+    if (partnerships.length % 2 === 1) leftovers.push(partnerships.pop()!)
+    for (let index = 0; index < partnerships.length; index += 2) {
+      const first = partnerships[index]!
+      const second = partnerships[index + 1]!
+      matches.push({
+        teamAPlayerIds: [first[0], first[1]],
+        teamBPlayerIds: [second[0], second[1]],
+      })
+    }
+  }
+
+  if (leftovers.length === 0) return matches
+  const overflowMatches = pairPartnershipsIntoMatches(leftovers, random)
+  return overflowMatches ? [...matches, ...overflowMatches] : null
 }
 
 function pairingScore(
@@ -235,65 +377,62 @@ function orderMatches(
   matches: readonly Omit<GeneratedRotationMatch, 'sequenceNumber'>[],
   courtCount: number,
   random: () => number,
-): GeneratedRotationMatch[] {
+): { matches: GeneratedRotationMatch[]; idleCourtPenalty: number } {
   const remaining = [...matches]
+  const optimalTwoCourtBatches = courtCount === 2
+    ? buildOptimalTwoCourtBatches(matches, generatedMatchPlayerIds, random)
+    : null
+  const remainingBatches = optimalTwoCourtBatches ? [...optimalTwoCourtBatches] : null
   const lastPlayed = new Map<string, number>()
   const ordered: GeneratedRotationMatch[] = []
+  let idleCourtPenalty = 0
   let roundNumber = 0
 
   while (remaining.length > 0) {
-    const batch: Omit<GeneratedRotationMatch, 'sequenceNumber'>[] = []
-    const batchPlayerIds = new Set<string>()
-
-    while (batch.length < courtCount && remaining.length > 0) {
-      const slotsLeft = courtCount - batch.length
-      const ranked = remaining
-        .map((match, index) => {
-          const players = generatedMatchPlayerIds(match)
-          if (players.some((playerId) => batchPlayerIds.has(playerId))) return null
-
-          const rests = players.map((playerId) => {
-            const last = lastPlayed.get(playerId)
-            return last == null ? roundNumber + 2 : roundNumber - last - 1
-          })
-          const compatibleMatches = batch.length === 0 && slotsLeft > 1
-            ? remaining.filter((candidate) => {
-                if (candidate === match) return false
-                return hasNoPlayersInCommon(players, generatedMatchPlayerIds(candidate))
-              }).length
-            : 0
-
-          return {
-            index,
-            match,
-            fillableSlots:
-              batch.length === 0 ? Math.min(slotsLeft, compatibleMatches + 1) : 1,
-            backToBack: rests.filter((rest) => rest === 0).length,
-            minimumRest: Math.min(...rests),
-            totalRest: rests.reduce((sum, rest) => sum + rest, 0),
-            random: random(),
-          }
+    const targetSize = Math.min(courtCount, remaining.length)
+    const ranked = remaining
+      .map((match) => {
+        const players = generatedMatchPlayerIds(match)
+        const rests = players.map((playerId) => {
+          const last = lastPlayed.get(playerId)
+          return last == null ? roundNumber + 2 : roundNumber - last - 1
         })
-        .filter((candidate) => candidate != null)
-        .sort(
-          (a, b) =>
-            b.fillableSlots - a.fillableSlots ||
-            a.backToBack - b.backToBack ||
-            b.minimumRest - a.minimumRest ||
-            b.totalRest - a.totalRest ||
-            a.random - b.random,
-        )
-
-      const chosen = ranked[0]
-      if (!chosen) break
-      remaining.splice(chosen.index, 1)
-      batch.push(chosen.match)
-      for (const playerId of generatedMatchPlayerIds(chosen.match)) {
-        batchPlayerIds.add(playerId)
-      }
+        return {
+          match,
+          backToBack: rests.filter((rest) => rest === 0).length,
+          minimumRest: Math.min(...rests),
+          totalRest: rests.reduce((sum, rest) => sum + rest, 0),
+          random: random(),
+        }
+      })
+      .sort(
+        (a, b) =>
+          a.backToBack - b.backToBack ||
+          b.minimumRest - a.minimumRest ||
+          b.totalRest - a.totalRest ||
+          a.random - b.random,
+      )
+    let batch: Omit<GeneratedRotationMatch, 'sequenceNumber'>[]
+    if (remainingBatches) {
+      remainingBatches.sort((first, second) => {
+        if (first.length !== second.length) return second.length - first.length
+        const firstRank = Math.min(...first.map((match) => ranked.findIndex((item) => item.match === match)))
+        const secondRank = Math.min(...second.map((match) => ranked.findIndex((item) => item.match === match)))
+        return firstRank - secondRank
+      })
+      batch = remainingBatches.shift()!
+    } else {
+      const selection = findCompatibleBatch(
+        ranked.map(({ match }) => match),
+        targetSize,
+        generatedMatchPlayerIds,
+      )
+      batch = selection.batch.length > 0 ? selection.batch : [ranked[0]!.match]
     }
+    idleCourtPenalty += targetSize - batch.length
 
     for (const match of batch) {
+      remaining.splice(remaining.indexOf(match), 1)
       ordered.push({ ...match, sequenceNumber: ordered.length + 1 })
       for (const playerId of generatedMatchPlayerIds(match)) {
         lastPlayed.set(playerId, roundNumber)
@@ -302,18 +441,20 @@ function orderMatches(
     roundNumber += 1
   }
 
-  return ordered
+  return { matches: ordered, idleCourtPenalty }
 }
 
 function evaluateSchedule(
   matches: GeneratedRotationMatch[],
   playerIds: readonly string[],
-): Omit<CandidateSchedule, 'matches'> {
+  courtCount: number,
+): Pick<CandidateSchedule, 'opponentPenalty' | 'consecutivePenalty'> {
   const opponentCounts = new Map<string, number>()
   const lastPlayed = new Map<string, number>()
   let consecutivePenalty = 0
 
   matches.forEach((match, index) => {
+    const roundNumber = Math.floor(index / courtCount)
     const teams = [match.teamAPlayerIds, match.teamBPlayerIds] as const
     for (const first of teams[0]) {
       for (const second of teams[1]) {
@@ -322,8 +463,8 @@ function evaluateSchedule(
       }
     }
     for (const playerId of [...teams[0], ...teams[1]]) {
-      if (lastPlayed.get(playerId) === index - 1) consecutivePenalty += 1
-      lastPlayed.set(playerId, index)
+      if (lastPlayed.get(playerId) === roundNumber - 1) consecutivePenalty += 1
+      lastPlayed.set(playerId, roundNumber)
     }
   })
 
@@ -355,20 +496,30 @@ export function generateRotationSchedule(
 
   let best: CandidateSchedule | null = null
   const partnershipCount = (playerIds.length * matchesPerPlayer) / 2
-  const qualityAttempts = Math.max(24, Math.min(80, playerIds.length * 4))
+  const qualityAttempts = Math.max(48, Math.min(120, playerIds.length * 8))
   const attempts = partnershipCount <= 80 ? qualityAttempts : partnershipCount <= 250 ? 16 : 8
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     const random = mulberry32((seed + Math.imul(attempt + 1, 0x9e3779b1)) >>> 0)
-    const partnerships = createPartnerships(playerIds, matchesPerPlayer, random)
-    const paired = pairPartnershipsIntoMatches(partnerships, random)
+    const paired = playerIds.length % 2 === 0
+      ? pairEvenPartnershipRoundsIntoMatches(
+          createEvenPartnershipRounds(playerIds, matchesPerPlayer, random),
+          random,
+        )
+      : pairPartnershipsIntoMatches(
+          createPartnerships(playerIds, matchesPerPlayer, random),
+          random,
+        )
     if (!paired) continue
-    const matches = orderMatches(paired, courtCount, random)
-    const score = evaluateSchedule(matches, playerIds)
-    const candidate = { matches, ...score }
+    const ordered = orderMatches(paired, courtCount, random)
+    const score = evaluateSchedule(ordered.matches, playerIds, courtCount)
+    const candidate = { ...ordered, ...score }
     if (
       !best ||
-      candidate.opponentPenalty < best.opponentPenalty ||
-      (candidate.opponentPenalty === best.opponentPenalty &&
+      candidate.idleCourtPenalty < best.idleCourtPenalty ||
+      (candidate.idleCourtPenalty === best.idleCourtPenalty &&
+        candidate.opponentPenalty < best.opponentPenalty) ||
+      (candidate.idleCourtPenalty === best.idleCourtPenalty &&
+        candidate.opponentPenalty === best.opponentPenalty &&
         candidate.consecutivePenalty < best.consecutivePenalty)
     ) {
       best = candidate
@@ -388,6 +539,39 @@ function matchPlayerIds(match: RotationMatch): string[] {
     match.team_b_player_1_id,
     match.team_b_player_2_id,
   ]
+}
+
+export function getRotationStartableMatchIds(
+  matches: readonly RotationMatch[],
+  courtCount: number,
+): Set<string> {
+  const playingMatches = matches.filter((match) => match.status === 'playing')
+  const playingPlayerIds = new Set(playingMatches.flatMap(matchPlayerIds))
+  const eligibleMatches = matches.filter(
+    (match) =>
+      match.status === 'available' &&
+      matchPlayerIds(match).every((playerId) => !playingPlayerIds.has(playerId)),
+  )
+  const openCourtCount = Math.max(0, courtCount - playingMatches.length)
+  const targetSize = Math.min(openCourtCount, eligibleMatches.length)
+  if (targetSize <= 1) return new Set(eligibleMatches.map((match) => match.id))
+
+  const startableIds = new Set<string>()
+  for (const match of eligibleMatches) {
+    const completion = findCompatibleBatch(
+      eligibleMatches.filter((candidate) => candidate.id !== match.id),
+      targetSize - 1,
+      matchPlayerIds,
+      matchPlayerIds(match),
+    )
+    if (completion.batch.length === targetSize - 1 || completion.truncated) {
+      startableIds.add(match.id)
+    }
+  }
+
+  return startableIds.size > 0
+    ? startableIds
+    : new Set(eligibleMatches.map((match) => match.id))
 }
 
 export function recommendRotationMatch(
@@ -423,6 +607,7 @@ export function recommendRotationMatch(
     1,
     courtCount - matches.filter((match) => match.status === 'playing').length,
   )
+  const startableMatchIds = getRotationStartableMatchIds(matches, courtCount)
 
   return (
     eligibleMatches
@@ -437,13 +622,7 @@ export function recommendRotationMatch(
         })
         return {
           match,
-          keepsCourtsMoving:
-            openCourtCount <= 1 ||
-            eligibleMatches.filter(
-              (candidate) =>
-                candidate.id !== match.id &&
-                hasNoPlayersInCommon(ids, matchPlayerIds(candidate)),
-            ).length >= openCourtCount - 1,
+          keepsCourtsMoving: openCourtCount <= 1 || startableMatchIds.has(match.id),
           appearanceSpread: Math.max(...projected) - Math.min(...projected),
           backToBack: rests.filter((rest) => rest === 0).length,
           minimumRest: Math.min(...rests),

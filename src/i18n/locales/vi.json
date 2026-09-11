@@ -554,6 +554,7 @@
     "bestNext": "Nên đấu tiếp",
     "startCourt": "Bắt đầu ở Sân {{number}}",
     "playersBusy": "Có người chơi hiện đang ở sân khác.",
+    "blocksOtherCourts": "Hãy chọn trận khác trước để tất cả các sân đều có thể thi đấu.",
     "showAllMatches": "Xem tất cả {{count}} trận",
     "showFewerMatches": "Thu gọn danh sách",
     "completedMatches": "Trận đã hoàn tất ({{count}})",
