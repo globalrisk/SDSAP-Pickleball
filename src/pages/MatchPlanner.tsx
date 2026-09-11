@@ -173,6 +173,7 @@ function ScoreForm({
 
 function StandingsTable({ standings }: { standings: RotationStanding[] }) {
   const { t } = useTranslation()
+  const formatDifferential = (value: number) => value > 0 ? `+${value}` : String(value)
   return (
     <div className="overflow-x-auto">
       <table className="w-full border-collapse text-left text-sm">
@@ -182,6 +183,7 @@ function StandingsTable({ standings }: { standings: RotationStanding[] }) {
             <th className="px-2 py-3">{t('rotation.player')}</th>
             <th className="px-2 py-3 text-center">{t('rotation.played')}</th>
             <th className="px-2 py-3 text-center">{t('rotation.points')}</th>
+            <th className="px-2 py-3 text-center">{t('rotation.pointDifference')}</th>
           </tr>
         </thead>
         <tbody>
@@ -191,6 +193,7 @@ function StandingsTable({ standings }: { standings: RotationStanding[] }) {
               <td className="px-2 py-3 font-bold text-slate-900">{row.name}</td>
               <td className="px-2 py-3 text-center">{row.played}</td>
               <td className="px-2 py-3 text-center font-black text-emerald-700">{row.wins}</td>
+              <td className={`px-2 py-3 text-center font-black tabular-nums ${row.pointDifferential > 0 ? 'text-emerald-700' : row.pointDifferential < 0 ? 'text-red-600' : 'text-slate-500'}`}>{formatDifferential(row.pointDifferential)}</td>
             </tr>
           ))}
         </tbody>
