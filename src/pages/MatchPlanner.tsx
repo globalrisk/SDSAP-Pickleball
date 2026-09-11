@@ -281,6 +281,7 @@ function PlannerSetup({
   const { t } = useTranslation()
   const [name, setName] = useState(t('rotation.defaultEventName'))
   const [playerCount, setPlayerCount] = useState(10)
+  const [playerCountInput, setPlayerCountInput] = useState('10')
   const [matchesPerPlayer, setMatchesPerPlayer] = useState(6)
   const [courtCount, setCourtCount] = useState(2)
   const [playerNames, setPlayerNames] = useState(() =>
@@ -297,10 +298,12 @@ function PlannerSetup({
   const namesValid =
     trimmedNames.every(Boolean) &&
     new Set(trimmedNames.map((playerName) => playerName.toLocaleLowerCase())).size === playerCount
+  const playerCountInputValid = playerCountInput === String(playerCount)
 
   function changePlayerCount(value: number) {
     const nextCount = Math.max(4, Math.min(40, Math.trunc(value || 4)))
     setPlayerCount(nextCount)
+    setPlayerCountInput(String(nextCount))
     setPlayerNames((current) =>
       Array.from(
         { length: nextCount },
@@ -309,6 +312,15 @@ function PlannerSetup({
     )
     setCourtCount((current) => Math.min(current, Math.floor(nextCount / 4)))
     setMatchesPerPlayer((current) => Math.min(current, nextCount - 1))
+  }
+
+  function editPlayerCount(value: string) {
+    setPlayerCountInput(value)
+    if (value === '') return
+    const parsed = Number(value)
+    if (Number.isInteger(parsed) && parsed >= 4 && parsed <= 40) {
+      changePlayerCount(parsed)
+    }
   }
 
   return (
@@ -329,7 +341,7 @@ function PlannerSetup({
         className="rounded-3xl border border-cyan-100 bg-white p-4 pb-24 shadow-sm sm:p-7"
         onSubmit={(event) => {
           event.preventDefault()
-          if (validation.valid && namesValid && name.trim()) {
+          if (validation.valid && playerCountInputValid && namesValid && name.trim()) {
             onCreate({ name: name.trim(), playerNames: trimmedNames, matchesPerPlayer, courtCount })
           }
         }}
@@ -342,7 +354,7 @@ function PlannerSetup({
           </label>
           <label className="text-sm font-bold text-slate-700">
             {t('rotation.playerCount')}
-            <input type="number" min="4" max="40" value={playerCount} onChange={(event) => changePlayerCount(Number(event.target.value))} className={`${inputClass} mt-1`} />
+            <input type="number" min="4" max="40" inputMode="numeric" value={playerCountInput} onFocus={(event) => event.currentTarget.select()} onChange={(event) => editPlayerCount(event.target.value)} onBlur={() => changePlayerCount(Number(playerCountInput))} className={`${inputClass} mt-1`} />
           </label>
           <label className="text-sm font-bold text-slate-700">
             {t('rotation.courtCount')}
@@ -379,7 +391,7 @@ function PlannerSetup({
 
         {error ? <div className="mt-5"><ErrorState message={error.message} /></div> : null}
         <div className="fixed inset-x-4 bottom-4 z-30 rounded-2xl border border-cyan-100 bg-white/95 p-2 shadow-xl backdrop-blur sm:static sm:mt-6 sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none">
-          <button type="submit" disabled={isSaving || !validation.valid || !namesValid || !name.trim()} className={`${primaryButton} w-full`}>
+          <button type="submit" disabled={isSaving || !validation.valid || !playerCountInputValid || !namesValid || !name.trim()} className={`${primaryButton} w-full`}>
             {isSaving ? t('rotation.generating') : t('rotation.generate')}
           </button>
         </div>
