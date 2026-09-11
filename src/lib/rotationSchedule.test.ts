@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   generateRotationSchedule,
+  getNextRotationPlannedRound,
   getRotationStartableMatchIds,
   recommendRotationMatch,
   validateRotationConfiguration,
@@ -161,6 +162,18 @@ function rotationMatch(
 }
 
 describe('rotation match recommendation', () => {
+  it('groups the earliest unfinished matches into a planned court round', () => {
+    const first = rotationMatch('first', 1, ['p1', 'p2', 'p3', 'p4'], 'completed')
+    const second = rotationMatch('second', 2, ['p5', 'p6', 'p7', 'p8'], 'completed')
+    const third = rotationMatch('third', 3, ['p1', 'p5', 'p6', 'p7'])
+    const fourth = rotationMatch('fourth', 4, ['p2', 'p3', 'p4', 'p8'])
+
+    expect(getNextRotationPlannedRound([fourth, second, third, first], 2)).toEqual({
+      roundNumber: 2,
+      matches: [third, fourth],
+    })
+  })
+
   it('prevents a first match that would strand another empty court', () => {
     const isolated = rotationMatch('isolated', 1, ['p1', 'p2', 'p3', 'p4'])
     const firstPair = rotationMatch('first-pair', 2, ['p1', 'p2', 'p5', 'p6'])

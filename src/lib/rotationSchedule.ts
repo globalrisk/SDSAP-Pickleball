@@ -541,6 +541,29 @@ function matchPlayerIds(match: RotationMatch): string[] {
   ]
 }
 
+function rotationPlannedBatch(match: RotationMatch, courtCount: number) {
+  return Math.floor((match.sequence_number - 1) / courtCount)
+}
+
+export function getNextRotationPlannedRound(
+  matches: readonly RotationMatch[],
+  courtCount: number,
+): { roundNumber: number; matches: RotationMatch[] } | null {
+  if (!Number.isInteger(courtCount) || courtCount < 1) return null
+  const nextMatch = matches
+    .filter((match) => match.status !== 'completed')
+    .sort((a, b) => a.sequence_number - b.sequence_number)[0]
+  if (!nextMatch) return null
+
+  const batch = rotationPlannedBatch(nextMatch, courtCount)
+  return {
+    roundNumber: batch + 1,
+    matches: matches
+      .filter((match) => rotationPlannedBatch(match, courtCount) === batch)
+      .sort((a, b) => a.sequence_number - b.sequence_number),
+  }
+}
+
 export function getRotationStartableMatchIds(
   matches: readonly RotationMatch[],
   courtCount: number,
@@ -607,14 +630,16 @@ export function recommendRotationMatch(
     courtCount - playingMatches.length,
   )
   const startableMatchIds = getRotationStartableMatchIds(matches, courtCount)
-  const plannedBatch = (match: RotationMatch) =>
-    Math.floor((match.sequence_number - 1) / courtCount)
-  const playingBatches = new Set(playingMatches.map(plannedBatch))
+  const playingBatches = new Set(
+    playingMatches.map((match) => rotationPlannedBatch(match, courtCount)),
+  )
   const preferredBatch = courtCount > 1
     ? playingBatches.size === 1
       ? [...playingBatches][0]!
       : playingBatches.size === 0
-        ? Math.min(...eligibleMatches.map(plannedBatch))
+        ? Math.min(
+            ...eligibleMatches.map((match) => rotationPlannedBatch(match, courtCount)),
+          )
         : null
     : null
 
@@ -633,7 +658,8 @@ export function recommendRotationMatch(
           match,
           keepsCourtsMoving: openCourtCount <= 1 || startableMatchIds.has(match.id),
           followsPlannedBatch:
-            preferredBatch == null || plannedBatch(match) === preferredBatch,
+            preferredBatch == null ||
+            rotationPlannedBatch(match, courtCount) === preferredBatch,
           appearanceSpread: Math.max(...projected) - Math.min(...projected),
           backToBack: rests.filter((rest) => rest === 0).length,
           minimumRest: Math.min(...rests),
