@@ -13,5 +13,6 @@
       "onAutoForward": "openPreview"
     }
   },
-  "postCreateCommand": "npm ci"
+  "postCreateCommand": "npm ci",
+  "postStartCommand": "nohup npm run dev > /tmp/sdsap-vite.log 2>&1 &"
 }
