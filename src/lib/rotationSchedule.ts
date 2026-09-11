@@ -579,9 +579,8 @@ export function recommendRotationMatch(
   players: readonly RotationPlayer[],
   courtCount = 1,
 ): RotationMatch | null {
-  const playingPlayers = new Set(
-    matches.filter((match) => match.status === 'playing').flatMap(matchPlayerIds),
-  )
+  const playingMatches = matches.filter((match) => match.status === 'playing')
+  const playingPlayers = new Set(playingMatches.flatMap(matchPlayerIds))
   const completed = matches
     .filter((match) => match.status === 'completed')
     .sort(
@@ -605,9 +604,19 @@ export function recommendRotationMatch(
   )
   const openCourtCount = Math.max(
     1,
-    courtCount - matches.filter((match) => match.status === 'playing').length,
+    courtCount - playingMatches.length,
   )
   const startableMatchIds = getRotationStartableMatchIds(matches, courtCount)
+  const plannedBatch = (match: RotationMatch) =>
+    Math.floor((match.sequence_number - 1) / courtCount)
+  const playingBatches = new Set(playingMatches.map(plannedBatch))
+  const preferredBatch = courtCount > 1
+    ? playingBatches.size === 1
+      ? [...playingBatches][0]!
+      : playingBatches.size === 0
+        ? Math.min(...eligibleMatches.map(plannedBatch))
+        : null
+    : null
 
   return (
     eligibleMatches
@@ -623,6 +632,8 @@ export function recommendRotationMatch(
         return {
           match,
           keepsCourtsMoving: openCourtCount <= 1 || startableMatchIds.has(match.id),
+          followsPlannedBatch:
+            preferredBatch == null || plannedBatch(match) === preferredBatch,
           appearanceSpread: Math.max(...projected) - Math.min(...projected),
           backToBack: rests.filter((rest) => rest === 0).length,
           minimumRest: Math.min(...rests),
@@ -632,6 +643,7 @@ export function recommendRotationMatch(
       .sort(
         (a, b) =>
           Number(b.keepsCourtsMoving) - Number(a.keepsCourtsMoving) ||
+          Number(b.followsPlannedBatch) - Number(a.followsPlannedBatch) ||
           a.appearanceSpread - b.appearanceSpread ||
           a.backToBack - b.backToBack ||
           b.minimumRest - a.minimumRest ||

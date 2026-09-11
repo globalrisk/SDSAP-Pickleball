@@ -126,6 +126,15 @@ function rotationPlayer(id: string): RotationPlayer {
   }
 }
 
+function persistedMatchPlayers(match: RotationMatch) {
+  return [
+    match.team_a_player_1_id,
+    match.team_a_player_2_id,
+    match.team_b_player_1_id,
+    match.team_b_player_2_id,
+  ]
+}
+
 function rotationMatch(
   id: string,
   sequence: number,
@@ -182,6 +191,57 @@ describe('rotation match recommendation', () => {
       recommendRotationMatch([isolated, firstPair, secondPair], players, 2)?.id,
     ).toBe('first-pair')
   })
+
+  it.each([1, 42, 123, 20260911])(
+    'keeps the generated 10-player schedule in eight two-court rounds for seed %i',
+    (seed) => {
+      const ids = playerIds(10)
+      const players = ids.map((id, index) => ({
+        ...rotationPlayer(id),
+        display_order: index + 1,
+      }))
+      let matches = generateRotationSchedule(ids, 6, 2, seed).map((match, index) =>
+        rotationMatch(`match-${index + 1}`, match.sequenceNumber, [
+          ...match.teamAPlayerIds,
+          ...match.teamBPlayerIds,
+        ]),
+      )
+      let rounds = 0
+
+      while (matches.some((match) => match.status !== 'completed')) {
+        for (let court = 1; court <= 2; court += 1) {
+          const recommended = recommendRotationMatch(matches, players, 2)
+          if (!recommended) break
+          matches = matches.map((match) =>
+            match.id === recommended.id
+              ? { ...match, status: 'playing', court_number: court }
+              : match,
+          )
+        }
+
+        const playing = matches.filter((match) => match.status === 'playing')
+        expect(playing.length).toBeGreaterThan(0)
+        expect(new Set(playing.flatMap(persistedMatchPlayers))).toHaveLength(
+          playing.length * 4,
+        )
+        rounds += 1
+        matches = matches.map((match) =>
+          match.status === 'playing'
+            ? {
+                ...match,
+                status: 'completed',
+                court_number: null,
+                team_a_score: 11,
+                team_b_score: 7,
+                result_recorded_at: `2026-01-${String(rounds).padStart(2, '0')}`,
+              }
+            : match,
+        )
+      }
+
+      expect(rounds).toBe(8)
+    },
+  )
 
   it('never recommends players who are currently on another court', () => {
     const players = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8'].map(rotationPlayer)
