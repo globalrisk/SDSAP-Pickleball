@@ -406,7 +406,10 @@ function PlannerEvent({
   const playersById = useMemo(() => new Map(players.map((player) => [player.id, player])), [players])
   const standings = useMemo(() => buildRotationStandings(players, matches), [players, matches])
   const podium = getRotationPodium(standings, event.status === 'completed')
-  const recommended = useMemo(() => recommendRotationMatch(matches, players), [matches, players])
+  const recommended = useMemo(
+    () => recommendRotationMatch(matches, players, event.court_count),
+    [event.court_count, matches, players],
+  )
   const completed = matches.filter((match) => match.status === 'completed')
   const available = matches.filter((match) => match.status === 'available')
   const orderedAvailable = recommended

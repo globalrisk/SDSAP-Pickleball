@@ -39,6 +39,12 @@ describe('rotation schedule generation', () => {
     expect([...appearances.values()]).toEqual(Array.from({ length: 10 }, () => 6))
   })
 
+  it('opens a two-court schedule with two player-disjoint matches', () => {
+    const matches = generateRotationSchedule(playerIds(10), 6, 2, 20260911)
+
+    expect(new Set(matches.slice(0, 2).flatMap(matchPlayers))).toHaveLength(8)
+  })
+
   it.each([
     [4, 3, 1],
     [5, 4, 1],
@@ -138,6 +144,17 @@ function rotationMatch(
 }
 
 describe('rotation match recommendation', () => {
+  it('starts with a match that leaves another eligible match for the second court', () => {
+    const players = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9'].map(rotationPlayer)
+    const isolated = rotationMatch('isolated', 1, ['p1', 'p2', 'p3', 'p4'])
+    const firstPair = rotationMatch('first-pair', 2, ['p1', 'p2', 'p5', 'p6'])
+    const secondPair = rotationMatch('second-pair', 3, ['p3', 'p4', 'p7', 'p8'])
+
+    expect(
+      recommendRotationMatch([isolated, firstPair, secondPair], players, 2)?.id,
+    ).toBe('first-pair')
+  })
+
   it('never recommends players who are currently on another court', () => {
     const players = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8'].map(rotationPlayer)
     const playing = rotationMatch('playing', 1, ['p1', 'p2', 'p3', 'p4'], 'playing')
