@@ -19,6 +19,27 @@ function matchPlayers(match: {
   return [...match.teamAPlayerIds, ...match.teamBPlayerIds]
 }
 
+function generatedRounds(
+  matches: ReturnType<typeof generateRotationSchedule>,
+  courtCount: number,
+) {
+  const rounds: typeof matches[] = []
+  let round: typeof matches = []
+  let roundPlayerIds = new Set<string>()
+  for (const match of matches) {
+    const ids = matchPlayers(match)
+    if (round.length >= courtCount || ids.some((id) => roundPlayerIds.has(id))) {
+      rounds.push(round)
+      round = []
+      roundPlayerIds = new Set()
+    }
+    round.push(match)
+    for (const id of ids) roundPlayerIds.add(id)
+  }
+  if (round.length > 0) rounds.push(round)
+  return rounds
+}
+
 describe('rotation schedule generation', () => {
   it('builds the default 10-player schedule with exact appearances and unique partners', () => {
     const ids = playerIds(10)
@@ -42,16 +63,65 @@ describe('rotation schedule generation', () => {
   })
 
   it.each([1, 42, 123, 20260911])(
-    'groups a two-court schedule into player-disjoint rounds for seed %i',
+    'uses the optimized eight-round rest pattern for seed %i',
     (seed) => {
       const matches = generateRotationSchedule(playerIds(10), 6, 2, seed)
-      const completeRoundMatchCount = matches.length - (matches.length % 2)
+      const rounds = generatedRounds(matches, 2)
+      const streaks = new Map(playerIds(10).map((id) => [id, 0]))
+      const rests = new Map(playerIds(10).map((id) => [id, 0]))
+      let maximumStreak = 0
+      let maximumRest = 0
 
-      for (let index = 0; index < completeRoundMatchCount; index += 2) {
-        expect(new Set(matches.slice(index, index + 2).flatMap(matchPlayers))).toHaveLength(8)
+      expect(rounds.map((round) => round.length)).toEqual([2, 2, 2, 2, 1, 2, 2, 2])
+      for (const round of rounds) {
+        const active = new Set(round.flatMap(matchPlayers))
+        expect(active.size).toBe(round.length * 4)
+        for (const id of playerIds(10)) {
+          const streak = active.has(id) ? streaks.get(id)! + 1 : 0
+          const rest = active.has(id) ? 0 : rests.get(id)! + 1
+          streaks.set(id, streak)
+          rests.set(id, rest)
+          maximumStreak = Math.max(maximumStreak, streak)
+          maximumRest = Math.max(maximumRest, rest)
+        }
       }
+      expect(maximumStreak).toBeLessThanOrEqual(4)
+      expect(maximumRest).toBe(1)
     },
   )
+
+  it('preserves the optimized template across 1,000 random player assignments', () => {
+    const ids = playerIds(10)
+    for (let seed = 1; seed <= 1_000; seed += 1) {
+      const matches = generateRotationSchedule(ids, 6, 2, seed)
+      const appearances = new Map(ids.map((id) => [id, 0]))
+      const partnerships = new Set<string>()
+      let maximumStreak = 0
+      const streaks = new Map(ids.map((id) => [id, 0]))
+
+      for (const match of matches) {
+        for (const id of matchPlayers(match)) {
+          appearances.set(id, appearances.get(id)! + 1)
+        }
+        for (const pair of [match.teamAPlayerIds, match.teamBPlayerIds]) {
+          const key = [...pair].sort().join(':')
+          expect(partnerships.has(key)).toBe(false)
+          partnerships.add(key)
+        }
+      }
+      for (const round of generatedRounds(matches, 2)) {
+        const active = new Set(round.flatMap(matchPlayers))
+        for (const id of ids) {
+          const streak = active.has(id) ? streaks.get(id)! + 1 : 0
+          streaks.set(id, streak)
+          maximumStreak = Math.max(maximumStreak, streak)
+        }
+      }
+
+      expect([...appearances.values()]).toEqual(Array.from({ length: 10 }, () => 6))
+      expect(maximumStreak).toBeLessThanOrEqual(4)
+    }
+  })
 
   it.each([
     [4, 3, 1],
@@ -172,6 +242,25 @@ describe('rotation match recommendation', () => {
       roundNumber: 2,
       matches: [third, fourth],
     })
+  })
+
+  it('keeps a deliberate one-court rest round between full rounds', () => {
+    const first = rotationMatch('first', 1, ['p1', 'p2', 'p3', 'p4'], 'completed')
+    const second = rotationMatch('second', 2, ['p5', 'p6', 'p7', 'p8'], 'completed')
+    const restRound = rotationMatch('rest-round', 3, ['p1', 'p5', 'p6', 'p7'])
+    const nextFirst = rotationMatch('next-first', 4, ['p1', 'p2', 'p8', 'p9'])
+    const nextSecond = rotationMatch('next-second', 5, ['p3', 'p4', 'p5', 'p6'])
+
+    expect(
+      getNextRotationPlannedRound([first, second, restRound, nextFirst, nextSecond], 2),
+    ).toEqual({ roundNumber: 2, matches: [restRound] })
+
+    expect(
+      getNextRotationPlannedRound(
+        [first, second, { ...restRound, status: 'completed' }, nextFirst, nextSecond],
+        2,
+      ),
+    ).toEqual({ roundNumber: 3, matches: [nextFirst, nextSecond] })
   })
 
   it('prevents a first match that would strand another empty court', () => {

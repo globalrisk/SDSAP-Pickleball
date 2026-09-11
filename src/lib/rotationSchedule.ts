@@ -13,6 +13,29 @@ interface CandidateSchedule {
   consecutivePenalty: number
 }
 
+type FixedTemplateMatch = readonly [
+  readonly [number, number],
+  readonly [number, number],
+]
+
+const OPTIMIZED_TEN_PLAYER_TEMPLATE: readonly FixedTemplateMatch[] = [
+  [[0, 8], [4, 7]],
+  [[3, 1], [5, 6]],
+  [[1, 0], [4, 5]],
+  [[2, 9], [3, 7]],
+  [[9, 5], [4, 2]],
+  [[6, 3], [8, 7]],
+  [[6, 1], [2, 7]],
+  [[9, 8], [5, 0]],
+  [[4, 3], [8, 6]],
+  [[0, 2], [3, 5]],
+  [[4, 1], [7, 9]],
+  [[2, 1], [4, 0]],
+  [[9, 6], [5, 8]],
+  [[1, 8], [2, 3]],
+  [[9, 0], [6, 7]],
+]
+
 export interface RotationScheduleValidation {
   valid: boolean
   code: 'playerCount' | 'matchesPerPlayer' | 'divisibility' | 'courtCount' | null
@@ -494,6 +517,15 @@ export function generateRotationSchedule(
     throw new Error('Player IDs must be unique.')
   }
 
+  if (playerIds.length === 10 && matchesPerPlayer === 6 && courtCount === 2) {
+    const assignedPlayers = shuffle(playerIds, mulberry32(seed))
+    return OPTIMIZED_TEN_PLAYER_TEMPLATE.map(([teamA, teamB], index) => ({
+      sequenceNumber: index + 1,
+      teamAPlayerIds: [assignedPlayers[teamA[0]]!, assignedPlayers[teamA[1]]!],
+      teamBPlayerIds: [assignedPlayers[teamB[0]]!, assignedPlayers[teamB[1]]!],
+    }))
+  }
+
   let best: CandidateSchedule | null = null
   const partnershipCount = (playerIds.length * matchesPerPlayer) / 2
   const qualityAttempts = Math.max(48, Math.min(120, playerIds.length * 8))
@@ -541,8 +573,41 @@ function matchPlayerIds(match: RotationMatch): string[] {
   ]
 }
 
-function rotationPlannedBatch(match: RotationMatch, courtCount: number) {
-  return Math.floor((match.sequence_number - 1) / courtCount)
+function rotationPlannedBatches(
+  matches: readonly RotationMatch[],
+  courtCount: number,
+): RotationMatch[][] {
+  if (!Number.isInteger(courtCount) || courtCount < 1) return []
+
+  const batches: RotationMatch[][] = []
+  let batch: RotationMatch[] = []
+  let batchPlayerIds = new Set<string>()
+  for (const match of [...matches].sort((a, b) => a.sequence_number - b.sequence_number)) {
+    const playerIds = matchPlayerIds(match)
+    if (
+      batch.length >= courtCount ||
+      playerIds.some((playerId) => batchPlayerIds.has(playerId))
+    ) {
+      batches.push(batch)
+      batch = []
+      batchPlayerIds = new Set()
+    }
+    batch.push(match)
+    for (const playerId of playerIds) batchPlayerIds.add(playerId)
+  }
+  if (batch.length > 0) batches.push(batch)
+  return batches
+}
+
+function rotationPlannedBatchIndexes(
+  matches: readonly RotationMatch[],
+  courtCount: number,
+) {
+  const indexes = new Map<string, number>()
+  rotationPlannedBatches(matches, courtCount).forEach((batch, index) => {
+    for (const match of batch) indexes.set(match.id, index)
+  })
+  return indexes
 }
 
 export function getNextRotationPlannedRound(
@@ -550,17 +615,14 @@ export function getNextRotationPlannedRound(
   courtCount: number,
 ): { roundNumber: number; matches: RotationMatch[] } | null {
   if (!Number.isInteger(courtCount) || courtCount < 1) return null
-  const nextMatch = matches
-    .filter((match) => match.status !== 'completed')
-    .sort((a, b) => a.sequence_number - b.sequence_number)[0]
-  if (!nextMatch) return null
-
-  const batch = rotationPlannedBatch(nextMatch, courtCount)
+  const batches = rotationPlannedBatches(matches, courtCount)
+  const batchIndex = batches.findIndex((batch) =>
+    batch.some((match) => match.status !== 'completed'),
+  )
+  if (batchIndex < 0) return null
   return {
-    roundNumber: batch + 1,
-    matches: matches
-      .filter((match) => rotationPlannedBatch(match, courtCount) === batch)
-      .sort((a, b) => a.sequence_number - b.sequence_number),
+    roundNumber: batchIndex + 1,
+    matches: batches[batchIndex]!,
   }
 }
 
@@ -630,15 +692,16 @@ export function recommendRotationMatch(
     courtCount - playingMatches.length,
   )
   const startableMatchIds = getRotationStartableMatchIds(matches, courtCount)
+  const plannedBatchIndexes = rotationPlannedBatchIndexes(matches, courtCount)
   const playingBatches = new Set(
-    playingMatches.map((match) => rotationPlannedBatch(match, courtCount)),
+    playingMatches.map((match) => plannedBatchIndexes.get(match.id)),
   )
   const preferredBatch = courtCount > 1
     ? playingBatches.size === 1
       ? [...playingBatches][0]!
       : playingBatches.size === 0
         ? Math.min(
-            ...eligibleMatches.map((match) => rotationPlannedBatch(match, courtCount)),
+            ...eligibleMatches.map((match) => plannedBatchIndexes.get(match.id) ?? Infinity),
           )
         : null
     : null
@@ -659,7 +722,7 @@ export function recommendRotationMatch(
           keepsCourtsMoving: openCourtCount <= 1 || startableMatchIds.has(match.id),
           followsPlannedBatch:
             preferredBatch == null ||
-            rotationPlannedBatch(match, courtCount) === preferredBatch,
+            plannedBatchIndexes.get(match.id) === preferredBatch,
           appearanceSpread: Math.max(...projected) - Math.min(...projected),
           backToBack: rests.filter((rest) => rest === 0).length,
           minimumRest: Math.min(...rests),

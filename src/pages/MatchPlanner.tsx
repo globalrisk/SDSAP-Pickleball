@@ -443,6 +443,12 @@ function PlannerEvent({
     !customRound &&
     playingMatches.length > 0 &&
     Boolean(plannedRound?.matches.some((match) => match.status === 'completed'))
+  const lighterRoundInProgress =
+    !customRound &&
+    playingMatches.length > 0 &&
+    Boolean(plannedRound && plannedRound.matches.length < event.court_count) &&
+    !plannedRound?.matches.some((match) => match.status === 'available')
+  const holdOpenCourts = waitingForOtherCourt || lighterRoundInProgress
   const roundMatchesToStart =
     plannedRound?.matches
       .map((match, index) => ({ match, court: index + 1 }))
@@ -553,7 +559,9 @@ function PlannerEvent({
                 <p className="mt-1 text-sm text-cyan-800">
                   {customRound
                     ? t('rotation.customRoundHint')
-                    : waitingForOtherCourt
+                    : lighterRoundInProgress
+                      ? t('rotation.lighterRoundInProgress')
+                      : waitingForOtherCourt
                       ? t('rotation.waitingForOtherCourt')
                       : playingMatches.length > 0
                         ? t('rotation.roundInProgress')
@@ -598,7 +606,7 @@ function PlannerEvent({
               {Array.from({ length: event.court_count }, (_, index) => index + 1).map((court) => {
                 const playing = matches.find((match) => match.status === 'playing' && match.court_number === court)
                 const plannedCourtMatch = customRound ? null : plannedRound?.matches[court - 1]
-                const courtRecommendation = waitingForOtherCourt
+                const courtRecommendation = holdOpenCourts
                   ? null
                   : plannedCourtMatch?.status === 'available'
                     ? plannedCourtMatch
@@ -606,7 +614,7 @@ function PlannerEvent({
                 return (
                   <article key={court} className={`min-h-64 rounded-3xl p-5 shadow-sm ${playing ? 'bg-gradient-to-br from-cyan-800 to-cyan-600' : 'border-2 border-dashed border-cyan-200 bg-cyan-50/50'}`}>
                     <div className="flex items-center justify-between"><h3 className={`text-sm font-black uppercase tracking-wider ${playing ? 'text-cyan-100' : 'text-cyan-800'}`}>{t('rotation.court', { number: court })}</h3>{playing ? <span className="rounded-full bg-red-500 px-2.5 py-1 text-xs font-black text-white">{t('rotation.playing')}</span> : null}</div>
-                    {playing ? <><div className="mt-4"><MatchTeams match={playing} playersById={playersById} /></div><ScoreForm match={playing} playersById={playersById} isSaving={scoreMutation.isPending} onSave={(a, b) => scoreMutation.mutate({ match: playing, a, b })} /><button type="button" disabled={queueMutation.isPending} onClick={() => queueMutation.mutate(playing)} className="mt-2 min-h-10 w-full text-xs font-bold text-cyan-100 underline underline-offset-4 disabled:opacity-50">{t('rotation.returnQueue')}</button></> : courtRecommendation ? <><p className="mt-5 text-xs font-bold uppercase tracking-wide text-cyan-700">{t('rotation.recommended')}</p><div className="mt-2"><MatchTeams match={courtRecommendation} playersById={playersById} compact /></div><button type="button" disabled={startMutation.isPending || startRoundMutation.isPending || connectionStatus === 'offline'} onClick={() => startMutation.mutate({ match: courtRecommendation, court })} className={`${primaryButton} mt-5 w-full`}>{t('rotation.startMatch')}</button></> : <div className="flex min-h-48 items-center justify-center text-center text-sm text-slate-500">{available.length > 0 ? t('rotation.waitingPlayers') : t('rotation.noMatchesWaiting')}</div>}
+                    {playing ? <><div className="mt-4"><MatchTeams match={playing} playersById={playersById} /></div><ScoreForm match={playing} playersById={playersById} isSaving={scoreMutation.isPending} onSave={(a, b) => scoreMutation.mutate({ match: playing, a, b })} /><button type="button" disabled={queueMutation.isPending} onClick={() => queueMutation.mutate(playing)} className="mt-2 min-h-10 w-full text-xs font-bold text-cyan-100 underline underline-offset-4 disabled:opacity-50">{t('rotation.returnQueue')}</button></> : courtRecommendation ? <><p className="mt-5 text-xs font-bold uppercase tracking-wide text-cyan-700">{t('rotation.recommended')}</p><div className="mt-2"><MatchTeams match={courtRecommendation} playersById={playersById} compact /></div><button type="button" disabled={startMutation.isPending || startRoundMutation.isPending || connectionStatus === 'offline'} onClick={() => startMutation.mutate({ match: courtRecommendation, court })} className={`${primaryButton} mt-5 w-full`}>{t('rotation.startMatch')}</button></> : <div className="flex min-h-48 items-center justify-center text-center text-sm text-slate-500">{lighterRoundInProgress ? t('rotation.restCourt') : available.length > 0 ? t('rotation.waitingPlayers') : t('rotation.noMatchesWaiting')}</div>}
                   </article>
                 )
               })}

@@ -542,6 +542,8 @@
     "startRound": "Bắt đầu vòng",
     "startingRound": "Đang bắt đầu vòng...",
     "waitingForOtherCourt": "Một sân đã kết thúc sớm. Hãy chờ sân còn lại trước khi bắt đầu vòng tiếp theo.",
+    "lighterRoundInProgress": "Đây là vòng nghỉ nhẹ. Hãy để sân còn lại trống cho đến khi trận đấu kết thúc.",
+    "restCourt": "Sân này được để trống để người chơi nghỉ trong vòng này.",
     "customRound": "Vòng tùy chỉnh",
     "customRoundHint": "Các trận đã được bắt đầu khác với thứ tự dự kiến.",
     "manualOrderHint": "Bạn vẫn có thể bắt đầu bất kỳ trận phù hợp nào trong hàng chờ.",

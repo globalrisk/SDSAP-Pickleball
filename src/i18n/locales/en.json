@@ -543,6 +543,8 @@
     "startRound": "Start round",
     "startingRound": "Starting round...",
     "waitingForOtherCourt": "One court finished early. Wait for the other court before starting the next round.",
+    "lighterRoundInProgress": "This is a lighter rest round. Keep the other court open until it finishes.",
+    "restCourt": "Reserved for player rest during this round.",
     "customRound": "Custom round",
     "customRoundHint": "Matches were started outside the planned order.",
     "manualOrderHint": "You can still start any eligible match from the queue.",
