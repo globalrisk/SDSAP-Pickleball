@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -18,6 +18,7 @@ import { createRefreshCoordinator } from '../lib/refreshCoordinator'
 import {
   generateRotationSchedule,
   getNextRotationPlannedRound,
+  getRotationPlannedRestRoundMatchIds,
   getRotationStartableMatchIds,
   isRotationPlannedRestRound,
   recommendRotationMatch,
@@ -68,6 +69,115 @@ function matchPlayerIds(match: RotationMatch) {
 
 function playerName(playersById: ReadonlyMap<string, RotationPlayer>, id: string) {
   return playersById.get(id)?.name ?? '—'
+}
+
+function PlayerQueueFilter({
+  players,
+  value,
+  onChange,
+}: {
+  players: RotationPlayer[]
+  value: string
+  onChange: (playerId: string) => void
+}) {
+  const { t } = useTranslation()
+  const [isOpen, setIsOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const orderedPlayers = useMemo(
+    () => [...players].sort((a, b) => a.display_order - b.display_order),
+    [players],
+  )
+  const selectedPlayer = players.find((player) => player.id === value)
+
+  useEffect(() => {
+    if (!isOpen) return
+
+    function closeOnOutsidePress(event: PointerEvent) {
+      if (!containerRef.current?.contains(event.target as Node)) setIsOpen(false)
+    }
+
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape') setIsOpen(false)
+    }
+
+    document.addEventListener('pointerdown', closeOnOutsidePress)
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsidePress)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [isOpen])
+
+  function choosePlayer(playerId: string) {
+    onChange(playerId)
+    setIsOpen(false)
+  }
+
+  const options = [
+    { id: '', name: t('rotation.allPlayers') },
+    ...orderedPlayers.map((player) => ({ id: player.id, name: player.name })),
+  ]
+
+  return (
+    <div ref={containerRef} className="relative mt-4">
+      <p id="rotation-queue-player-filter-label" className="mb-1.5 text-xs font-black uppercase tracking-wider text-cyan-700">
+        {t('rotation.filterByPlayer')}
+      </p>
+      <button
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+        aria-labelledby="rotation-queue-player-filter-label rotation-queue-player-filter"
+        id="rotation-queue-player-filter"
+        onClick={() => setIsOpen((current) => !current)}
+        className="flex min-h-12 w-full items-center gap-3 rounded-2xl border-2 border-cyan-100 bg-gradient-to-r from-white to-cyan-50 px-4 py-3 text-left text-sm font-black text-slate-900 shadow-sm transition hover:border-cyan-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-600 focus-visible:ring-offset-2"
+      >
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-cyan-600 text-white shadow-sm" aria-hidden="true">
+          <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 5h18M6 12h12m-9 7h6" />
+          </svg>
+        </span>
+        <span className="min-w-0 flex-1 truncate">{selectedPlayer?.name ?? t('rotation.allPlayers')}</span>
+        <svg
+          viewBox="0 0 20 20"
+          className={`size-5 shrink-0 text-cyan-700 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+          fill="currentColor"
+          aria-hidden="true"
+        >
+          <path fillRule="evenodd" d="M5.22 7.22a.75.75 0 011.06 0L10 10.94l3.72-3.72a.75.75 0 111.06 1.06l-4.25 4.25a.75.75 0 01-1.06 0L5.22 8.28a.75.75 0 010-1.06z" clipRule="evenodd" />
+        </svg>
+      </button>
+      {isOpen ? (
+        <div
+          role="listbox"
+          aria-labelledby="rotation-queue-player-filter-label"
+          className="absolute inset-x-0 top-full z-30 mt-2 max-h-72 space-y-1 overflow-y-auto rounded-2xl border border-cyan-100 bg-white p-2 shadow-2xl shadow-cyan-950/15"
+        >
+          {options.map((option) => {
+            const selected = option.id === value
+            return (
+              <button
+                key={option.id || 'all'}
+                type="button"
+                role="option"
+                aria-selected={selected}
+                onClick={() => choosePlayer(option.id)}
+                className={`flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-600 ${selected ? 'bg-cyan-600 text-white shadow-sm' : 'text-slate-700 hover:bg-cyan-50 hover:text-cyan-950'}`}
+              >
+                <span className={`size-2.5 rounded-full ${selected ? 'bg-white' : 'bg-cyan-300'}`} aria-hidden="true" />
+                <span className="min-w-0 flex-1 truncate">{option.name}</span>
+                {selected ? (
+                  <svg viewBox="0 0 20 20" className="size-4 shrink-0" fill="currentColor" aria-hidden="true">
+                    <path fillRule="evenodd" d="M16.704 5.29a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.296-7.296a1 1 0 011.408 0z" clipRule="evenodd" />
+                  </svg>
+                ) : null}
+              </button>
+            )
+          })}
+        </div>
+      ) : null}
+    </div>
+  )
 }
 
 function MatchTeams({
@@ -423,6 +533,7 @@ function PlannerEvent({
   const { t } = useTranslation()
   const [mobileSection, setMobileSection] = useState<MobilePlannerSection>('courts')
   const [showAllQueue, setShowAllQueue] = useState(false)
+  const [queuePlayerId, setQueuePlayerId] = useState('')
   const playersById = useMemo(() => new Map(players.map((player) => [player.id, player])), [players])
   const standings = useMemo(() => buildRotationStandings(players, matches), [players, matches])
   const podium = getRotationPodium(standings, event.status === 'completed')
@@ -439,6 +550,10 @@ function PlannerEvent({
   const playingMatches = matches.filter((match) => match.status === 'playing')
   const plannedRound = getNextRotationPlannedRound(matches, event.court_count)
   const plannedRoundIds = new Set(plannedRound?.matches.map((match) => match.id) ?? [])
+  const plannedRestRoundMatchIds = getRotationPlannedRestRoundMatchIds(
+    matches,
+    event.court_count,
+  )
   const plannedRestRound = isRotationPlannedRestRound(matches, event.court_count)
   const customRound =
     playingMatches.length > 0 &&
@@ -457,9 +572,15 @@ function PlannerEvent({
     plannedRound?.matches
       .map((match, index) => ({ match, court: index + 1 }))
       .filter(({ match }) => match.status === 'available') ?? []
-  const orderedAvailable = recommended
-    ? [recommended, ...available.filter((match) => match.id !== recommended.id)]
+  const playerFilteredAvailable = queuePlayerId
+    ? available.filter((match) => matchPlayerIds(match).includes(queuePlayerId))
     : available
+  const recommendedInFilter = recommended && playerFilteredAvailable.some(
+    (match) => match.id === recommended.id,
+  )
+  const orderedAvailable = recommendedInFilter
+    ? [recommended, ...playerFilteredAvailable.filter((match) => match.id !== recommended.id)]
+    : playerFilteredAvailable
   const progress = matches.length > 0 ? Math.round((completed.length / matches.length) * 100) : 0
   const emptyCourts = Array.from({ length: event.court_count }, (_, index) => index + 1).filter(
     (court) => !playingMatches.some((match) => match.court_number === court),
@@ -626,17 +747,22 @@ function PlannerEvent({
           </section>
 
           <section className={`${mobileSection === 'queue' ? 'block' : 'hidden xl:block'} rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5`} role="tabpanel">
-            <div className="flex items-end justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-wider text-cyan-700">{t('rotation.queueEyebrow')}</p><h2 className="text-xl font-black text-slate-950">{t('rotation.waitingMatches')}</h2></div><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">{available.length}</span></div>
+            <div className="flex items-end justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-wider text-cyan-700">{t('rotation.queueEyebrow')}</p><h2 className="text-xl font-black text-slate-950">{t('rotation.waitingMatches')}</h2></div><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">{playerFilteredAvailable.length}</span></div>
+            <PlayerQueueFilter
+              players={players}
+              value={queuePlayerId}
+              onChange={setQueuePlayerId}
+            />
             <div className="mt-4 space-y-3">
-              {available.length === 0 ? <p className="py-6 text-center text-sm text-slate-500">{t('rotation.queueEmpty')}</p> : orderedAvailable.map((match, index) => {
+              {available.length === 0 ? <p className="py-6 text-center text-sm text-slate-500">{t('rotation.queueEmpty')}</p> : orderedAvailable.length === 0 ? <p className="py-6 text-center text-sm text-slate-500">{t('rotation.noPlayerMatches')}</p> : orderedAvailable.map((match, index) => {
                 const blocked = matchPlayerIds(match).some((id) => matches.some((active) => active.status === 'playing' && matchPlayerIds(active).includes(id)))
                 const strandsCourt =
                   !blocked &&
                   !startableMatchIds.has(match.id) &&
-                  !(plannedRestRound && plannedRoundIds.has(match.id))
-                return <article key={match.id} className={`${index >= 3 && !showAllQueue ? 'hidden xl:block' : 'block'} rounded-2xl border p-4 ${recommended?.id === match.id ? 'border-cyan-300 bg-cyan-50' : 'border-slate-200'}`}><div className="flex flex-wrap items-center justify-between gap-2"><span className="text-xs font-black text-slate-500">{t('rotation.matchNumber', { number: match.sequence_number })}</span>{recommended?.id === match.id ? <span className="rounded-full bg-cyan-600 px-2.5 py-1 text-xs font-black text-white">{t('rotation.bestNext')}</span> : null}</div><div className="mt-2"><MatchTeams match={match} playersById={playersById} compact /></div><div className="mt-3 flex flex-wrap gap-2">{emptyCourts.map((court) => <button key={court} type="button" disabled={blocked || strandsCourt || startMutation.isPending || startRoundMutation.isPending || connectionStatus === 'offline'} onClick={() => startMutation.mutate({ match, court })} className={secondaryButton}>{t('rotation.startCourt', { number: court })}</button>)}</div>{blocked ? <p className="mt-2 text-xs font-semibold text-amber-700">{t('rotation.playersBusy')}</p> : strandsCourt ? <p className="mt-2 text-xs font-semibold text-amber-700">{t('rotation.blocksOtherCourts')}</p> : null}</article>
+                  !plannedRestRoundMatchIds.has(match.id)
+                return <article key={match.id} className={`${index >= 3 && !showAllQueue && !queuePlayerId ? 'hidden xl:block' : 'block'} rounded-2xl border p-4 ${recommended?.id === match.id ? 'border-cyan-300 bg-cyan-50' : 'border-slate-200'}`}><div className="flex flex-wrap items-center justify-between gap-2"><span className="text-xs font-black text-slate-500">{t('rotation.matchNumber', { number: match.sequence_number })}</span>{recommended?.id === match.id ? <span className="rounded-full bg-cyan-600 px-2.5 py-1 text-xs font-black text-white">{t('rotation.bestNext')}</span> : null}</div><div className="mt-2"><MatchTeams match={match} playersById={playersById} compact /></div><div className="mt-3 flex flex-wrap gap-2">{emptyCourts.map((court) => <button key={court} type="button" disabled={blocked || strandsCourt || startMutation.isPending || startRoundMutation.isPending || connectionStatus === 'offline'} onClick={() => startMutation.mutate({ match, court })} className={secondaryButton}>{t('rotation.startCourt', { number: court })}</button>)}</div>{blocked ? <p className="mt-2 text-xs font-semibold text-amber-700">{t('rotation.playersBusy')}</p> : strandsCourt ? <p className="mt-2 text-xs font-semibold text-amber-700">{t('rotation.blocksOtherCourts')}</p> : null}</article>
               })}
-              {available.length > 3 ? <button type="button" onClick={() => setShowAllQueue((current) => !current)} className={`${secondaryButton} w-full xl:hidden`}>{showAllQueue ? t('rotation.showFewerMatches') : t('rotation.showAllMatches', { count: available.length })}</button> : null}
+              {!queuePlayerId && available.length > 3 ? <button type="button" onClick={() => setShowAllQueue((current) => !current)} className={`${secondaryButton} w-full xl:hidden`}>{showAllQueue ? t('rotation.showFewerMatches') : t('rotation.showAllMatches', { count: available.length })}</button> : null}
             </div>
           </section>
 

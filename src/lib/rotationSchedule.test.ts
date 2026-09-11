@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   generateRotationSchedule,
   getNextRotationPlannedRound,
+  getRotationPlannedRestRoundMatchIds,
   getRotationStartableMatchIds,
   isRotationPlannedRestRound,
   recommendRotationMatch,
@@ -258,6 +259,18 @@ describe('rotation match recommendation', () => {
     expect(
       isRotationPlannedRestRound([first, second, restRound, nextFirst, nextSecond], 2),
     ).toBe(true)
+    expect(
+      getRotationPlannedRestRoundMatchIds(
+        [
+          { ...first, status: 'available' },
+          { ...second, status: 'available' },
+          restRound,
+          nextFirst,
+          nextSecond,
+        ],
+        2,
+      ),
+    ).toEqual(new Set([restRound.id]))
 
     expect(
       getNextRotationPlannedRound(

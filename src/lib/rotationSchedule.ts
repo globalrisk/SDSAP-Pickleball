@@ -634,6 +634,17 @@ export function isRotationPlannedRestRound(
   return Boolean(plannedRound && plannedRound.matches.length < courtCount)
 }
 
+export function getRotationPlannedRestRoundMatchIds(
+  matches: readonly RotationMatch[],
+  courtCount: number,
+): Set<string> {
+  return new Set(
+    rotationPlannedBatches(matches, courtCount)
+      .filter((batch) => batch.length < courtCount)
+      .flatMap((batch) => batch.map((match) => match.id)),
+  )
+}
+
 export function getRotationStartableMatchIds(
   matches: readonly RotationMatch[],
   courtCount: number,
