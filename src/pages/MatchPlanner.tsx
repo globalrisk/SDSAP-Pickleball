@@ -37,6 +37,8 @@ const primaryButton =
 const secondaryButton =
   'inline-flex min-h-11 items-center justify-center rounded-xl border border-cyan-200 bg-white px-4 py-2 text-sm font-bold text-cyan-900 transition hover:bg-cyan-50 disabled:cursor-not-allowed disabled:opacity-50'
 
+type MobilePlannerSection = 'courts' | 'queue' | 'standings'
+
 function sourcePlayerIds(count: number) {
   return Array.from({ length: count }, (_, index) => `player-${index + 1}`)
 }
@@ -306,21 +308,21 @@ function PlannerSetup({
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[22rem_minmax(0,1fr)]">
-      <section className="rounded-3xl bg-gradient-to-br from-slate-950 via-cyan-950 to-cyan-700 p-6 text-white shadow-xl">
+    <div className="grid gap-4 sm:gap-6 lg:grid-cols-[22rem_minmax(0,1fr)]">
+      <section className="rounded-3xl bg-gradient-to-br from-slate-950 via-cyan-950 to-cyan-700 p-5 text-white shadow-xl sm:p-6">
         <p className="text-xs font-black uppercase tracking-[0.22em] text-cyan-200">{t('rotation.setupEyebrow')}</p>
-        <h1 className="mt-3 text-3xl font-black tracking-tight">{t('rotation.title')}</h1>
-        <p className="mt-3 text-sm leading-6 text-cyan-100">{t('rotation.setupDescription')}</p>
-        <div className="mt-7 grid grid-cols-3 gap-2">
+        <h1 className="mt-2 text-2xl font-black tracking-tight sm:mt-3 sm:text-3xl">{t('rotation.title')}</h1>
+        <p className="mt-2 text-sm leading-6 text-cyan-100 sm:mt-3">{t('rotation.setupDescription')}</p>
+        <div className="mt-4 grid grid-cols-3 gap-2 sm:mt-7">
           <div className="rounded-2xl bg-white/10 p-3 text-center"><p className="text-2xl font-black">{playerCount}</p><p className="text-xs text-cyan-100">{t('rotation.players')}</p></div>
           <div className="rounded-2xl bg-white/10 p-3 text-center"><p className="text-2xl font-black">{matchesPerPlayer}</p><p className="text-xs text-cyan-100">{t('rotation.each')}</p></div>
           <div className="rounded-2xl bg-white/10 p-3 text-center"><p className="text-2xl font-black">{validation.valid ? (playerCount * matchesPerPlayer) / 4 : '—'}</p><p className="text-xs text-cyan-100">{t('rotation.matches')}</p></div>
         </div>
-        <p className="mt-5 rounded-2xl border border-cyan-300/20 bg-cyan-950/30 px-4 py-3 text-sm text-cyan-50">{t('rotation.noRepeatPromise')}</p>
+        <p className="mt-4 rounded-2xl border border-cyan-300/20 bg-cyan-950/30 px-4 py-3 text-sm text-cyan-50 sm:mt-5">{t('rotation.noRepeatPromise')}</p>
       </section>
 
       <form
-        className="rounded-3xl border border-cyan-100 bg-white p-5 shadow-sm sm:p-7"
+        className="rounded-3xl border border-cyan-100 bg-white p-4 pb-24 shadow-sm sm:p-7"
         onSubmit={(event) => {
           event.preventDefault()
           if (validation.valid && namesValid && name.trim()) {
@@ -329,8 +331,8 @@ function PlannerSetup({
         }}
       >
         <h2 className="text-xl font-black text-slate-950">{t('rotation.eventSetup')}</h2>
-        <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <label className="text-sm font-bold text-slate-700 sm:col-span-2">
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:mt-5 sm:gap-4 lg:grid-cols-4">
+          <label className="col-span-2 text-sm font-bold text-slate-700">
             {t('rotation.eventName')}
             <input value={name} onChange={(event) => setName(event.target.value)} className={`${inputClass} mt-1`} maxLength={120} />
           </label>
@@ -342,7 +344,7 @@ function PlannerSetup({
             {t('rotation.courtCount')}
             <input type="number" min="1" max={Math.floor(playerCount / 4)} value={courtCount} onChange={(event) => setCourtCount(Number(event.target.value))} className={`${inputClass} mt-1`} />
           </label>
-          <label className="text-sm font-bold text-slate-700 sm:col-span-2">
+          <label className="col-span-2 text-sm font-bold text-slate-700 sm:col-span-1 lg:col-span-2">
             {t('rotation.matchesEach')}
             <input type="number" min="1" max={playerCount - 1} value={matchesPerPlayer} onChange={(event) => setMatchesPerPlayer(Number(event.target.value))} className={`${inputClass} mt-1`} />
           </label>
@@ -355,12 +357,12 @@ function PlannerSetup({
           </div>
         ) : null}
 
-        <div className="mt-6">
+        <div className="mt-5 sm:mt-6">
           <div className="flex items-end justify-between gap-3">
             <div><h3 className="font-black text-slate-950">{t('rotation.playerNames')}</h3><p className="text-sm text-slate-500">{t('rotation.uniqueNames')}</p></div>
             <span className="rounded-full bg-cyan-50 px-3 py-1 text-xs font-bold text-cyan-800">{playerCount}</span>
           </div>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:gap-3">
             {playerNames.map((playerName, index) => (
               <label key={index} className="text-xs font-bold text-slate-500">
                 {t('rotation.playerNumber', { number: index + 1 })}
@@ -372,9 +374,11 @@ function PlannerSetup({
         </div>
 
         {error ? <div className="mt-5"><ErrorState message={error.message} /></div> : null}
-        <button type="submit" disabled={isSaving || !validation.valid || !namesValid || !name.trim()} className={`${primaryButton} mt-6 w-full`}>
-          {isSaving ? t('rotation.generating') : t('rotation.generate')}
-        </button>
+        <div className="fixed inset-x-4 bottom-4 z-30 rounded-2xl border border-cyan-100 bg-white/95 p-2 shadow-xl backdrop-blur sm:static sm:mt-6 sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none">
+          <button type="submit" disabled={isSaving || !validation.valid || !namesValid || !name.trim()} className={`${primaryButton} w-full`}>
+            {isSaving ? t('rotation.generating') : t('rotation.generate')}
+          </button>
+        </div>
       </form>
     </div>
   )
@@ -397,12 +401,17 @@ function PlannerEvent({
 }) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
+  const [mobileSection, setMobileSection] = useState<MobilePlannerSection>('courts')
+  const [showAllQueue, setShowAllQueue] = useState(false)
   const playersById = useMemo(() => new Map(players.map((player) => [player.id, player])), [players])
   const standings = useMemo(() => buildRotationStandings(players, matches), [players, matches])
   const podium = getRotationPodium(standings, event.status === 'completed')
   const recommended = useMemo(() => recommendRotationMatch(matches, players), [matches, players])
   const completed = matches.filter((match) => match.status === 'completed')
   const available = matches.filter((match) => match.status === 'available')
+  const orderedAvailable = recommended
+    ? [recommended, ...available.filter((match) => match.id !== recommended.id)]
+    : available
   const progress = matches.length > 0 ? Math.round((completed.length / matches.length) * 100) : 0
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: rotationSnapshotQueryKey })
@@ -462,9 +471,28 @@ function PlannerEvent({
         </section>
       ) : null}
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_23rem]">
+      <nav className="sticky top-2 z-20 mt-4 grid grid-cols-3 gap-1 rounded-2xl border border-cyan-100 bg-white/95 p-1.5 shadow-lg backdrop-blur xl:hidden" role="tablist" aria-label={t('rotation.mobileSections')}>
+        {([
+          ['courts', t('rotation.courtsTab')],
+          ['queue', t('rotation.queueTab')],
+          ['standings', t('rotation.standingsTab')],
+        ] as const).map(([section, label]) => (
+          <button
+            key={section}
+            type="button"
+            role="tab"
+            aria-selected={mobileSection === section}
+            onClick={() => setMobileSection(section)}
+            className={`min-h-11 rounded-xl px-2 py-2 text-sm font-black transition ${mobileSection === section ? 'bg-cyan-600 text-white shadow-sm' : 'text-cyan-900 hover:bg-cyan-50'}`}
+          >
+            {label}{section === 'queue' ? <span className={`ml-1 rounded-full px-1.5 py-0.5 text-xs ${mobileSection === section ? 'bg-white/20' : 'bg-cyan-100'}`}>{available.length}</span> : null}
+          </button>
+        ))}
+      </nav>
+
+      <div className="mt-4 grid gap-6 sm:mt-6 xl:grid-cols-[minmax(0,1fr)_23rem]">
         <div className="min-w-0 space-y-6">
-          <section>
+          <section className={mobileSection === 'courts' ? 'block' : 'hidden xl:block'} role="tabpanel">
             <div className="mb-3 flex items-end justify-between"><div><p className="text-xs font-black uppercase tracking-wider text-cyan-700">{t('rotation.courtsEyebrow')}</p><h2 className="text-xl font-black text-slate-950">{t('rotation.courts')}</h2></div><span className="text-sm text-slate-500">{t('rotation.flexibleHint')}</span></div>
             <div className="grid gap-4 lg:grid-cols-2">
               {Array.from({ length: event.court_count }, (_, index) => index + 1).map((court) => {
@@ -479,20 +507,21 @@ function PlannerEvent({
             </div>
           </section>
 
-          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <section className={`${mobileSection === 'queue' ? 'block' : 'hidden xl:block'} rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5`} role="tabpanel">
             <div className="flex items-end justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-wider text-cyan-700">{t('rotation.queueEyebrow')}</p><h2 className="text-xl font-black text-slate-950">{t('rotation.waitingMatches')}</h2></div><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">{available.length}</span></div>
             <div className="mt-4 space-y-3">
-              {available.length === 0 ? <p className="py-6 text-center text-sm text-slate-500">{t('rotation.queueEmpty')}</p> : available.map((match) => {
+              {available.length === 0 ? <p className="py-6 text-center text-sm text-slate-500">{t('rotation.queueEmpty')}</p> : orderedAvailable.map((match, index) => {
                 const blocked = matchPlayerIds(match).some((id) => matches.some((active) => active.status === 'playing' && matchPlayerIds(active).includes(id)))
-                return <article key={match.id} className={`rounded-2xl border p-4 ${recommended?.id === match.id ? 'border-cyan-300 bg-cyan-50' : 'border-slate-200'}`}><div className="flex flex-wrap items-center justify-between gap-2"><span className="text-xs font-black text-slate-500">{t('rotation.matchNumber', { number: match.sequence_number })}</span>{recommended?.id === match.id ? <span className="rounded-full bg-cyan-600 px-2.5 py-1 text-[11px] font-black text-white">{t('rotation.bestNext')}</span> : null}</div><div className="mt-2"><MatchTeams match={match} playersById={playersById} compact /></div><div className="mt-3 flex flex-wrap gap-2">{emptyCourts.map((court) => <button key={court} type="button" disabled={blocked || startMutation.isPending || connectionStatus === 'offline'} onClick={() => startMutation.mutate({ match, court })} className={secondaryButton}>{t('rotation.startCourt', { number: court })}</button>)}</div>{blocked ? <p className="mt-2 text-xs font-semibold text-amber-700">{t('rotation.playersBusy')}</p> : null}</article>
+                return <article key={match.id} className={`${index >= 3 && !showAllQueue ? 'hidden xl:block' : 'block'} rounded-2xl border p-4 ${recommended?.id === match.id ? 'border-cyan-300 bg-cyan-50' : 'border-slate-200'}`}><div className="flex flex-wrap items-center justify-between gap-2"><span className="text-xs font-black text-slate-500">{t('rotation.matchNumber', { number: match.sequence_number })}</span>{recommended?.id === match.id ? <span className="rounded-full bg-cyan-600 px-2.5 py-1 text-xs font-black text-white">{t('rotation.bestNext')}</span> : null}</div><div className="mt-2"><MatchTeams match={match} playersById={playersById} compact /></div><div className="mt-3 flex flex-wrap gap-2">{emptyCourts.map((court) => <button key={court} type="button" disabled={blocked || startMutation.isPending || connectionStatus === 'offline'} onClick={() => startMutation.mutate({ match, court })} className={secondaryButton}>{t('rotation.startCourt', { number: court })}</button>)}</div>{blocked ? <p className="mt-2 text-xs font-semibold text-amber-700">{t('rotation.playersBusy')}</p> : null}</article>
               })}
+              {available.length > 3 ? <button type="button" onClick={() => setShowAllQueue((current) => !current)} className={`${secondaryButton} w-full xl:hidden`}>{showAllQueue ? t('rotation.showFewerMatches') : t('rotation.showAllMatches', { count: available.length })}</button> : null}
             </div>
           </section>
 
-          {completed.length > 0 ? <details className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"><summary className="cursor-pointer text-lg font-black text-slate-950">{t('rotation.completedMatches', { count: completed.length })}</summary><div className="mt-4 space-y-3">{completed.slice().reverse().map((match) => <article key={match.id} className="rounded-2xl bg-slate-50 p-4"><div className="flex flex-wrap items-center justify-between gap-2"><span className="text-xs font-bold text-slate-500">{t('rotation.matchNumber', { number: match.sequence_number })}</span><span className="text-lg font-black text-slate-950">{match.team_a_score}–{match.team_b_score}</span></div><div className="mt-2"><MatchTeams match={match} playersById={playersById} compact /></div><ScoreForm key={`${match.id}-${match.revision}`} match={match} playersById={playersById} isSaving={scoreMutation.isPending} onSave={(a, b) => scoreMutation.mutate({ match, a, b })} tone="edit" /></article>)}</div></details> : null}
+          {completed.length > 0 ? <details className={`${mobileSection === 'queue' ? 'block' : 'hidden xl:block'} rounded-3xl border border-slate-200 bg-white p-5 shadow-sm`}><summary className="cursor-pointer text-lg font-black text-slate-950">{t('rotation.completedMatches', { count: completed.length })}</summary><div className="mt-4 space-y-3">{completed.slice().reverse().map((match) => <article key={match.id} className="rounded-2xl bg-slate-50 p-4"><div className="flex flex-wrap items-center justify-between gap-2"><span className="text-xs font-bold text-slate-500">{t('rotation.matchNumber', { number: match.sequence_number })}</span><span className="text-lg font-black text-slate-950">{match.team_a_score}–{match.team_b_score}</span></div><div className="mt-2"><MatchTeams match={match} playersById={playersById} compact /></div><ScoreForm key={`${match.id}-${match.revision}`} match={match} playersById={playersById} isSaving={scoreMutation.isPending} onSave={(a, b) => scoreMutation.mutate({ match, a, b })} tone="edit" /></article>)}</div></details> : null}
         </div>
 
-        <aside className="min-w-0 xl:sticky xl:top-5 xl:self-start">
+        <aside className={`${mobileSection === 'standings' ? 'block' : 'hidden xl:block'} min-w-0 xl:sticky xl:top-5 xl:self-start`} role="tabpanel">
           <section className="rounded-3xl border border-cyan-100 bg-white p-5 shadow-sm">
             <p className="text-xs font-black uppercase tracking-wider text-cyan-700">{event.status === 'completed' ? t('rotation.final') : t('rotation.provisional')}</p>
             <h2 className="mt-1 text-xl font-black text-slate-950">{t('rotation.standings')}</h2>
