@@ -19,6 +19,7 @@ import { MatchPlannerPage } from './pages/MatchPlanner'
 import { AdminLoginPage } from './pages/AdminLogin'
 import { CreateLeaguePage } from './pages/CreateLeague'
 import { AdminRoute } from './components/AdminRoute'
+import { LazyTeamDuelLoginPage, LazyTeamDuelPage } from './components/LazyTeamDuelRoutes'
 import './i18n'
 import './index.css'
 
@@ -50,6 +51,9 @@ createRoot(document.getElementById('root')!).render(
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<DefaultLeagueRedirect />} />
+            <Route path="team-duel" element={<LazyTeamDuelPage />} />
+            <Route path="team-duel/events/:eventId" element={<LazyTeamDuelPage />} />
+            <Route path="team-duel/login" element={<LazyTeamDuelLoginPage />} />
             <Route path="leagues/:leagueSlug" element={<LeagueShell />}>
               <Route element={<AppLayout />}>
                 <Route index element={<Dashboard />} />

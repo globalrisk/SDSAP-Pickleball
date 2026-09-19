@@ -15,6 +15,7 @@ const navItems = [
   { to: '/matches', labelKey: 'nav.matches', desktopKey: 'nav.matches' },
   { to: '/rankings', labelKey: 'nav.rankings', desktopKey: 'nav.rankings' },
   { to: '/match-planner', labelKey: 'nav.matchPlanner', desktopKey: 'nav.matchPlanner' },
+  { to: '/team-duel', labelKey: 'nav.teamDuel', desktopKey: 'nav.teamDuel', global: true },
   { to: '/setup', labelKey: 'nav.setup', desktopKey: 'nav.setup' },
 ] as const
 
@@ -37,7 +38,9 @@ export function AppLayout() {
   const visibleNavItems = isAdmin ? navItems : navItems.filter((item) => item.to !== '/setup')
   const mobilePrimaryItems = visibleNavItems.slice(0, 4)
   const mobileMoreItems = visibleNavItems.slice(4)
-  const moreActive = mobileMoreItems.some(({ to }) => location.pathname.startsWith(leaguePath(to)))
+  const itemPath = (item: (typeof navItems)[number]) =>
+    'global' in item && item.global ? item.to : leaguePath(item.to)
+  const moreActive = mobileMoreItems.some((item) => location.pathname.startsWith(itemPath(item)))
 
   useEffect(() => {
     setMoreOpen(false)
@@ -79,14 +82,14 @@ export function AppLayout() {
             </div>
           </div>
           <nav className="hidden gap-1 overflow-x-auto pb-3 md:flex">
-            {visibleNavItems.map(({ to, labelKey, desktopKey, ...rest }) => (
+            {visibleNavItems.map((item) => (
               <NavLink
-                key={to}
-                to={leaguePath(to)}
-                end={'end' in rest ? rest.end : undefined}
+                key={item.to}
+                to={itemPath(item)}
+                end={'end' in item ? item.end : undefined}
                 className={({ isActive }) => navClassName(isActive)}
               >
-                {t(desktopKey ?? labelKey)}
+                {t(item.desktopKey)}
               </NavLink>
             ))}
           </nav>
@@ -99,15 +102,15 @@ export function AppLayout() {
 
       <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-green-200 bg-white/95 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur md:hidden">
         <div className="mx-auto flex max-w-lg items-stretch justify-between gap-1">
-          {mobilePrimaryItems.map(({ to, labelKey, ...rest }) => (
+          {mobilePrimaryItems.map((item) => (
             <NavLink
-              key={to}
-              to={leaguePath(to)}
-              end={'end' in rest ? rest.end : undefined}
+              key={item.to}
+              to={itemPath(item)}
+              end={'end' in item ? item.end : undefined}
               className={({ isActive }) => navClassName(isActive, true)}
             >
-              <NavIcon to={to} />
-              <span>{t(labelKey)}</span>
+              <NavIcon to={item.to} />
+              <span>{t(item.labelKey)}</span>
             </NavLink>
           ))}
           <button
@@ -135,10 +138,10 @@ export function AppLayout() {
             id="mobile-more-menu"
             className="fixed inset-x-3 bottom-20 z-30 mx-auto max-w-sm rounded-2xl border border-green-200 bg-white p-2 shadow-xl md:hidden"
           >
-            {mobileMoreItems.map(({ to, labelKey }) => (
+            {mobileMoreItems.map((item) => (
               <NavLink
-                key={to}
-                to={leaguePath(to)}
+                key={item.to}
+                to={itemPath(item)}
                 className={({ isActive }) =>
                   `flex min-h-12 items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 ${
                     isActive
@@ -147,8 +150,8 @@ export function AppLayout() {
                   }`
                 }
               >
-                <NavIcon to={to} />
-                {t(labelKey)}
+                <NavIcon to={item.to} />
+                {t(item.labelKey)}
               </NavLink>
             ))}
             <NavLink
@@ -222,9 +225,20 @@ function NavIcon({ to }: { to: string }) {
       )
     case '/match-planner':
       return (
-        <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M7 4v16M17 4v16M4 8h6m4 0h6M4 16h6m4 0h6" />
+        <svg aria-hidden="true" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <rect x="8" y="2.5" width="8" height="4" rx="1.5" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M8 4.5H6a2 2 0 00-2 2v13a2 2 0 002 2h12a2 2 0 002-2v-13a2 2 0 00-2-2h-2M11 11h5M11 16h5" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 11h.01M7.5 16h.01" strokeWidth={3} />
         </svg>
+      )
+    case '/team-duel':
+      return (
+        <span
+          aria-hidden="true"
+          className={`${className} inline-flex items-center justify-center rounded-md border-2 border-current text-[8px] font-black leading-none tracking-tighter`}
+        >
+          VS
+        </span>
       )
     default:
       return null
