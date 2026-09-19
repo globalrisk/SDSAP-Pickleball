@@ -1,11 +1,13 @@
 import { useQuery } from '@tanstack/react-query'
 import { fetchAssignedPoolPlayerIds, fetchPlayerPool } from '../lib/api'
 import { useSeason } from '../context/SeasonContext'
+import { useLeague } from '../context/LeagueContext'
 
 export function usePlayerPool() {
+  const { league } = useLeague()
   return useQuery({
-    queryKey: ['player-pool'],
-    queryFn: fetchPlayerPool,
+    queryKey: ['player-pool', league.id],
+    queryFn: () => fetchPlayerPool(league.id),
   })
 }
 

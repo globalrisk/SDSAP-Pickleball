@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { formatMatchDate } from '../lib/formatDate'
 import type { PlayerRivalries, PlayerRivalry } from '../types'
+import { useLeague } from '../context/LeagueContext'
 
 interface ProfileRivalriesProps {
   playerName: string
@@ -10,6 +11,7 @@ interface ProfileRivalriesProps {
 
 export function ProfileRivalries({ playerName, rivalries }: ProfileRivalriesProps) {
   const { t, i18n } = useTranslation()
+  const { leaguePath } = useLeague()
   const { nemesis, favoriteOpponent, byOpponent } = rivalries
 
   if (byOpponent.length === 0) {
@@ -106,7 +108,7 @@ export function ProfileRivalries({ playerName, rivalries }: ProfileRivalriesProp
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
                   <Link
-                    to={`/players/${row.opponentId}`}
+                    to={leaguePath(`/players/${row.opponentId}`)}
                     className="font-semibold text-green-900 underline-offset-2 hover:underline"
                   >
                     {row.opponentName}
@@ -139,6 +141,7 @@ function SummaryCard({
   empty: string
   detail?: string
 }) {
+  const { leaguePath } = useLeague()
   return (
     <div className="rounded-lg bg-green-50 px-3 py-3">
       <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
@@ -147,7 +150,7 @@ function SummaryCard({
       {rivalry ? (
         <>
           <Link
-            to={`/players/${rivalry.opponentId}`}
+            to={leaguePath(`/players/${rivalry.opponentId}`)}
             className="mt-1 block text-lg font-bold text-green-900 underline-offset-2 hover:underline"
           >
             {rivalry.opponentName}

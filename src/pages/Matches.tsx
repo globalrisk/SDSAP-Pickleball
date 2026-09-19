@@ -8,6 +8,8 @@ import { ErrorState, PageHeader, SetupBanner } from '../components/Layout'
 import { useSeason } from '../context/SeasonContext'
 import { useMatches } from '../hooks/useMatches'
 import { useTeams } from '../hooks/useTeams'
+import { useAuth } from '../context/AuthContext'
+import { useLeague } from '../context/LeagueContext'
 import type { MatchStatus } from '../types'
 
 type StatusFilter = 'all' | MatchStatus
@@ -22,6 +24,8 @@ const STATUS_FILTERS: { key: StatusFilter; labelKey: string }[] = [
 export function MatchesPage() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
+  const { isAdmin } = useAuth()
+  const { league } = useLeague()
   const { selectedSeason, isSelectedSeasonActive } = useSeason()
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [teamFilterId, setTeamFilterId] = useState<string>('all')
@@ -32,6 +36,8 @@ export function MatchesPage() {
   const matchCount = matches?.length ?? 0
   const teamCount = teams?.length ?? 0
   const canCreateMatches =
+    isAdmin &&
+    league.status === 'active' &&
     isSelectedSeasonActive &&
     matchCount === 0 &&
     teamCount >= 2
@@ -74,7 +80,7 @@ export function MatchesPage() {
         subtitle={t('matches.subtitle', { count: matchCount })}
       />
 
-      {isSelectedSeasonActive && (
+      {isAdmin && league.status === 'active' && isSelectedSeasonActive && (
         <section className="mb-6 rounded-xl border border-green-200 bg-white p-4 shadow-sm sm:p-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>

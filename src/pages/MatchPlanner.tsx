@@ -4,6 +4,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { LanguageSwitcher } from '../components/LanguageSwitcher'
 import { ErrorState, LoadingState, SetupBanner } from '../components/Layout'
+import { useAuth } from '../context/AuthContext'
+import { useLeague } from '../context/LeagueContext'
+import { useSeason } from '../context/SeasonContext'
 import { useRotationRealtime } from '../hooks/useRotationRealtime'
 import {
   fetchRotationSnapshot,
@@ -521,6 +524,7 @@ function PlannerEvent({
   onRefresh,
   onRegenerate,
   onReset,
+  canManage,
 }: {
   players: RotationPlayer[]
   matches: RotationMatch[]
@@ -529,6 +533,7 @@ function PlannerEvent({
   onRefresh: () => Promise<void>
   onRegenerate: () => void
   onReset: () => void
+  canManage: boolean
 }) {
   const { t } = useTranslation()
   const [mobileSection, setMobileSection] = useState<MobilePlannerSection>('courts')
@@ -623,10 +628,10 @@ function PlannerEvent({
             <h1 className="mt-4 text-3xl font-black tracking-tight">{event.name}</h1>
             <p className="mt-1 text-sm text-cyan-100">{t('rotation.eventSummary', { players: players.length, matches: event.matches_per_player, courts: event.court_count })}</p>
           </div>
-          <div className="flex flex-wrap gap-2">
+          {canManage ? <div className="flex flex-wrap gap-2">
             {event.status === 'draft' ? <button type="button" onClick={onRegenerate} className="min-h-10 rounded-xl border border-white/25 px-3 py-2 text-sm font-bold hover:bg-white/10">{t('rotation.regenerate')}</button> : null}
             <button type="button" onClick={onReset} className="min-h-10 rounded-xl border border-red-200/40 bg-red-500/15 px-3 py-2 text-sm font-bold text-red-50 hover:bg-red-500/25">{t('rotation.reset')}</button>
-          </div>
+          </div> : null}
         </div>
         <div className="mt-6 flex items-center justify-between text-xs font-bold text-cyan-50"><span>{t('rotation.progress')}</span><span>{completed.length}/{matches.length}</span></div>
         <div className="mt-2 h-3 overflow-hidden rounded-full bg-white/15"><div className="h-full rounded-full bg-cyan-300 transition-[width]" style={{ width: `${progress}%` }} /></div>
@@ -709,7 +714,7 @@ function PlannerEvent({
                 ) : null}
                 {plannedRound ? <p className="mt-1 text-xs font-semibold text-cyan-700">{t('rotation.manualOrderHint')}</p> : null}
               </div>
-              {playingMatches.length === 0 && roundMatchesToStart.length > 0 ? (
+              {canManage && playingMatches.length === 0 && roundMatchesToStart.length > 0 ? (
                 <button
                   type="button"
                   disabled={
@@ -739,7 +744,7 @@ function PlannerEvent({
                 return (
                   <article key={court} className={`min-h-64 rounded-3xl p-5 shadow-sm ${playing ? 'bg-gradient-to-br from-cyan-800 to-cyan-600' : 'border-2 border-dashed border-cyan-200 bg-cyan-50/50'}`}>
                     <div className="flex items-center justify-between"><h3 className={`text-sm font-black uppercase tracking-wider ${playing ? 'text-cyan-100' : 'text-cyan-800'}`}>{t('rotation.court', { number: court })}</h3>{playing ? <span className="rounded-full bg-red-500 px-2.5 py-1 text-xs font-black text-white">{t('rotation.playing')}</span> : null}</div>
-                    {playing ? <><div className="mt-4"><MatchTeams match={playing} playersById={playersById} /></div><ScoreForm match={playing} playersById={playersById} isSaving={scoreMutation.isPending} onSave={(a, b) => scoreMutation.mutate({ match: playing, a, b })} /><button type="button" disabled={queueMutation.isPending} onClick={() => queueMutation.mutate(playing)} className="mt-2 min-h-10 w-full text-xs font-bold text-cyan-100 underline underline-offset-4 disabled:opacity-50">{t('rotation.returnQueue')}</button></> : courtRecommendation ? <><p className="mt-5 text-xs font-bold uppercase tracking-wide text-cyan-700">{t('rotation.recommended')}</p><div className="mt-2"><MatchTeams match={courtRecommendation} playersById={playersById} compact /></div><button type="button" disabled={startMutation.isPending || startRoundMutation.isPending || connectionStatus === 'offline'} onClick={() => startMutation.mutate({ match: courtRecommendation, court })} className={`${primaryButton} mt-5 w-full`}>{t('rotation.startMatch')}</button></> : <div className="flex min-h-48 items-center justify-center text-center text-sm text-slate-500">{lighterRoundInProgress ? t('rotation.restCourt') : available.length > 0 ? t('rotation.waitingPlayers') : t('rotation.noMatchesWaiting')}</div>}
+                    {playing ? <><div className="mt-4"><MatchTeams match={playing} playersById={playersById} /></div>{canManage ? <><ScoreForm match={playing} playersById={playersById} isSaving={scoreMutation.isPending} onSave={(a, b) => scoreMutation.mutate({ match: playing, a, b })} /><button type="button" disabled={queueMutation.isPending} onClick={() => queueMutation.mutate(playing)} className="mt-2 min-h-10 w-full text-xs font-bold text-cyan-100 underline underline-offset-4 disabled:opacity-50">{t('rotation.returnQueue')}</button></> : null}</> : courtRecommendation ? <><p className="mt-5 text-xs font-bold uppercase tracking-wide text-cyan-700">{t('rotation.recommended')}</p><div className="mt-2"><MatchTeams match={courtRecommendation} playersById={playersById} compact /></div>{canManage ? <button type="button" disabled={startMutation.isPending || startRoundMutation.isPending || connectionStatus === 'offline'} onClick={() => startMutation.mutate({ match: courtRecommendation, court })} className={`${primaryButton} mt-5 w-full`}>{t('rotation.startMatch')}</button> : null}</> : <div className="flex min-h-48 items-center justify-center text-center text-sm text-slate-500">{lighterRoundInProgress ? t('rotation.restCourt') : available.length > 0 ? t('rotation.waitingPlayers') : t('rotation.noMatchesWaiting')}</div>}
                   </article>
                 )
               })}
@@ -760,13 +765,13 @@ function PlannerEvent({
                   !blocked &&
                   !startableMatchIds.has(match.id) &&
                   !plannedRestRoundMatchIds.has(match.id)
-                return <article key={match.id} className={`${index >= 3 && !showAllQueue && !queuePlayerId ? 'hidden xl:block' : 'block'} rounded-2xl border p-4 ${recommended?.id === match.id ? 'border-cyan-300 bg-cyan-50' : 'border-slate-200'}`}><div className="flex flex-wrap items-center justify-between gap-2"><span className="text-xs font-black text-slate-500">{t('rotation.matchNumber', { number: match.sequence_number })}</span>{recommended?.id === match.id ? <span className="rounded-full bg-cyan-600 px-2.5 py-1 text-xs font-black text-white">{t('rotation.bestNext')}</span> : null}</div><div className="mt-2"><MatchTeams match={match} playersById={playersById} compact /></div><div className="mt-3 flex flex-wrap gap-2">{emptyCourts.map((court) => <button key={court} type="button" disabled={blocked || strandsCourt || startMutation.isPending || startRoundMutation.isPending || connectionStatus === 'offline'} onClick={() => startMutation.mutate({ match, court })} className={secondaryButton}>{t('rotation.startCourt', { number: court })}</button>)}</div>{blocked ? <p className="mt-2 text-xs font-semibold text-amber-700">{t('rotation.playersBusy')}</p> : strandsCourt ? <p className="mt-2 text-xs font-semibold text-amber-700">{t('rotation.blocksOtherCourts')}</p> : null}</article>
+                return <article key={match.id} className={`${index >= 3 && !showAllQueue && !queuePlayerId ? 'hidden xl:block' : 'block'} rounded-2xl border p-4 ${recommended?.id === match.id ? 'border-cyan-300 bg-cyan-50' : 'border-slate-200'}`}><div className="flex flex-wrap items-center justify-between gap-2"><span className="text-xs font-black text-slate-500">{t('rotation.matchNumber', { number: match.sequence_number })}</span>{recommended?.id === match.id ? <span className="rounded-full bg-cyan-600 px-2.5 py-1 text-xs font-black text-white">{t('rotation.bestNext')}</span> : null}</div><div className="mt-2"><MatchTeams match={match} playersById={playersById} compact /></div>{canManage ? <div className="mt-3 flex flex-wrap gap-2">{emptyCourts.map((court) => <button key={court} type="button" disabled={blocked || strandsCourt || startMutation.isPending || startRoundMutation.isPending || connectionStatus === 'offline'} onClick={() => startMutation.mutate({ match, court })} className={secondaryButton}>{t('rotation.startCourt', { number: court })}</button>)}</div> : null}{blocked ? <p className="mt-2 text-xs font-semibold text-amber-700">{t('rotation.playersBusy')}</p> : strandsCourt ? <p className="mt-2 text-xs font-semibold text-amber-700">{t('rotation.blocksOtherCourts')}</p> : null}</article>
               })}
               {!queuePlayerId && available.length > 3 ? <button type="button" onClick={() => setShowAllQueue((current) => !current)} className={`${secondaryButton} w-full xl:hidden`}>{showAllQueue ? t('rotation.showFewerMatches') : t('rotation.showAllMatches', { count: available.length })}</button> : null}
             </div>
           </section>
 
-          {completed.length > 0 ? <details className={`${mobileSection === 'queue' ? 'block' : 'hidden xl:block'} rounded-3xl border border-slate-200 bg-white p-5 shadow-sm`}><summary className="cursor-pointer text-lg font-black text-slate-950">{t('rotation.completedMatches', { count: completed.length })}</summary><div className="mt-4 space-y-3">{completed.slice().reverse().map((match) => <article key={match.id} className="rounded-2xl bg-slate-50 p-4"><div className="flex flex-wrap items-center justify-between gap-2"><span className="text-xs font-bold text-slate-500">{t('rotation.matchNumber', { number: match.sequence_number })}</span><span className="text-lg font-black text-slate-950">{match.team_a_score}–{match.team_b_score}</span></div><div className="mt-2"><MatchTeams match={match} playersById={playersById} compact /></div><ScoreForm key={`${match.id}-${match.revision}`} match={match} playersById={playersById} isSaving={scoreMutation.isPending} onSave={(a, b) => scoreMutation.mutate({ match, a, b })} tone="edit" /></article>)}</div></details> : null}
+          {completed.length > 0 ? <details className={`${mobileSection === 'queue' ? 'block' : 'hidden xl:block'} rounded-3xl border border-slate-200 bg-white p-5 shadow-sm`}><summary className="cursor-pointer text-lg font-black text-slate-950">{t('rotation.completedMatches', { count: completed.length })}</summary><div className="mt-4 space-y-3">{completed.slice().reverse().map((match) => <article key={match.id} className="rounded-2xl bg-slate-50 p-4"><div className="flex flex-wrap items-center justify-between gap-2"><span className="text-xs font-bold text-slate-500">{t('rotation.matchNumber', { number: match.sequence_number })}</span><span className="text-lg font-black text-slate-950">{match.team_a_score}–{match.team_b_score}</span></div><div className="mt-2"><MatchTeams match={match} playersById={playersById} compact /></div>{canManage ? <ScoreForm key={`${match.id}-${match.revision}`} match={match} playersById={playersById} isSaving={scoreMutation.isPending} onSave={(a, b) => scoreMutation.mutate({ match, a, b })} tone="edit" /> : null}</article>)}</div></details> : null}
         </div>
 
         <aside className={`${mobileSection === 'standings' ? 'block' : 'hidden xl:block'} min-w-0 xl:sticky xl:top-5 xl:self-start`} role="tabpanel">
@@ -785,34 +790,40 @@ function PlannerEvent({
 export function MatchPlannerPage() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
+  const { isAdmin } = useAuth()
+  const { league, leaguePath } = useLeague()
+  const { selectedSeason, isSelectedSeasonActive } = useSeason()
+  const seasonId = selectedSeason?.id
+  const queryKey = useMemo(() => rotationSnapshotQueryKey(seasonId), [seasonId])
+  const canManage = isAdmin && league.status === 'active' && isSelectedSeasonActive
   const [pendingAction, setPendingAction] = useState<'regenerate' | 'reset' | null>(null)
-  const snapshotQuery = useQuery({ queryKey: rotationSnapshotQueryKey, queryFn: fetchRotationSnapshot })
+  const snapshotQuery = useQuery({ queryKey, queryFn: () => fetchRotationSnapshot(seasonId!), enabled: Boolean(seasonId) })
   const refreshSnapshot = useMemo(
     () =>
       createRefreshCoordinator(() =>
         queryClient.refetchQueries(
-          { queryKey: rotationSnapshotQueryKey, type: 'active' },
+          { queryKey, type: 'active' },
           { cancelRefetch: true },
         ),
       ),
-    [queryClient],
+    [queryClient, queryKey],
   )
-  const connection = useRotationRealtime(refreshSnapshot)
+  const connection = useRotationRealtime(seasonId, snapshotQuery.data?.event.id, refreshSnapshot)
   const createMutation = useMutation({
     mutationFn: async (input: { name: string; playerNames: string[]; matchesPerPlayer: number; courtCount: number }) => {
       await waitForLoadingPaint()
       const seed = newSeed()
       const schedule = generateRotationSchedule(sourcePlayerIds(input.playerNames.length), input.matchesPerPlayer, input.courtCount, seed)
-      return replaceRotationEvent({ ...input, seed, schedule })
+      return replaceRotationEvent({ ...input, seasonId: seasonId!, seed, schedule })
     },
     onSuccess: async () => {
-      const savedSnapshot = await fetchRotationSnapshot()
-      queryClient.setQueryData(rotationSnapshotQueryKey, savedSnapshot)
+      const savedSnapshot = await fetchRotationSnapshot(seasonId!)
+      queryClient.setQueryData(queryKey, savedSnapshot)
     },
   })
   const resetMutation = useMutation({
     mutationFn: resetRotationEvent,
-    onSuccess: () => queryClient.setQueryData(rotationSnapshotQueryKey, null),
+    onSuccess: () => queryClient.setQueryData(queryKey, null),
   })
 
   const snapshot = snapshotQuery.data
@@ -834,16 +845,16 @@ export function MatchPlannerPage() {
     <div className="min-h-dvh bg-[radial-gradient(circle_at_top_right,_#cffafe_0,_#f8fafc_38%,_#ecfeff_100%)] text-slate-900">
       <header className="border-b border-cyan-100 bg-white/90 backdrop-blur">
         <div className="mx-auto flex min-h-16 max-w-7xl items-center justify-between gap-3 px-4 py-2 sm:px-6">
-          <Link to="/" className="inline-flex min-h-11 items-center gap-2 rounded-xl px-2 text-sm font-black text-cyan-900 hover:bg-cyan-50"><span aria-hidden="true">←</span>{t('rotation.backToLeague')}</Link>
+          <Link to={leaguePath()} className="inline-flex min-h-11 items-center gap-2 rounded-xl px-2 text-sm font-black text-cyan-900 hover:bg-cyan-50"><span aria-hidden="true">←</span>{t('rotation.backToLeague')}</Link>
           <LanguageSwitcher />
         </div>
       </header>
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
         <SetupBanner />
-        {snapshotQuery.isLoading ? <LoadingState /> : snapshotQuery.error ? <ErrorState message={(snapshotQuery.error as Error).message} /> : snapshot ? <PlannerEvent event={snapshot.event} players={snapshot.players} matches={snapshot.matches} connectionStatus={connection.status} onRefresh={refreshSnapshot} onRegenerate={() => setPendingAction('regenerate')} onReset={() => setPendingAction('reset')} /> : <PlannerSetup isSaving={createMutation.isPending} error={createMutation.error as Error | null} onCreate={(input) => createMutation.mutate(input)} />}
+        {snapshotQuery.isLoading ? <LoadingState /> : snapshotQuery.error ? <ErrorState message={(snapshotQuery.error as Error).message} /> : snapshot ? <PlannerEvent event={snapshot.event} players={snapshot.players} matches={snapshot.matches} connectionStatus={connection.status} onRefresh={refreshSnapshot} onRegenerate={() => setPendingAction('regenerate')} onReset={() => setPendingAction('reset')} canManage={canManage} /> : canManage ? <PlannerSetup isSaving={createMutation.isPending} error={createMutation.error as Error | null} onCreate={(input) => createMutation.mutate(input)} /> : <p className="rounded-2xl border border-cyan-100 bg-white p-6 text-sm text-slate-600">{t('rotation.adminRequired')}</p>}
         {resetMutation.error ? <div className="mt-5"><ErrorState message={(resetMutation.error as Error).message} /></div> : null}
       </main>
-      {pendingAction ? (
+      {canManage && pendingAction ? (
         <ConfirmationDialog
           title={t(`rotation.${pendingAction}Title`)}
           message={t(`rotation.${pendingAction}Confirm`)}

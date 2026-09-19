@@ -1,10 +1,12 @@
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useSeason } from '../context/SeasonContext'
+import { useLeague } from '../context/LeagueContext'
 
 export function ArchivedSeasonBanner() {
   const { t } = useTranslation()
   const { selectedSeason, isSelectedSeasonActive } = useSeason()
+  const { leaguePath } = useLeague()
 
   if (!selectedSeason || isSelectedSeasonActive) return null
 
@@ -13,7 +15,7 @@ export function ArchivedSeasonBanner() {
       <p className="font-semibold">{t('season.archivedBannerTitle')}</p>
       <p className="mt-1">{t('season.archivedBannerMessage', { name: selectedSeason.name })}</p>
       <Link
-        to={`/seasons/${selectedSeason.id}/recap`}
+        to={leaguePath(`/seasons/${selectedSeason.id}/recap`)}
         className="mt-2 inline-flex font-semibold text-amber-950 underline-offset-2 hover:underline"
       >
         {t('recap.bannerLink')}

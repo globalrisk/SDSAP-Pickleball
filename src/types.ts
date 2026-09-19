@@ -1,10 +1,23 @@
 export type MatchStatus = 'scheduled' | 'completed' | 'forfeit'
 export type MatchLiveStatus = 'available' | 'playing' | 'up_next'
 export type SeasonStatus = 'active' | 'archived'
+export type LeagueStatus = 'active' | 'archived'
 export type PoolPlayerStatus = 'active' | 'inactive'
+
+export interface League {
+  id: string
+  slug: string
+  name: string
+  logo_url: string | null
+  status: LeagueStatus
+  is_default: boolean
+  created_at: string
+  updated_at: string
+}
 
 export interface Season {
   id: string
+  league_id: string
   name: string
   status: SeasonStatus
   starts_at: string

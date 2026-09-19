@@ -2,13 +2,18 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import type { TournamentConnectionStatus } from './useTournamentRealtime'
 
-export function useRotationRealtime(refreshSnapshot: () => Promise<void>) {
+export function useRotationRealtime(
+  seasonId: string | undefined,
+  eventId: string | undefined,
+  refreshSnapshot: () => Promise<void>,
+) {
   const [status, setStatus] = useState<TournamentConnectionStatus>(() =>
     typeof navigator !== 'undefined' && !navigator.onLine ? 'offline' : 'connecting',
   )
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null)
 
   useEffect(() => {
+    if (!seasonId) return
     let disposed = false
     const refresh = () => {
       void refreshSnapshot()
@@ -28,10 +33,10 @@ export function useRotationRealtime(refreshSnapshot: () => Promise<void>) {
     window.addEventListener('online', handleOnline)
 
     const channel = supabase
-      .channel('rotation-current-event')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'rotation_events' }, refresh)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'rotation_players' }, refresh)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'rotation_matches' }, refresh)
+      .channel(`rotation-season-${seasonId ?? 'none'}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'rotation_events', filter: `season_id=eq.${seasonId}` }, refresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'rotation_players', filter: `event_id=eq.${eventId ?? '00000000-0000-0000-0000-000000000000'}` }, refresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'rotation_matches', filter: `event_id=eq.${eventId ?? '00000000-0000-0000-0000-000000000000'}` }, refresh)
       .subscribe((nextStatus, error) => {
         if (disposed) return
         if (nextStatus === 'SUBSCRIBED') {
@@ -53,7 +58,7 @@ export function useRotationRealtime(refreshSnapshot: () => Promise<void>) {
       window.removeEventListener('online', handleOnline)
       void supabase.removeChannel(channel)
     }
-  }, [refreshSnapshot])
+  }, [eventId, refreshSnapshot, seasonId])
 
   return { status, lastSyncedAt }
 }

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import type { LeagueHighlights } from '../lib/engagement'
 import { formatMatchDate } from '../lib/formatDate'
+import { useLeague } from '../context/LeagueContext'
 
 interface DashboardHighlightsProps {
   highlights: LeagueHighlights
@@ -10,6 +11,7 @@ interface DashboardHighlightsProps {
 
 export function DashboardHighlights({ highlights }: DashboardHighlightsProps) {
   const { t, i18n } = useTranslation()
+  const { leaguePath } = useLeague()
   const { hotStreak, closestMatch, recentUpset } = highlights
 
   if (!hotStreak && !closestMatch && !recentUpset) {
@@ -27,7 +29,7 @@ export function DashboardHighlights({ highlights }: DashboardHighlightsProps) {
             eyebrow={t('dashboard.hotStreakLabel')}
             title={
               <Link
-                to={`/players/${hotStreak.playerId}`}
+                to={leaguePath(`/players/${hotStreak.playerId}`)}
                 className="text-green-800 underline-offset-2 hover:underline"
               >
                 {hotStreak.playerName}
@@ -44,7 +46,7 @@ export function DashboardHighlights({ highlights }: DashboardHighlightsProps) {
               home: closestMatch.match.home_team.name,
               percent: closestMatch.homePercent,
             })}
-            to="/matches"
+            to={leaguePath('/matches')}
           />
         )}
         {recentUpset && (
@@ -65,7 +67,7 @@ export function DashboardHighlights({ highlights }: DashboardHighlightsProps) {
                 return label ? ` · ${label}` : ''
               })(),
             })}
-            to="/matches"
+            to={leaguePath('/matches')}
           />
         )}
       </div>

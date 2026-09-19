@@ -3,10 +3,12 @@ import { useTranslation } from 'react-i18next'
 import { ErrorState, PageHeader, SetupBanner } from '../components/Layout'
 import { SeasonRecapCard } from '../components/SeasonRecapCard'
 import { useSeasonRecap } from '../hooks/useSeasonRecap'
+import { useLeague } from '../context/LeagueContext'
 
 export function SeasonRecapPage() {
   const { seasonId } = useParams<{ seasonId: string }>()
   const { t } = useTranslation()
+  const { leaguePath } = useLeague()
   const { data: recap, isError, error, isLoading } = useSeasonRecap(seasonId)
 
   if (isError) return <ErrorState message={(error as Error).message} />
@@ -25,7 +27,7 @@ export function SeasonRecapPage() {
     <div>
       <SetupBanner />
       <div className="mb-4">
-        <Link to="/" className="text-sm text-green-700 hover:underline">
+        <Link to={leaguePath()} className="text-sm text-green-700 hover:underline">
           ← {t('recap.backHome')}
         </Link>
       </div>

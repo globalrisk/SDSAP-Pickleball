@@ -3,6 +3,7 @@ export type RotationMatchStatus = 'available' | 'playing' | 'completed'
 
 export interface RotationEvent {
   id: string
+  season_id: string
   name: string
   matches_per_player: number
   court_count: number

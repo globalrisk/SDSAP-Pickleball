@@ -8,6 +8,7 @@ import { RatingHistoryChart } from '../components/RatingHistoryChart'
 import { usePlayerProfile } from '../hooks/usePlayerProfile'
 import { formatMatchDate } from '../lib/formatDate'
 import { roundRating } from '../lib/ratings'
+import { useLeague } from '../context/LeagueContext'
 
 function formatDelta(delta: number): string {
   const rounded = roundRating(delta)
@@ -18,6 +19,7 @@ function formatDelta(delta: number): string {
 export function PlayerProfilePage() {
   const { t, i18n } = useTranslation()
   const { playerId } = useParams<{ playerId: string }>()
+  const { leaguePath } = useLeague()
   const { data: profile, isError, error, isLoading } = usePlayerProfile(playerId)
 
   if (isError) return <ErrorState message={(error as Error).message} />
@@ -64,7 +66,7 @@ export function PlayerProfilePage() {
     <div>
       <SetupBanner />
       <div className="mb-4">
-        <Link to="/rankings" className="text-sm text-green-700 hover:underline">
+        <Link to={leaguePath('/rankings')} className="text-sm text-green-700 hover:underline">
           ← {t('profile.backToRankings')}
         </Link>
       </div>

@@ -24,6 +24,13 @@ import { ArchivedSeasonBanner } from '../components/ArchivedSeasonBanner'
 import { BalancedTeamsBuilder } from '../components/BalancedTeamsBuilder'
 import { ErrorState, PageHeader, SetupBanner } from '../components/Layout'
 import { useSeason } from '../context/SeasonContext'
+import { useLeague } from '../context/LeagueContext'
+import {
+  addExistingPlayerToLeague,
+  fetchSharedPlayerIdentities,
+  updateLeagueBranding,
+  updateLeagueStatus,
+} from '../lib/leagueApi'
 import { useAssignedPoolPlayerIds, usePlayerPool } from '../hooks/usePlayerPool'
 import { useTeamsWithPlayers } from '../hooks/useTeams'
 import type { PoolPlayer, TeamWithPlayers } from '../types'
@@ -57,6 +64,80 @@ function pickNextTeamColor(usedColors: string[]): string {
 
 const selectClass =
   'min-h-11 w-full rounded-lg border border-green-200 bg-white px-3 py-2 text-base sm:text-sm'
+
+function LeagueBrandingForm() {
+  const { t } = useTranslation()
+  const queryClient = useQueryClient()
+  const { league } = useLeague()
+  const [name, setName] = useState(league.name)
+  const [logoFile, setLogoFile] = useState<File | null>(null)
+
+  useEffect(() => setName(league.name), [league.name])
+
+  const mutation = useMutation({
+    mutationFn: () => updateLeagueBranding(league.id, name, logoFile),
+    onSuccess: async () => {
+      setLogoFile(null)
+      await queryClient.invalidateQueries({ queryKey: ['leagues'] })
+    },
+  })
+  const statusMutation = useMutation({
+    mutationFn: () => updateLeagueStatus(
+      league.id,
+      league.status === 'active' ? 'archived' : 'active',
+    ),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['leagues'] })
+    },
+  })
+
+  return (
+    <section className="mb-6 rounded-xl border border-green-200 bg-white p-5 shadow-sm">
+      <h2 className="text-lg font-semibold text-green-900">{t('leagueSettings.title')}</h2>
+      <p className="mt-1 text-sm text-gray-600">{t('leagueSettings.description')}</p>
+      <form
+        className="mt-4 grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end"
+        onSubmit={(event) => {
+          event.preventDefault()
+          mutation.mutate()
+        }}
+      >
+        <div className="space-y-3">
+          <label className="block text-sm font-semibold text-gray-800">
+            {t('leagueSettings.name')}
+            <input value={name} onChange={(event) => setName(event.target.value)} className="mt-1 min-h-11 w-full rounded-lg border border-green-200 px-3" required />
+          </label>
+          <label className="block text-sm font-semibold text-gray-800">
+            {t('leagueSettings.logo')}
+            <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={(event) => setLogoFile(event.target.files?.[0] ?? null)} className="mt-1 block w-full text-sm" />
+          </label>
+        </div>
+        <button type="submit" disabled={mutation.isPending || !name.trim()} className="min-h-11 rounded-lg bg-green-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">
+          {mutation.isPending ? t('leagueSettings.saving') : t('common.save')}
+        </button>
+      </form>
+      {mutation.isSuccess ? <p className="mt-3 text-sm text-green-700" role="status">{t('leagueSettings.saved')}</p> : null}
+      {mutation.error ? <p className="mt-3 text-sm text-red-700" role="alert">{(mutation.error as Error).message}</p> : null}
+      <div className="mt-5 border-t border-gray-100 pt-4">
+        <p className="text-sm text-gray-600">
+          {league.status === 'active' ? t('leagueSettings.archiveHint') : t('leagueSettings.restoreHint')}
+        </p>
+        <button
+          type="button"
+          disabled={statusMutation.isPending}
+          onClick={() => {
+            const key = league.status === 'active' ? 'archiveConfirm' : 'restoreConfirm'
+            if (confirm(t(`leagueSettings.${key}`, { name: league.name }))) statusMutation.mutate()
+          }}
+          className="mt-3 min-h-11 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-bold text-amber-900 disabled:opacity-50"
+        >
+          {league.status === 'active' ? t('leagueSettings.archive') : t('leagueSettings.restore')}
+        </button>
+        {statusMutation.error ? <p className="mt-3 text-sm text-red-700" role="alert">{(statusMutation.error as Error).message}</p> : null}
+      </div>
+    </section>
+  )
+}
 
 function poolOptionsForSlot(
   pool: PoolPlayer[],
@@ -93,6 +174,7 @@ function PoolPlayerRow({
   onToggleStatus: (id: string, status: 'active' | 'inactive') => void
 }) {
   const { t } = useTranslation()
+  const { leaguePath } = useLeague()
   const [name, setName] = useState(player.name)
 
   useEffect(() => {
@@ -133,7 +215,7 @@ function PoolPlayerRow({
         {isAssigned ? t('pool.assigned') : t('pool.available')}
       </span>
       <span className="shrink-0 rounded-full bg-blue-100 px-2.5 py-1 text-xs font-medium text-blue-800">
-        <Link to={`/players/${player.id}`} className="hover:underline">
+        <Link to={leaguePath(`/players/${player.id}`)} className="hover:underline">
           {t('pool.ratingBadge', { rating: roundRating(player.rating) })}
         </Link>
       </span>
@@ -358,17 +440,26 @@ export function SetupPage() {
   const { t } = useTranslation()
   const [searchParams, setSearchParams] = useSearchParams()
   const queryClient = useQueryClient()
+  const { league, leaguePath } = useLeague()
   const { selectedSeason, activeSeason, isSelectedSeasonActive, setSelectedSeasonId } =
     useSeason()
   const { data: teams, isError, error } = useTeamsWithPlayers()
   const { data: pool = [], isError: poolError, error: poolQueryError } = usePlayerPool()
   const { data: assignedPoolIds = [] } = useAssignedPoolPlayerIds()
   const {
+    data: sharedPlayerIdentities = [],
+    isLoading: sharedPlayersLoading,
+    isError: sharedPlayersError,
+  } = useQuery({
+    queryKey: ['shared-player-identities'],
+    queryFn: fetchSharedPlayerIdentities,
+  })
+  const {
     data: partnershipCounts = EMPTY_PARTNERSHIP_COUNTS,
     isLoading: isPartnershipHistoryLoading,
   } = useQuery({
-    queryKey: ['partnership-counts'],
-    queryFn: fetchPartnershipCounts,
+    queryKey: ['partnership-counts', league.id],
+    queryFn: () => fetchPartnershipCounts(league.id),
   })
   const { data: activeSeasonAssignedIds = [] } = useQuery({
     queryKey: ['assigned-pool-players', activeSeason?.id],
@@ -376,8 +467,8 @@ export function SetupPage() {
     enabled: !!activeSeason,
   })
   const { data: activeSeasonMatches } = useQuery({
-    queryKey: ['matches', activeSeason?.id],
-    queryFn: () => fetchMatches(activeSeason!.id),
+    queryKey: ['matches', activeSeason?.id, league.id],
+    queryFn: () => fetchMatches(activeSeason!.id, league.id),
     enabled: !!activeSeason,
   })
   const [feedback, setFeedback] = useState<{
@@ -391,6 +482,8 @@ export function SetupPage() {
     : 'players'
   const [newPoolName, setNewPoolName] = useState('')
   const [newPoolRating, setNewPoolRating] = useState('1500')
+  const [existingPoolPlayerId, setExistingPoolPlayerId] = useState('')
+  const [existingPoolRating, setExistingPoolRating] = useState('1500')
   const [poolStatusFilter, setPoolStatusFilter] = useState<PoolStatusFilter>('active')
   const [poolSearch, setPoolSearch] = useState('')
   const [newTeam, setNewTeam] = useState({
@@ -423,6 +516,10 @@ export function SetupPage() {
       return !query || player.name.toLocaleLowerCase().includes(query)
     })
   }, [pool, poolSearch, poolStatusFilter])
+  const availableSharedPlayers = useMemo(() => {
+    const leaguePlayerIds = new Set(pool.map((player) => player.id))
+    return sharedPlayerIdentities.filter((player) => !leaguePlayerIds.has(player.id))
+  }, [pool, sharedPlayerIdentities])
   const recordedCount = (activeSeasonMatches ?? []).filter(
     (m) => m.status === 'completed' || m.status === 'forfeit',
   ).length
@@ -437,12 +534,35 @@ export function SetupPage() {
 
   const addPoolMutation = useMutation({
     mutationFn: ({ name, rating }: { name: string; rating: number }) =>
-      createPoolPlayer(name, rating),
+      createPoolPlayer(league.id, name, rating),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['player-pool'] })
       setNewPoolName('')
       setNewPoolRating('1500')
       setFeedback({ text: t('pool.added'), tone: 'ok' })
+    },
+    onError: (err: Error) =>
+      setFeedback({
+        text: t('pool.saveFailed', { message: err.message }),
+        tone: 'error',
+      }),
+  })
+
+  const addExistingPoolMutation = useMutation({
+    mutationFn: ({ playerId, rating }: { playerId: string; rating: number }) =>
+      addExistingPlayerToLeague(league.id, playerId, rating),
+    onSuccess: (_data, variables) => {
+      const playerName = sharedPlayerIdentities.find(
+        (player) => player.id === variables.playerId,
+      )?.name
+      queryClient.invalidateQueries({ queryKey: ['player-pool', league.id] })
+      queryClient.invalidateQueries({ queryKey: ['shared-player-identities'] })
+      setExistingPoolPlayerId('')
+      setExistingPoolRating('1500')
+      setFeedback({
+        text: t('pool.addedExisting', { name: playerName ?? t('pool.existingPlayer') }),
+        tone: 'ok',
+      })
     },
     onError: (err: Error) =>
       setFeedback({
@@ -471,7 +591,7 @@ export function SetupPage() {
     }: {
       id: string
       status: 'active' | 'inactive'
-    }) => updatePoolPlayerStatus(id, status),
+    }) => updatePoolPlayerStatus(league.id, id, status),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['player-pool'] })
       setFeedback({
@@ -495,7 +615,7 @@ export function SetupPage() {
   })
 
   const deletePoolMutation = useMutation({
-    mutationFn: (id: string) => deletePoolPlayer(id),
+    mutationFn: (id: string) => deletePoolPlayer(league.id, id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['player-pool'] })
       setFeedback({ text: t('pool.deleted'), tone: 'ok' })
@@ -519,7 +639,7 @@ export function SetupPage() {
   })
 
   const createSeasonMutation = useMutation({
-    mutationFn: (name: string) => createSeason(name),
+    mutationFn: (name: string) => createSeason(name, league.id),
     onSuccess: (season) => {
       invalidateSeasonData()
       setSelectedSeasonId(season.id)
@@ -616,6 +736,17 @@ export function SetupPage() {
     addPoolMutation.mutate({ name, rating })
   }
 
+  function handleAddExistingPoolPlayer(e: React.FormEvent) {
+    e.preventDefault()
+    if (!existingPoolPlayerId) return
+    const rating = Number(existingPoolRating)
+    if (!Number.isFinite(rating) || rating < 800 || rating > 2500) {
+      setFeedback({ text: t('pool.ratingInvalid'), tone: 'error' })
+      return
+    }
+    addExistingPoolMutation.mutate({ playerId: existingPoolPlayerId, rating })
+  }
+
   function handleCreateTeam(e: React.FormEvent) {
     e.preventDefault()
     if (!selectedSeason) return
@@ -668,11 +799,29 @@ export function SetupPage() {
   if (isError) return <ErrorState message={(error as Error).message} />
   if (poolError) return <ErrorState message={(poolQueryError as Error).message} />
 
+  if (league.status === 'archived') {
+    return (
+      <div>
+        <PageHeader title={t('setup.title')} subtitle={t('setup.subtitle')} />
+        <LeagueBrandingForm />
+        <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          {t('leagueSettings.archivedReadOnly')}
+        </p>
+      </div>
+    )
+  }
+
   return (
     <div>
       <SetupBanner />
       <ArchivedSeasonBanner />
-      <PageHeader title={t('setup.title')} subtitle={t('setup.subtitle')} />
+      <PageHeader
+        title={t('setup.title')}
+        subtitle={t('setup.subtitle')}
+        action={{ to: leaguePath('/admin/leagues/new'), label: t('league.create') }}
+      />
+
+      <LeagueBrandingForm />
 
       {feedback && (
         <p
@@ -715,7 +864,69 @@ export function SetupPage() {
         <h2 className="text-lg font-semibold text-green-900">{t('pool.title')}</h2>
         <p className="mt-1 text-sm text-gray-600">{t('pool.description')}</p>
 
-        <form onSubmit={handleAddPoolPlayer} className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+        <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4">
+          <h3 className="text-sm font-bold text-blue-950">{t('pool.addExistingTitle')}</h3>
+          <p className="mt-1 text-sm text-blue-800">{t('pool.addExistingDescription')}</p>
+          {sharedPlayersLoading ? (
+            <p className="mt-3 text-sm text-blue-800">{t('common.loading')}</p>
+          ) : sharedPlayersError ? (
+            <p className="mt-3 text-sm text-red-800">{t('pool.sharedPlayersLoadFailed')}</p>
+          ) : availableSharedPlayers.length === 0 ? (
+            <p className="mt-3 text-sm text-blue-800">{t('pool.noExistingAvailable')}</p>
+          ) : (
+            <form
+              onSubmit={handleAddExistingPoolPlayer}
+              className="mt-3 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end"
+            >
+              <label className="flex min-w-0 flex-1 flex-col gap-1">
+                <span className="text-xs font-medium text-blue-900">
+                  {t('pool.existingPlayer')}
+                </span>
+                <select
+                  value={existingPoolPlayerId}
+                  onChange={(event) => setExistingPoolPlayerId(event.target.value)}
+                  className={selectClass}
+                  required
+                >
+                  <option value="">{t('pool.existingPlayerPlaceholder')}</option>
+                  {availableSharedPlayers.map((player) => (
+                    <option key={player.id} value={player.id}>
+                      {player.name}
+                      {player.leagueNames.length > 0
+                        ? ` — ${player.leagueNames.join(', ')}`
+                        : ''}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex w-full flex-col gap-1 sm:w-36">
+                <span className="text-xs font-medium text-blue-900">{t('pool.ratingLabel')}</span>
+                <input
+                  type="number"
+                  min={800}
+                  max={2500}
+                  step={1}
+                  value={existingPoolRating}
+                  onChange={(event) => setExistingPoolRating(event.target.value)}
+                  className="min-h-11 w-full rounded-lg border border-blue-200 bg-white px-3 py-2 text-base sm:text-sm"
+                  required
+                />
+              </label>
+              <button
+                type="submit"
+                disabled={addExistingPoolMutation.isPending || !existingPoolPlayerId}
+                className="min-h-11 rounded-lg bg-blue-700 px-4 py-3 text-sm font-medium text-white hover:bg-blue-800 active:bg-blue-900 disabled:opacity-50 sm:py-2"
+              >
+                {addExistingPoolMutation.isPending
+                  ? t('pool.addingExisting')
+                  : t('pool.addExistingButton')}
+              </button>
+            </form>
+          )}
+        </div>
+
+        <h3 className="mt-5 text-sm font-bold text-green-950">{t('pool.addNewTitle')}</h3>
+        <form onSubmit={handleAddPoolPlayer} className="mt-2 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
           <input
             value={newPoolName}
             aria-label={t('pool.addPlaceholder')}

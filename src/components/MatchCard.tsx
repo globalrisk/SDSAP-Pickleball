@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next'
 import { RecordResultForm } from './RecordResultForm'
 import { TeamNameWithPlayers } from './TeamNameWithPlayers'
 import { useSeason } from '../context/SeasonContext'
+import { useAuth } from '../context/AuthContext'
+import { useLeague } from '../context/LeagueContext'
 import { formatMatchDate } from '../lib/formatDate'
 import { calculateMatchProbability } from '../lib/matchProbability'
 import type { MatchWithTeams } from '../types'
@@ -28,10 +30,12 @@ function StatusBadge({ status }: { status: MatchWithTeams['status'] }) {
 
 export function MatchCard({ match, showForm = true }: MatchCardProps) {
   const { t, i18n } = useTranslation()
+  const { isAdmin } = useAuth()
+  const { league } = useLeague()
   const { isSelectedSeasonActive } = useSeason()
   const [editing, setEditing] = useState(false)
   const isFinished = match.status === 'completed' || match.status === 'forfeit'
-  const canEdit = showForm && isSelectedSeasonActive
+  const canEdit = isAdmin && league.status === 'active' && showForm && isSelectedSeasonActive
   const probability = !isFinished
     ? calculateMatchProbability(match.home_team, match.away_team)
     : null

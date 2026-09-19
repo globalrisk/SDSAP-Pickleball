@@ -12,9 +12,13 @@ import { useStandings } from '../hooks/useStandings'
 import { useTeamsWithPlayers } from '../hooks/useTeams'
 import { usePlayerPool } from '../hooks/usePlayerPool'
 import { computeLeagueHighlights } from '../lib/engagement'
+import { useLeague } from '../context/LeagueContext'
+import { useAuth } from '../context/AuthContext'
 
 export function Dashboard() {
   const { t } = useTranslation()
+  const { league, leaguePath } = useLeague()
+  const { isAdmin } = useAuth()
   const { selectedSeason, isSelectedSeasonActive } = useSeason()
   const { standings, isError, error } = useStandings()
   const { data: matches } = useMatches()
@@ -60,12 +64,12 @@ export function Dashboard() {
         })}
         action={
           isSelectedSeasonActive
-            ? { label: t('dashboard.liveMode'), to: '/live' }
+            ? { label: t('dashboard.liveMode'), to: leaguePath('/live') }
             : undefined
         }
       />
 
-      {setupIncomplete ? (
+      {setupIncomplete && isAdmin && league.status === 'active' ? (
         <section className="mb-8 overflow-hidden rounded-2xl border border-green-300 bg-white shadow-sm">
           <div className="bg-gradient-to-r from-green-800 to-emerald-600 px-5 py-5 text-white sm:px-6">
             <p className="text-xs font-bold uppercase tracking-wider text-green-100">
@@ -80,21 +84,21 @@ export function Dashboard() {
               done={poolPlayerCount >= 2}
               title={t('dashboard.stepPlayers')}
               detail={t('dashboard.stepPlayersDetail')}
-              to="/setup?section=players"
+              to={leaguePath('/setup?section=players')}
             />
             <SetupStep
               number={2}
               done={teamCount >= 2}
               title={t('dashboard.stepTeams')}
               detail={t('dashboard.stepTeamsDetail')}
-              to="/setup?section=teams"
+              to={leaguePath('/setup?section=teams')}
             />
             <SetupStep
               number={3}
               done={allMatches.length > 0}
               title={t('dashboard.stepSchedule')}
               detail={t('dashboard.stepScheduleDetail')}
-              to="/matches"
+              to={leaguePath('/matches')}
             />
           </ol>
         </section>
@@ -105,7 +109,7 @@ export function Dashboard() {
           <p className="font-semibold">{t('recap.dashboardTitle')}</p>
           <p className="mt-1">{t('recap.dashboardMessage')}</p>
           <Link
-            to={`/seasons/${selectedSeason.id}/recap`}
+            to={leaguePath(`/seasons/${selectedSeason.id}/recap`)}
             className="mt-2 inline-flex font-semibold text-green-800 underline-offset-2 hover:underline"
           >
             {t('recap.dashboardLink')}
@@ -120,7 +124,7 @@ export function Dashboard() {
           <h2 className="text-lg font-semibold text-green-900">
             {t('dashboard.standings')}
           </h2>
-          <Link to="/standings" className="text-sm text-green-700 hover:underline">
+          <Link to={leaguePath('/standings')} className="text-sm text-green-700 hover:underline">
             {t('common.viewAll')}
           </Link>
         </div>

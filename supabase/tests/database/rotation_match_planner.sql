@@ -1,11 +1,15 @@
 -- Integration checks for the standalone rotation planner.
--- Every fixture is rolled back, so the singleton live event is not changed.
+-- Every fixture is rolled back, so league data is not changed.
 
 begin;
 
--- Match the browser/mobile Data API execution context. This catches role-specific
--- guards such as Supabase safeupdate, which do not affect the database owner.
-set local role anon;
+-- Match an authenticated administrator Data API request.
+set local role authenticated;
+select set_config(
+  'request.jwt.claims',
+  '{"app_metadata":{"role":"admin"}}',
+  true
+);
 
 do $$
 declare
@@ -13,8 +17,8 @@ declare
 begin
   foreach v_table in array array['rotation_events', 'rotation_players', 'rotation_matches']
   loop
-    if not has_table_privilege('anon', 'public.' || v_table, 'select,insert,update,delete') then
-      raise exception 'anon grants are incomplete for %', v_table;
+    if not has_table_privilege('authenticated', 'public.' || v_table, 'select,insert,update,delete') then
+      raise exception 'authenticated grants are incomplete for %', v_table;
     end if;
     if not exists (
       select 1
@@ -30,8 +34,19 @@ begin
 end;
 $$;
 
+insert into leagues (id, slug, name)
+values ('40000000-0000-4000-8000-000000000001', 'planner-test', 'Planner test');
+insert into seasons (id, league_id, name, status)
+values (
+  '50000000-0000-4000-8000-000000000001',
+  '40000000-0000-4000-8000-000000000001',
+  'Planner season',
+  'active'
+);
+
 select replace_rotation_event_atomic(
   '10000000-0000-0000-0000-000000000001'::uuid,
+  '50000000-0000-4000-8000-000000000001'::uuid,
   'Database verification',
   2,
   2,
@@ -56,10 +71,16 @@ select replace_rotation_event_atomic(
 
 do $$
 begin
-  if (select count(*) from rotation_players) <> 8 then
+  if (
+    select count(*) from rotation_players
+    where event_id = '10000000-0000-0000-0000-000000000001'
+  ) <> 8 then
     raise exception 'schedule did not create eight players';
   end if;
-  if (select count(*) from rotation_matches) <> 4 then
+  if (
+    select count(*) from rotation_matches
+    where event_id = '10000000-0000-0000-0000-000000000001'
+  ) <> 4 then
     raise exception 'schedule did not create four matches';
   end if;
 end;
@@ -71,6 +92,7 @@ begin
   begin
     perform replace_rotation_event_atomic(
       '11000000-0000-0000-0000-000000000001'::uuid,
+      '50000000-0000-4000-8000-000000000001'::uuid,
       'Invalid schedule',
       2,
       1,
@@ -159,7 +181,13 @@ select reset_rotation_event_atomic('10000000-0000-0000-0000-000000000001');
 
 do $$
 begin
-  if exists (select 1 from rotation_players) or exists (select 1 from rotation_matches) then
+  if exists (
+    select 1 from rotation_players
+    where event_id = '10000000-0000-0000-0000-000000000001'
+  ) or exists (
+    select 1 from rotation_matches
+    where event_id = '10000000-0000-0000-0000-000000000001'
+  ) then
     raise exception 'rotation cascade delete left child rows';
   end if;
 end;

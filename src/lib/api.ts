@@ -42,20 +42,51 @@ const MATCH_SELECT = `
   winner:teams!matches_winner_team_id_fkey(id, name, color)
 `
 
-export async function fetchSeasons(): Promise<Season[]> {
+type LeaguePlayerRow = {
+  pool_player_id: string
+  status: PoolPlayer['status']
+  rating: number
+  rating_deviation: number
+  volatility: number
+  initial_rating: number
+  created_at: string
+  player_pool: { id: string; name: string; created_at: string } | { id: string; name: string; created_at: string }[]
+}
+
+function mapLeaguePlayer(row: LeaguePlayerRow): PoolPlayer {
+  const identity = Array.isArray(row.player_pool) ? row.player_pool[0] : row.player_pool
+  return {
+    id: row.pool_player_id,
+    name: identity?.name ?? '',
+    status: row.status,
+    rating: row.rating,
+    rating_deviation: row.rating_deviation,
+    volatility: row.volatility,
+    initial_rating: row.initial_rating,
+    created_at: identity?.created_at ?? row.created_at,
+  }
+}
+
+function joinedOne<T>(value: T | T[] | null): T | null {
+  return Array.isArray(value) ? (value[0] ?? null) : value
+}
+
+export async function fetchSeasons(leagueId: string): Promise<Season[]> {
   const { data, error } = await supabase
     .from('seasons')
     .select('*')
+    .eq('league_id', leagueId)
     .order('starts_at', { ascending: false })
 
   if (error) throw error
   return data ?? []
 }
 
-export async function fetchActiveSeason(): Promise<Season | null> {
+export async function fetchActiveSeason(leagueId: string): Promise<Season | null> {
   const { data, error } = await supabase
     .from('seasons')
     .select('*')
+    .eq('league_id', leagueId)
     .eq('status', 'active')
     .maybeSingle()
 
@@ -63,10 +94,10 @@ export async function fetchActiveSeason(): Promise<Season | null> {
   return data
 }
 
-export async function createSeason(name: string): Promise<Season> {
+export async function createSeason(name: string, leagueId: string): Promise<Season> {
   const { data, error } = await supabase
     .from('seasons')
-    .insert({ name, status: 'active' })
+    .insert({ name, league_id: leagueId, status: 'active' })
     .select()
     .single()
 
@@ -86,13 +117,18 @@ export async function archiveSeason(seasonId: string): Promise<Season> {
   return data
 }
 
-export async function fetchPlayerRankings(): Promise<PlayerRankingRow[]> {
+export async function fetchPlayerRankings(leagueId: string): Promise<PlayerRankingRow[]> {
   const [poolResult, historyResult, titles] = await Promise.all([
     supabase
-      .from('player_pool')
-      .select('id, name, status, rating, rating_deviation, volatility'),
-    supabase.from('rating_history').select('pool_player_id, match_id').not('match_id', 'is', null),
-    fetchPlayerTitlesMap(),
+      .from('league_players')
+      .select('pool_player_id, status, rating, rating_deviation, volatility, initial_rating, created_at, player_pool!inner(id, name, created_at)')
+      .eq('league_id', leagueId),
+    supabase
+      .from('rating_history')
+      .select('pool_player_id, match_id')
+      .eq('league_id', leagueId)
+      .not('match_id', 'is', null),
+    fetchPlayerTitlesMap(leagueId),
   ])
   if (poolResult.error) throw poolResult.error
   if (historyResult.error) throw historyResult.error
@@ -100,7 +136,8 @@ export async function fetchPlayerRankings(): Promise<PlayerRankingRow[]> {
   for (const row of historyResult.data ?? []) {
     matchCounts.set(row.pool_player_id, (matchCounts.get(row.pool_player_id) ?? 0) + 1)
   }
-  const rows = buildRankingRows(poolResult.data ?? [], matchCounts)
+  const pool = ((poolResult.data ?? []) as unknown as LeaguePlayerRow[]).map(mapLeaguePlayer)
+  const rows = buildRankingRows(pool, matchCounts)
   return rows.map((row) => ({
     ...row,
     title: titles.get(row.id) ?? null,
@@ -112,13 +149,14 @@ function toPublicTitle(title: AssignedPlayerTitle | undefined): PlayerTitle | nu
   return { id: title.id, whyParams: title.whyParams }
 }
 
-export async function fetchPlayerTitlesMap(): Promise<Map<string, PlayerTitle>> {
+export async function fetchPlayerTitlesMap(leagueId: string): Promise<Map<string, PlayerTitle>> {
   const { data: pool, error: poolError } = await supabase
-    .from('player_pool')
-    .select('id, name, rating, rating_deviation, initial_rating')
+    .from('league_players')
+    .select('pool_player_id, status, rating, rating_deviation, volatility, initial_rating, created_at, player_pool!inner(id, name, created_at)')
+    .eq('league_id', leagueId)
   if (poolError) throw poolError
 
-  const poolRows = pool ?? []
+  const poolRows = ((pool ?? []) as unknown as LeaguePlayerRow[]).map(mapLeaguePlayer)
   if (poolRows.length === 0) return new Map()
 
   const ratingById = new Map(
@@ -132,24 +170,28 @@ export async function fetchPlayerTitlesMap(): Promise<Map<string, PlayerTitle>> 
   const { data: historyRows, error: historyError } = await supabase
     .from('rating_history')
     .select('id, pool_player_id, match_id, rating, rating_deviation, recorded_at, sequence')
+    .eq('league_id', leagueId)
     .order('sequence')
   if (historyError) throw historyError
 
   const { data: matches, error: matchError } = await supabase
     .from('matches')
     .select(
-      'id, season_id, status, winner_team_id, home_team_id, away_team_id, home_score, away_score, home_pool_player_ids, away_pool_player_ids, result_recorded_at',
+      'id, season_id, status, winner_team_id, home_team_id, away_team_id, home_score, away_score, home_pool_player_ids, away_pool_player_ids, result_recorded_at, seasons!inner(league_id)',
     )
+    .eq('seasons.league_id', leagueId)
   if (matchError) throw matchError
 
   const { data: teams, error: teamsError } = await supabase
     .from('teams')
-    .select('id, season_id, name, color, created_at, players(id, name, pool_player_id, team_id, created_at)')
+    .select('id, season_id, name, color, created_at, players(id, name, pool_player_id, team_id, is_present, created_at), seasons!inner(league_id)')
+    .eq('seasons.league_id', leagueId)
   if (teamsError) throw teamsError
 
   const { data: seasons, error: seasonsError } = await supabase
     .from('seasons')
     .select('id, status')
+    .eq('league_id', leagueId)
   if (seasonsError) throw seasonsError
 
   const teamsBySeason = new Map<string, TeamWithPlayers[]>()
@@ -160,14 +202,14 @@ export async function fetchPlayerTitlesMap(): Promise<Map<string, PlayerTitle>> 
       players: [...(team.players ?? [])].sort((a, b) =>
         a.created_at.localeCompare(b.created_at),
       ),
-    } as TeamWithPlayers)
+    } as unknown as TeamWithPlayers)
     teamsBySeason.set(team.season_id, list)
   }
 
   const matchesBySeason = new Map<string, MatchWithTeams[]>()
   for (const match of matches ?? []) {
     const list = matchesBySeason.get(match.season_id) ?? []
-    list.push(match as MatchWithTeams)
+    list.push(match as unknown as MatchWithTeams)
     matchesBySeason.set(match.season_id, list)
   }
 
@@ -322,15 +364,20 @@ export async function fetchPlayerTitlesMap(): Promise<Map<string, PlayerTitle>> 
   return publicMap
 }
 
-export async function fetchPlayerProfile(poolPlayerId: string): Promise<PlayerProfile> {
-  const { data: player, error: playerError } = await supabase
-    .from('player_pool')
-    .select('*')
-    .eq('id', poolPlayerId)
+export async function fetchPlayerProfile(
+  leagueId: string,
+  poolPlayerId: string,
+): Promise<PlayerProfile> {
+  const { data: playerRow, error: playerError } = await supabase
+    .from('league_players')
+    .select('pool_player_id, status, rating, rating_deviation, volatility, initial_rating, created_at, player_pool!inner(id, name, created_at)')
+    .eq('league_id', leagueId)
+    .eq('pool_player_id', poolPlayerId)
     .single()
   if (playerError) throw playerError
+  const player = mapLeaguePlayer(playerRow as unknown as LeaguePlayerRow)
 
-  const rankings = await fetchPlayerRankings()
+  const rankings = await fetchPlayerRankings(leagueId)
   const ranking = rankings.find((row) => row.id === poolPlayerId)
   const rank = ranking?.rank ?? null
   const title = ranking?.title ?? null
@@ -338,6 +385,7 @@ export async function fetchPlayerProfile(poolPlayerId: string): Promise<PlayerPr
   const { data: historyRows, error: historyError } = await supabase
     .from('rating_history')
     .select('id, match_id, rating, rating_deviation, recorded_at, sequence')
+    .eq('league_id', leagueId)
     .eq('pool_player_id', poolPlayerId)
     .order('sequence')
   if (historyError) throw historyError
@@ -351,8 +399,9 @@ export async function fetchPlayerProfile(poolPlayerId: string): Promise<PlayerPr
   const { data: resultMatches, error: resultError } = await supabase
     .from('matches')
     .select(
-      'id, season_id, round_number, winner_team_id, home_team_id, away_team_id, home_score, away_score, home_pool_player_ids, away_pool_player_ids, result_recorded_at, seasons(name, starts_at)',
+      'id, season_id, round_number, winner_team_id, home_team_id, away_team_id, home_score, away_score, home_pool_player_ids, away_pool_player_ids, result_recorded_at, seasons!inner(name, starts_at, league_id)',
     )
+    .eq('seasons.league_id', leagueId)
     .eq('status', 'completed')
     .order('result_recorded_at')
   if (resultError) throw resultError
@@ -611,6 +660,7 @@ interface PendingRatingMatch {
 }
 
 async function fetchCompletedMatchesForRatings(
+  leagueId: string,
   pending?: PendingRatingMatch,
 ): Promise<FinishedMatchForRatings[]> {
   const { data, error } = await supabase
@@ -628,7 +678,7 @@ async function fetchCompletedMatchesForRatings(
       away_score,
       home_pool_player_ids,
       away_pool_player_ids,
-      seasons(starts_at),
+      seasons!inner(starts_at, league_id),
       home_team:teams!matches_home_team_id_fkey(
         players(pool_player_id)
       ),
@@ -636,6 +686,7 @@ async function fetchCompletedMatchesForRatings(
         players(pool_player_id)
       )
     `)
+    .eq('seasons.league_id', leagueId)
 
   if (error) throw error
 
@@ -727,11 +778,17 @@ async function fetchSeasonPoolPlayerIds(seasonId: string): Promise<string[]> {
   return [...new Set((data ?? []).map((row) => row.pool_player_id))]
 }
 
-async function buildRatingsReplacement(pending?: PendingRatingMatch) {
+async function buildRatingsReplacement(
+  leagueId: string,
+  pending?: PendingRatingMatch,
+) {
   const [{ data: pool, error: poolError }, finishedMatches, revisionResult] = await Promise.all([
-    supabase.from('player_pool').select('id, initial_rating'),
-    fetchCompletedMatchesForRatings(pending),
-    fetchRatingRevision(),
+    supabase
+      .from('league_players')
+      .select('pool_player_id, initial_rating')
+      .eq('league_id', leagueId),
+    fetchCompletedMatchesForRatings(leagueId, pending),
+    fetchRatingRevision(leagueId),
   ])
   if (poolError) throw poolError
   const seasonIds = [...new Set(finishedMatches.map((match) => match.season_id))]
@@ -744,7 +801,7 @@ async function buildRatingsReplacement(pending?: PendingRatingMatch) {
   const now = new Date().toISOString()
   return {
     ...replayRatings({
-      pool: pool ?? [],
+      pool: (pool ?? []).map((row) => ({ id: row.pool_player_id, initial_rating: row.initial_rating })),
       finishedMatches,
       seasonRosters,
       recordedAt: now,
@@ -753,11 +810,11 @@ async function buildRatingsReplacement(pending?: PendingRatingMatch) {
   }
 }
 
-async function fetchRatingRevision(): Promise<number | null> {
+async function fetchRatingRevision(leagueId: string): Promise<number | null> {
   const { data, error } = await supabase
     .from('rating_state')
     .select('revision')
-    .eq('id', true)
+    .eq('league_id', leagueId)
     .single()
   if (!error) return data.revision as number
   if (
@@ -770,10 +827,11 @@ async function fetchRatingRevision(): Promise<number | null> {
   throw error
 }
 
-export async function recomputeAllRatings(): Promise<void> {
+export async function recomputeAllRatings(leagueId: string): Promise<void> {
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    const { historyRows, playerRatings, expectedRevision } = await buildRatingsReplacement()
+    const { historyRows, playerRatings, expectedRevision } = await buildRatingsReplacement(leagueId)
     const rpcArgs = {
+      p_league_id: leagueId,
       p_history_rows: historyRows,
       p_player_ratings: playerRatings,
       ...(expectedRevision == null ? {} : { p_expected_revision: expectedRevision }),
@@ -800,13 +858,15 @@ function isRatingRevisionConflict(error: { code?: string; message?: string }): b
 }
 
 async function saveMatchAndRatingsAtomic(
+  leagueId: string,
   match: AtomicMatchSave,
   pending: PendingRatingMatch,
 ): Promise<void> {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const { historyRows, playerRatings, expectedRevision } =
-      await buildRatingsReplacement(pending)
+      await buildRatingsReplacement(leagueId, pending)
     const rpcArgs = {
+      p_league_id: leagueId,
       p_match_id: match.matchId,
       p_status: match.status,
       p_winner_team_id: match.winnerTeamId,
@@ -825,17 +885,20 @@ async function saveMatchAndRatingsAtomic(
   }
 }
 
-export async function fetchPlayerPool(): Promise<PoolPlayer[]> {
+export async function fetchPlayerPool(leagueId: string): Promise<PoolPlayer[]> {
   const { data, error } = await supabase
-    .from('player_pool')
-    .select('*')
-    .order('name')
+    .from('league_players')
+    .select('pool_player_id, status, rating, rating_deviation, volatility, initial_rating, created_at, player_pool!inner(id, name, created_at)')
+    .eq('league_id', leagueId)
 
   if (error) throw error
-  return data ?? []
+  return ((data ?? []) as unknown as LeaguePlayerRow[])
+    .map(mapLeaguePlayer)
+    .sort((a, b) => a.name.localeCompare(b.name))
 }
 
 export async function createPoolPlayer(
+  leagueId: string,
   name: string,
   initialRating: number = TRUESKILL_DEFAULTS.rating,
 ): Promise<PoolPlayer> {
@@ -858,15 +921,28 @@ export async function createPoolPlayer(
 
   if (error) throw error
 
+  const { error: membershipError } = await supabase.from('league_players').insert({
+    league_id: leagueId,
+    pool_player_id: data.id,
+    status: 'active',
+    rating,
+    initial_rating: rating,
+    rating_deviation: TRUESKILL_DEFAULTS.rd,
+    volatility: TRUESKILL_DEFAULTS.volatility,
+  })
+  if (membershipError) throw membershipError
+
   const { data: maxSeqRows, error: seqError } = await supabase
     .from('rating_history')
     .select('sequence')
+    .eq('league_id', leagueId)
     .order('sequence', { ascending: false })
     .limit(1)
   if (seqError) throw seqError
 
   const nextSequence = ((maxSeqRows?.[0]?.sequence as number | undefined) ?? -1) + 1
   const { error: historyError } = await supabase.from('rating_history').insert({
+    league_id: leagueId,
     pool_player_id: data.id,
     match_id: null,
     rating,
@@ -876,7 +952,14 @@ export async function createPoolPlayer(
   })
   if (historyError) throw historyError
 
-  return data
+  return {
+    ...data,
+    status: 'active',
+    rating,
+    initial_rating: rating,
+    rating_deviation: TRUESKILL_DEFAULTS.rd,
+    volatility: TRUESKILL_DEFAULTS.volatility,
+  }
 }
 
 export async function updatePoolPlayer(id: string, name: string): Promise<void> {
@@ -889,6 +972,7 @@ export async function updatePoolPlayer(id: string, name: string): Promise<void> 
 }
 
 export async function updatePoolPlayerStatus(
+  leagueId: string,
   id: string,
   status: 'active' | 'inactive',
 ): Promise<void> {
@@ -896,6 +980,7 @@ export async function updatePoolPlayerStatus(
     const { data: activeSeasons, error: seasonError } = await supabase
       .from('seasons')
       .select('id')
+      .eq('league_id', leagueId)
       .eq('status', 'active')
     if (seasonError) throw seasonError
 
@@ -917,25 +1002,40 @@ export async function updatePoolPlayerStatus(
   }
 
   const { error } = await supabase
-    .from('player_pool')
+    .from('league_players')
     .update({ status })
-    .eq('id', id)
+    .eq('league_id', leagueId)
+    .eq('pool_player_id', id)
 
   if (error) throw error
 }
 
-export async function deletePoolPlayer(id: string): Promise<void> {
-  const { count, error: countError } = await supabase
-    .from('players')
-    .select('id', { count: 'exact', head: true })
-    .eq('pool_player_id', id)
+export async function deletePoolPlayer(leagueId: string, id: string): Promise<void> {
+  const { data: leagueSeasons, error: seasonsError } = await supabase
+    .from('seasons')
+    .select('id')
+    .eq('league_id', leagueId)
+  if (seasonsError) throw seasonsError
+  const seasonIds = (leagueSeasons ?? []).map((season) => season.id)
 
-  if (countError) throw countError
-  if ((count ?? 0) > 0) {
-    throw new Error('Player is assigned to a team and cannot be deleted')
+  if (seasonIds.length > 0) {
+    const { count, error: countError } = await supabase
+      .from('players')
+      .select('id', { count: 'exact', head: true })
+      .eq('pool_player_id', id)
+      .in('season_id', seasonIds)
+
+    if (countError) throw countError
+    if ((count ?? 0) > 0) {
+      throw new Error('Player is assigned to a team and cannot be deleted')
+    }
   }
 
-  const { error } = await supabase.from('player_pool').delete().eq('id', id)
+  const { error } = await supabase
+    .from('league_players')
+    .delete()
+    .eq('league_id', leagueId)
+    .eq('pool_player_id', id)
   if (error) throw error
 }
 
@@ -949,18 +1049,30 @@ export async function fetchAssignedPoolPlayerIds(seasonId: string): Promise<stri
   return (data ?? []).map((row) => row.pool_player_id)
 }
 
-async function loadPoolPlayersByIds(ids: string[]): Promise<Map<string, PoolPlayer>> {
+async function loadPoolPlayersByIds(
+  seasonId: string,
+  ids: string[],
+): Promise<Map<string, PoolPlayer>> {
   const uniqueIds = [...new Set(ids)]
   if (uniqueIds.length === 0) return new Map()
 
+  const { data: season, error: seasonError } = await supabase
+    .from('seasons')
+    .select('league_id')
+    .eq('id', seasonId)
+    .single()
+  if (seasonError) throw seasonError
+
   const { data, error } = await supabase
-    .from('player_pool')
-    .select('*')
-    .in('id', uniqueIds)
+    .from('league_players')
+    .select('pool_player_id, status, rating, rating_deviation, volatility, initial_rating, created_at, player_pool!inner(id, name, created_at)')
+    .eq('league_id', season.league_id)
+    .in('pool_player_id', uniqueIds)
 
   if (error) throw error
 
-  return new Map((data ?? []).map((player) => [player.id, player]))
+  const players = ((data ?? []) as unknown as LeaguePlayerRow[]).map(mapLeaguePlayer)
+  return new Map(players.map((player) => [player.id, player]))
 }
 
 async function assertPoolPlayersAvailable(
@@ -976,7 +1088,7 @@ async function assertPoolPlayersAvailable(
     throw new Error('Team players must be different people')
   }
 
-  const poolById = await loadPoolPlayersByIds(poolPlayerIds)
+  const poolById = await loadPoolPlayersByIds(seasonId, poolPlayerIds)
   for (const id of poolPlayerIds) {
     const player = poolById.get(id)
     if (!player) {
@@ -1014,10 +1126,19 @@ export async function fetchTeams(seasonId: string): Promise<Team[]> {
   return data ?? []
 }
 
-export async function fetchPartnershipCounts(): Promise<Map<string, number>> {
+export async function fetchPartnershipCounts(leagueId: string): Promise<Map<string, number>> {
+  const { data: seasons, error: seasonsError } = await supabase
+    .from('seasons')
+    .select('id')
+    .eq('league_id', leagueId)
+  if (seasonsError) throw seasonsError
+  const seasonIds = (seasons ?? []).map((season) => season.id)
+  if (seasonIds.length === 0) return new Map()
+
   const { data, error } = await supabase
     .from('players')
     .select('team_id, pool_player_id')
+    .in('season_id', seasonIds)
     .order('team_id')
     .order('created_at')
   if (error) throw error
@@ -1053,7 +1174,10 @@ export async function fetchTeamsWithPlayers(seasonId: string): Promise<TeamWithP
   }))
 }
 
-export async function fetchMatches(seasonId: string): Promise<MatchWithTeams[]> {
+export async function fetchMatches(
+  seasonId: string,
+  leagueId: string,
+): Promise<MatchWithTeams[]> {
   const [matchesResult, ratingsResult] = await Promise.all([
     supabase
       .from('matches')
@@ -1061,7 +1185,10 @@ export async function fetchMatches(seasonId: string): Promise<MatchWithTeams[]> 
       .eq('season_id', seasonId)
       .order('result_recorded_at', { ascending: false, nullsFirst: true })
       .order('id'),
-    supabase.from('player_pool').select('id, rating, rating_deviation'),
+    supabase
+      .from('league_players')
+      .select('pool_player_id, rating, rating_deviation')
+      .eq('league_id', leagueId),
   ])
 
   if (matchesResult.error) throw matchesResult.error
@@ -1069,7 +1196,7 @@ export async function fetchMatches(seasonId: string): Promise<MatchWithTeams[]> 
 
   const ratings = new Map(
     (ratingsResult.data ?? []).map((player) => [
-      player.id,
+      player.pool_player_id,
       { rating: player.rating, ratingDeviation: player.rating_deviation },
     ]),
   )
@@ -1096,21 +1223,26 @@ export async function fetchMatches(seasonId: string): Promise<MatchWithTeams[]> 
   }))
 }
 
-export async function fetchSeasonRecap(seasonId: string): Promise<SeasonRecap> {
+export async function fetchSeasonRecap(
+  seasonId: string,
+  leagueId: string,
+): Promise<SeasonRecap> {
   const { data: season, error: seasonError } = await supabase
     .from('seasons')
     .select('*')
     .eq('id', seasonId)
+    .eq('league_id', leagueId)
     .single()
   if (seasonError) throw seasonError
 
   const [teams, matches, poolNames, historyResult] = await Promise.all([
     fetchTeamsWithPlayers(seasonId),
-    fetchMatches(seasonId),
+    fetchMatches(seasonId, leagueId),
     supabase.from('player_pool').select('id, name'),
     supabase
       .from('rating_history')
       .select('pool_player_id, match_id, rating, rating_deviation, sequence')
+      .eq('league_id', leagueId)
       .order('sequence'),
   ])
 
@@ -1133,6 +1265,7 @@ export async function fetchSeasonRecap(seasonId: string): Promise<SeasonRecap> {
   const { data: fullHistory, error: fullHistoryError } = await supabase
     .from('rating_history')
     .select('pool_player_id, match_id, rating, rating_deviation, sequence')
+    .eq('league_id', leagueId)
     .in('pool_player_id', [...rosterIds])
     .order('sequence')
   if (fullHistoryError) throw fullHistoryError
@@ -1198,11 +1331,13 @@ export async function recordResult(
   const { data: match, error: matchError } = await supabase
     .from('matches')
     .select(
-      'home_team_id, away_team_id, home_pool_player_ids, away_pool_player_ids, result_recorded_at',
+      'home_team_id, away_team_id, home_pool_player_ids, away_pool_player_ids, result_recorded_at, seasons!inner(league_id)',
     )
     .eq('id', matchId)
     .single()
   if (matchError) throw matchError
+  const leagueId = joinedOne(match.seasons as { league_id: string } | { league_id: string }[])?.league_id
+  if (!leagueId) throw new Error('Match league was not found')
 
   validateMatchResult({
     homeTeamId: match.home_team_id,
@@ -1232,6 +1367,7 @@ export async function recordResult(
     resultRecordedAt,
   }
   await saveMatchAndRatingsAtomic(
+    leagueId,
     {
       matchId,
       status: 'completed',
@@ -1255,11 +1391,13 @@ export async function recordForfeit(
   const { data: match, error: matchError } = await supabase
     .from('matches')
     .select(
-      'home_team_id, away_team_id, home_pool_player_ids, away_pool_player_ids, result_recorded_at',
+      'home_team_id, away_team_id, home_pool_player_ids, away_pool_player_ids, result_recorded_at, seasons!inner(league_id)',
     )
     .eq('id', matchId)
     .single()
   if (matchError) throw matchError
+  const leagueId = joinedOne(match.seasons as { league_id: string } | { league_id: string }[])?.league_id
+  if (!leagueId) throw new Error('Match league was not found')
 
   if (match.home_team_id !== homeTeamId || match.away_team_id !== awayTeamId) {
     throw new Error('Match teams changed; refresh and try again')
@@ -1278,6 +1416,7 @@ export async function recordForfeit(
 
   const resultRecordedAt = match.result_recorded_at ?? new Date().toISOString()
   await saveMatchAndRatingsAtomic(
+    leagueId,
     {
       matchId,
       status: 'forfeit',
@@ -1293,7 +1432,19 @@ export async function recordForfeit(
 }
 
 export async function revertMatchToScheduled(matchId: string): Promise<void> {
+  const { data: matchRow, error } = await supabase
+    .from('matches')
+    .select('seasons!inner(league_id)')
+    .eq('id', matchId)
+    .single()
+  if (error) throw error
+  const leagueId = joinedOne(
+    matchRow.seasons as { league_id: string } | { league_id: string }[],
+  )?.league_id
+  if (!leagueId) throw new Error('Match league was not found')
+
   await saveMatchAndRatingsAtomic(
+    leagueId,
     {
       matchId,
       status: 'scheduled',

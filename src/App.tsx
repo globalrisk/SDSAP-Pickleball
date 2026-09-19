@@ -3,7 +3,10 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { GlobalLoadingOverlay } from './components/GlobalLoadingOverlay'
 import { LanguageSwitcher } from './components/LanguageSwitcher'
+import { LeagueSelector } from './components/LeagueSelector'
 import { SeasonSelector } from './components/SeasonSelector'
+import { useAuth } from './context/AuthContext'
+import { useLeague } from './context/LeagueContext'
 
 const navItems = [
   { to: '/', labelKey: 'nav.home', desktopKey: 'nav.dashboard', end: true },
@@ -14,9 +17,6 @@ const navItems = [
   { to: '/match-planner', labelKey: 'nav.matchPlanner', desktopKey: 'nav.matchPlanner' },
   { to: '/setup', labelKey: 'nav.setup', desktopKey: 'nav.setup' },
 ] as const
-
-const mobilePrimaryItems = navItems.slice(0, 4)
-const mobileMoreItems = navItems.slice(4)
 
 function navClassName(isActive: boolean, mobile = false) {
   const base = mobile
@@ -31,32 +31,58 @@ function navClassName(isActive: boolean, mobile = false) {
 export function AppLayout() {
   const { t } = useTranslation()
   const location = useLocation()
+  const { league, leaguePath } = useLeague()
+  const { isAdmin, signOut } = useAuth()
   const [moreOpen, setMoreOpen] = useState(false)
-  const moreActive = mobileMoreItems.some(({ to }) => location.pathname.startsWith(to))
+  const visibleNavItems = isAdmin ? navItems : navItems.filter((item) => item.to !== '/setup')
+  const mobilePrimaryItems = visibleNavItems.slice(0, 4)
+  const mobileMoreItems = visibleNavItems.slice(4)
+  const moreActive = mobileMoreItems.some(({ to }) => location.pathname.startsWith(leaguePath(to)))
 
   useEffect(() => {
     setMoreOpen(false)
   }, [location.pathname])
+
+  useEffect(() => {
+    document.title = `${league.name} · Pickleball`
+  }, [league.name])
 
   return (
     <div className="min-h-dvh bg-gradient-to-b from-green-50 to-green-100">
       <GlobalLoadingOverlay />
       <header className="sticky top-0 z-20 border-b border-green-200 bg-white/90 backdrop-blur supports-[backdrop-filter]:bg-white/80">
         <div className="mx-auto max-w-5xl px-4 sm:px-6">
-          <div className="flex h-12 items-center justify-between gap-3 sm:h-14">
-            <span className="text-base font-bold text-green-800 sm:text-lg">
-              {t('app.title')}
-            </span>
-            <div className="flex items-center gap-2">
+          <div className="flex min-h-14 items-center justify-between gap-3 py-2">
+            <div className="flex min-w-0 items-center gap-2">
+              {league.logo_url ? (
+                <img src={league.logo_url} alt="" className="h-9 w-9 shrink-0 rounded-xl object-cover" />
+              ) : (
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-green-700 text-sm font-black text-white" aria-hidden="true">
+                  {league.name.slice(0, 2).toUpperCase()}
+                </span>
+              )}
+              <span className="truncate text-base font-bold text-green-800 sm:text-lg">{league.name}</span>
+            </div>
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <LeagueSelector />
               <SeasonSelector />
               <LanguageSwitcher />
+              {isAdmin ? (
+                <button type="button" onClick={() => void signOut()} className="hidden min-h-9 rounded-lg border border-green-200 px-2 text-xs font-bold text-green-800 sm:inline-flex sm:items-center">
+                  {t('auth.signOut')}
+                </button>
+              ) : (
+                <NavLink to={leaguePath('/login')} className="hidden min-h-9 items-center rounded-lg border border-green-200 px-2 text-xs font-bold text-green-800 sm:inline-flex">
+                  {t('auth.admin')}
+                </NavLink>
+              )}
             </div>
           </div>
           <nav className="hidden gap-1 overflow-x-auto pb-3 md:flex">
-            {navItems.map(({ to, labelKey, desktopKey, ...rest }) => (
+            {visibleNavItems.map(({ to, labelKey, desktopKey, ...rest }) => (
               <NavLink
                 key={to}
-                to={to}
+                to={leaguePath(to)}
                 end={'end' in rest ? rest.end : undefined}
                 className={({ isActive }) => navClassName(isActive)}
               >
@@ -76,7 +102,7 @@ export function AppLayout() {
           {mobilePrimaryItems.map(({ to, labelKey, ...rest }) => (
             <NavLink
               key={to}
-              to={to}
+              to={leaguePath(to)}
               end={'end' in rest ? rest.end : undefined}
               className={({ isActive }) => navClassName(isActive, true)}
             >
@@ -112,7 +138,7 @@ export function AppLayout() {
             {mobileMoreItems.map(({ to, labelKey }) => (
               <NavLink
                 key={to}
-                to={to}
+                to={leaguePath(to)}
                 className={({ isActive }) =>
                   `flex min-h-12 items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 ${
                     isActive
@@ -125,6 +151,18 @@ export function AppLayout() {
                 {t(labelKey)}
               </NavLink>
             ))}
+            <NavLink
+              to={isAdmin ? leaguePath('/admin/leagues/new') : leaguePath('/login')}
+              className="flex min-h-12 items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold text-green-900 hover:bg-green-50"
+            >
+              <span aria-hidden="true">{isAdmin ? '+' : '↳'}</span>
+              {isAdmin ? t('league.create') : t('auth.admin')}
+            </NavLink>
+            {isAdmin ? (
+              <button type="button" onClick={() => void signOut()} className="flex min-h-12 w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-semibold text-red-700 hover:bg-red-50">
+                <span aria-hidden="true">↪</span>{t('auth.signOut')}
+              </button>
+            ) : null}
           </div>
         </>
       ) : null}

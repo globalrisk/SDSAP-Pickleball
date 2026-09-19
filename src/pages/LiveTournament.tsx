@@ -23,12 +23,16 @@ import {
 import { recommendNextMatch } from '../lib/matchRecommendation'
 import { buildTournamentView } from '../lib/tournamentMode'
 import type { MatchLiveStatus, MatchWithTeams } from '../types'
+import { useAuth } from '../context/AuthContext'
+import { useLeague } from '../context/LeagueContext'
 
 const actionClass =
   'inline-flex min-h-10 flex-1 items-center justify-center rounded-xl px-3 py-2 text-xs font-bold transition-colors disabled:opacity-50 sm:flex-none'
 
 export function LiveTournamentPage() {
   const { t } = useTranslation()
+  const { isAdmin } = useAuth()
+  const { league, leaguePath } = useLeague()
   const queryClient = useQueryClient()
   const { selectedSeason, isSelectedSeasonActive, isLoading: seasonLoading } = useSeason()
   const matchesQuery = useMatches()
@@ -47,6 +51,7 @@ export function LiveTournamentPage() {
   )
   const remainingCount = tournament.totalCount - tournament.completedCount
   const courtCount = selectedSeason?.live_court_count ?? 1
+  const canManage = isAdmin && league.status === 'active' && isSelectedSeasonActive
   const recommendedMatch = useMemo(
     () => recommendNextMatch(matchesQuery.data ?? [], standingsQuery.standings),
     [matchesQuery.data, standingsQuery.standings],
@@ -83,7 +88,7 @@ export function LiveTournamentPage() {
   const seedUpNext = seedMutation.mutate
   useEffect(() => {
     if (
-      !isSelectedSeasonActive ||
+      !canManage ||
       tournament.upNext ||
       !recommendedMatch ||
       seedMutation.isPending
@@ -92,7 +97,7 @@ export function LiveTournamentPage() {
     }
     seedUpNext(recommendedMatch.id)
   }, [
-    isSelectedSeasonActive,
+    canManage,
     recommendedMatch,
     seedMutation.isPending,
     seedUpNext,
@@ -242,7 +247,7 @@ export function LiveTournamentPage() {
         </div>
       ) : null}
 
-      {selectedSeason && isSelectedSeasonActive ? (
+      {selectedSeason && canManage ? (
         <section className="mb-6 flex flex-col gap-3 rounded-2xl border border-green-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-sm font-black text-green-950">{t('live.numberOfCourts')}</h2>
@@ -286,7 +291,7 @@ export function LiveTournamentPage() {
                       <button
                         key={player.id}
                         type="button"
-                        disabled={!isSelectedSeasonActive || presenceMutation.isPending}
+                        disabled={!canManage || presenceMutation.isPending}
                         onClick={() => presenceMutation.mutate({ playerId: player.id, isPresent: !isPresent })}
                         className={`min-h-11 rounded-xl border px-2 py-2 text-left text-xs font-bold transition-colors disabled:opacity-50 ${
                           isPresent
@@ -314,13 +319,13 @@ export function LiveTournamentPage() {
           <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-green-100 text-2xl">🏓</div>
           <h2 className="mt-4 text-lg font-bold text-green-950">{t('live.noMatchesTitle')}</h2>
           <p className="mt-1 text-sm text-gray-600">{t('live.noMatchesBody')}</p>
-          {isSelectedSeasonActive ? <Link to="/matches" className="mt-4 inline-flex min-h-11 items-center rounded-xl bg-green-600 px-5 py-2 text-sm font-bold text-white hover:bg-green-700">{t('live.createSchedule')}</Link> : null}
+          {canManage ? <Link to={leaguePath('/matches')} className="mt-4 inline-flex min-h-11 items-center rounded-xl bg-green-600 px-5 py-2 text-sm font-bold text-white hover:bg-green-700">{t('live.createSchedule')}</Link> : null}
         </section>
       ) : tournament.isComplete ? (
         <section className="mb-5 rounded-2xl border border-amber-300 bg-gradient-to-r from-amber-50 to-yellow-50 p-5 text-center shadow-sm">
           <div className="text-4xl" aria-hidden="true">🏆</div>
           <h2 className="mt-2 text-xl font-black text-amber-950">{t('live.tournamentComplete')}</h2>
-          {selectedSeason ? <Link to={`/seasons/${selectedSeason.id}/recap`} className="mt-3 inline-flex min-h-11 items-center rounded-xl bg-amber-500 px-5 py-2 text-sm font-bold text-amber-950 hover:bg-amber-400">{t('live.viewRecap')}</Link> : null}
+          {selectedSeason ? <Link to={leaguePath(`/seasons/${selectedSeason.id}/recap`)} className="mt-3 inline-flex min-h-11 items-center rounded-xl bg-amber-500 px-5 py-2 text-sm font-bold text-amber-950 hover:bg-amber-400">{t('live.viewRecap')}</Link> : null}
         </section>
       ) : null}
 
@@ -341,7 +346,7 @@ export function LiveTournamentPage() {
                       label={t('live.court', { number: courtNumber })}
                       tone="playing"
                       actions={
-                        isSelectedSeasonActive ? (
+                        canManage ? (
                           <button
                             type="button"
                             disabled={queueMutation.isPending}
@@ -352,7 +357,7 @@ export function LiveTournamentPage() {
                           </button>
                         ) : null
                       }
-                      showResultForm={isSelectedSeasonActive}
+                      showResultForm={canManage}
                       onSaved={handleSaved}
                     />
                   ) : (
@@ -373,7 +378,7 @@ export function LiveTournamentPage() {
                   match={tournament.upNext}
                   label={t('live.autoSelected')}
                   tone="next"
-                  actions={isSelectedSeasonActive ? upNextActions(tournament.upNext) : null}
+                  actions={canManage ? upNextActions(tournament.upNext) : null}
                 />
               ) : (
                 <p className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900">{t('live.noUpNext')}</p>
@@ -390,7 +395,7 @@ export function LiveTournamentPage() {
               </div>
               <div className="space-y-3">
                 {tournament.available.map((match) => (
-                  <LiveMatchCard key={match.id} match={match} label={t('live.ready')} actions={isSelectedSeasonActive ? queueActions(match) : null} />
+                  <LiveMatchCard key={match.id} match={match} label={t('live.ready')} actions={canManage ? queueActions(match) : null} />
                 ))}
               </div>
             </section>
@@ -417,7 +422,7 @@ export function LiveTournamentPage() {
                 </li>
               ))}
             </ol>
-            <Link to="/standings" className="mt-3 flex min-h-11 items-center justify-center rounded-xl bg-green-50 text-sm font-bold text-green-800 hover:bg-green-100">{t('common.viewAll')}</Link>
+            <Link to={leaguePath('/standings')} className="mt-3 flex min-h-11 items-center justify-center rounded-xl bg-green-50 text-sm font-bold text-green-800 hover:bg-green-100">{t('common.viewAll')}</Link>
           </aside>
         </div>
       ) : null}

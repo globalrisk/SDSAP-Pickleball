@@ -10,8 +10,10 @@ import {
 import { useQuery } from '@tanstack/react-query'
 import { fetchActiveSeason, fetchSeasons } from '../lib/api'
 import type { Season } from '../types'
+import { useLeague } from './LeagueContext'
 
-const STORAGE_KEY = 'sdsap-selected-season-id'
+const STORAGE_KEY = 'pickleball-selected-season-id'
+const EMPTY_SEASONS: Season[] = []
 
 interface SeasonContextValue {
   seasons: Season[]
@@ -27,22 +29,23 @@ interface SeasonContextValue {
 const SeasonContext = createContext<SeasonContextValue | null>(null)
 
 export function SeasonProvider({ children }: { children: ReactNode }) {
+  const { league } = useLeague()
   const seasonsQuery = useQuery({
-    queryKey: ['seasons'],
-    queryFn: fetchSeasons,
+    queryKey: ['seasons', league.id],
+    queryFn: () => fetchSeasons(league.id),
   })
 
   const activeSeasonQuery = useQuery({
-    queryKey: ['seasons', 'active'],
-    queryFn: fetchActiveSeason,
+    queryKey: ['seasons', league.id, 'active'],
+    queryFn: () => fetchActiveSeason(league.id),
   })
 
-  const seasons = seasonsQuery.data ?? []
+  const seasons = seasonsQuery.data ?? EMPTY_SEASONS
   const activeSeason = activeSeasonQuery.data ?? null
 
   const [selectedSeasonId, setSelectedSeasonIdState] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null
-    return localStorage.getItem(STORAGE_KEY)
+    return localStorage.getItem(`${STORAGE_KEY}:${league.id}`)
   })
 
   useEffect(() => {
@@ -57,14 +60,14 @@ export function SeasonProvider({ children }: { children: ReactNode }) {
     const fallback = activeSeason ?? seasons[0]
     if (fallback) {
       setSelectedSeasonIdState(fallback.id)
-      localStorage.setItem(STORAGE_KEY, fallback.id)
+      localStorage.setItem(`${STORAGE_KEY}:${league.id}`, fallback.id)
     }
-  }, [seasons, selectedSeasonId, activeSeason])
+  }, [seasons, selectedSeasonId, activeSeason, league.id])
 
   const setSelectedSeasonId = useCallback((seasonId: string) => {
     setSelectedSeasonIdState(seasonId)
-    localStorage.setItem(STORAGE_KEY, seasonId)
-  }, [])
+    localStorage.setItem(`${STORAGE_KEY}:${league.id}`, seasonId)
+  }, [league.id])
 
   const selectedSeason = useMemo(
     () => seasons.find((s) => s.id === selectedSeasonId) ?? activeSeason ?? seasons[0] ?? null,

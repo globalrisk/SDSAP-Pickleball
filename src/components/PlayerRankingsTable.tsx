@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { PlayerTitleBadge } from './PlayerTitleBadge'
 import { roundRating } from '../lib/ratings'
 import type { PlayerRankingRow } from '../types'
+import { useLeague } from '../context/LeagueContext'
 
 interface PlayerRankingsTableProps {
   rows: PlayerRankingRow[]
@@ -36,6 +37,7 @@ function getPodiumStyles(rank: number | null) {
 
 export function PlayerRankingsTable({ rows }: PlayerRankingsTableProps) {
   const { t } = useTranslation()
+  const { leaguePath } = useLeague()
 
   if (rows.length === 0) {
     return <p className="text-sm text-gray-500">{t('rankings.empty')}</p>
@@ -90,7 +92,7 @@ export function PlayerRankingsTable({ rows }: PlayerRankingsTableProps) {
                 >
                   <td className="p-0" colSpan={5}>
                     <Link
-                      to={`/players/${row.id}`}
+                      to={leaguePath(`/players/${row.id}`)}
                       className={`flex min-h-12 items-center gap-0 ${
                         isInactive ? 'active:bg-gray-100/80' : 'active:bg-green-50/80'
                       }`}

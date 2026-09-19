@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { formatMatchDate } from '../lib/formatDate'
 import type { SeasonRecap, SeasonRecapTeamAward } from '../types'
+import { useLeague } from '../context/LeagueContext'
 
 interface SeasonRecapCardProps {
   recap: SeasonRecap
@@ -10,6 +11,7 @@ interface SeasonRecapCardProps {
 
 export function SeasonRecapCard({ recap }: SeasonRecapCardProps) {
   const { t, i18n } = useTranslation()
+  const { leaguePath } = useLeague()
 
   return (
     <div className="overflow-hidden rounded-2xl border border-green-200 bg-gradient-to-br from-green-50 via-white to-amber-50 p-5 shadow-sm sm:p-6">
@@ -44,7 +46,7 @@ export function SeasonRecapCard({ recap }: SeasonRecapCardProps) {
             eyebrow={t('recap.mvp')}
             title={
               <Link
-                to={`/players/${recap.mvp.playerId}`}
+                to={leaguePath(`/players/${recap.mvp.playerId}`)}
                 className="text-green-800 underline-offset-2 hover:underline"
               >
                 {recap.mvp.playerName}
@@ -69,7 +71,7 @@ export function SeasonRecapCard({ recap }: SeasonRecapCardProps) {
             eyebrow={t('recap.mostImproved')}
             title={
               <Link
-                to={`/players/${recap.mostImproved.playerId}`}
+                to={leaguePath(`/players/${recap.mostImproved.playerId}`)}
                 className="text-green-800 underline-offset-2 hover:underline"
               >
                 {recap.mostImproved.playerName}

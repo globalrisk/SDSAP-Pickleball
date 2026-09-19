@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { useLeague } from '../context/LeagueContext'
 
 export interface TeamPlayerLink {
   name: string
@@ -6,13 +7,14 @@ export interface TeamPlayerLink {
 }
 
 function PlayerLabel({ player }: { player: TeamPlayerLink }) {
+  const { leaguePath } = useLeague()
   if (!player.poolPlayerId) {
     return <span>{player.name}</span>
   }
 
   return (
     <Link
-      to={`/players/${player.poolPlayerId}`}
+      to={leaguePath(`/players/${player.poolPlayerId}`)}
       className="text-green-700 underline-offset-2 hover:underline"
       onClick={(e) => e.stopPropagation()}
     >

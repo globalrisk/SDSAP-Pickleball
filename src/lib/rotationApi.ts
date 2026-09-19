@@ -8,13 +8,14 @@ import type {
   RotationSnapshot,
 } from './rotationTypes'
 
-export const rotationSnapshotQueryKey = ['rotation', 'snapshot'] as const
+export const rotationSnapshotQueryKey = (seasonId: string | undefined) =>
+  ['rotation', 'snapshot', seasonId] as const
 
-export async function fetchRotationSnapshot(): Promise<RotationSnapshot | null> {
+export async function fetchRotationSnapshot(seasonId: string): Promise<RotationSnapshot | null> {
   const { data: event, error: eventError } = await supabase
     .from('rotation_events')
     .select('*')
-    .limit(1)
+    .eq('season_id', seasonId)
     .maybeSingle()
   if (eventError) throw eventError
   if (!event) return null
@@ -41,6 +42,7 @@ export async function fetchRotationSnapshot(): Promise<RotationSnapshot | null> 
 }
 
 export async function replaceRotationEvent(input: {
+  seasonId: string
   name: string
   playerNames: string[]
   matchesPerPlayer: number
@@ -70,6 +72,7 @@ export async function replaceRotationEvent(input: {
 
   const { data, error } = await supabase.rpc('replace_rotation_event_atomic', {
     p_event_id: eventId,
+    p_season_id: input.seasonId,
     p_name: input.name.trim(),
     p_matches_per_player: input.matchesPerPlayer,
     p_court_count: input.courtCount,
