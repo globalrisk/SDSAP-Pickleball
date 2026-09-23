@@ -9,6 +9,8 @@ A shared pickleball platform for multiple independent leagues. Players have one 
 - Stable league links at `/leagues/{slug}` and a league switcher
 - League-specific name, logo, seasons, teams, ratings, results, and match-day data
 - One shared player directory with league-specific membership and ratings
+- Administrators can add players from **Manage → Players** without assigning a league; these players are immediately available to Team Duel and can join a league later from that league's Setup page
+- Setup follows **League roster → Season players → Teams → League settings**. League membership persists across seasons; choose each season's participants separately before building teams.
 - Multiple leagues can each have an active season at the same time
 - Administrator-only setup and result entry; public pages are read-only
 - Guided creation of a league, first season, roster, teams, and schedule
@@ -47,7 +49,13 @@ A shared pickleball platform for multiple independent leagues. Players have one 
 
    You can also use the SQL Editor after downloading a backup from the Supabase Dashboard. Do not enable the new frontend against production until the migration completes successfully.
 
-4. Start the local app:
+4. Deploy the username sign-in function. Its JWT check is disabled in `supabase/config.toml` because the function verifies the submitted password with Supabase Auth before returning a session:
+
+   ```bash
+   npx supabase functions deploy admin-username-login
+   ```
+
+5. Start the local app:
 
    ```bash
    npm run dev
@@ -57,7 +65,7 @@ A shared pickleball platform for multiple independent leagues. Players have one 
 
 ## Create an administrator
 
-There is no public signup or account-management screen.
+There is no public signup. Administrators can link a username to their own existing account from **Manage → Account** after signing in.
 
 1. In **Supabase Dashboard → Authentication → Users**, create the user manually.
 2. In the SQL Editor, assign the protected app-metadata role:
@@ -71,15 +79,17 @@ There is no public signup or account-management screen.
 
 3. In Authentication settings, keep public user signup disabled.
 4. Sign in from the app's **Admin** link. Every administrator can manage every league.
+5. Open **Manage → Account** to set a unique username. Future sign-ins can use the username or email with the same password. Email stays in Supabase Auth for recovery.
 
 The authorization check uses `app_metadata`, not user-editable metadata. Database RLS and RPC permissions enforce the same rule even if someone calls the API directly.
 
 ## League administration
 
-- Use **Setup** to change the current league's name or logo. Its slug and shareable link stay unchanged.
-- Use **Create league** for the guided first-season flow.
+- Use **Manage → League setup** to change the current league's name or logo. Its slug and shareable link stay unchanged.
+- Use **Manage → Create league** for the guided first-season flow.
 - Renaming a shared player updates that identity across every league and historical roster display.
 - Removing or deactivating a player from one league does not remove them from another.
+- Leave someone out of a season in **Setup → Season players**. Use **Inactive** only when their league membership is unavailable longer term. Players already on a team must be removed from that team before being excluded from the season.
 - Archiving a season preserves its history. Permanent league deletion is intentionally not supported.
 
 ## Verification

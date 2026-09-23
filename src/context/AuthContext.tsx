@@ -14,7 +14,7 @@ interface AuthContextValue {
   user: User | null
   isAdmin: boolean
   isLoading: boolean
-  signIn: (email: string, password: string) => Promise<void>
+  signIn: (identifier: string, password: string) => Promise<void>
   signOut: () => Promise<void>
 }
 
@@ -46,13 +46,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const signIn = useCallback(async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password,
-    })
-    if (error) throw error
-    if (!hasAdminRole(data.user)) {
+  const signIn = useCallback(async (identifier: string, password: string) => {
+    const trimmed = identifier.trim()
+    let signedInUser: User | null = null
+    if (trimmed.includes('@')) {
+      const { data, error } = await supabase.auth.signInWithPassword({ email: trimmed, password })
+      if (error) throw error
+      signedInUser = data.user
+    } else {
+      const { data, error } = await supabase.functions.invoke('admin-username-login', {
+        body: { username: trimmed.toLowerCase(), password },
+      })
+      if (error) throw new Error('Invalid username or password.')
+      const tokens = data as { access_token?: string; refresh_token?: string } | null
+      if (!tokens?.access_token || !tokens.refresh_token) {
+        throw new Error('Invalid username or password.')
+      }
+      const { data: session, error: sessionError } = await supabase.auth.setSession({
+        access_token: tokens.access_token,
+        refresh_token: tokens.refresh_token,
+      })
+      if (sessionError) throw sessionError
+      signedInUser = session.user
+    }
+    if (!hasAdminRole(signedInUser)) {
       await supabase.auth.signOut()
       throw new Error('This account does not have administrator access.')
     }

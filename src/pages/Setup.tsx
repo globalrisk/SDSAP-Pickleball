@@ -31,15 +31,16 @@ import {
   updateLeagueBranding,
   updateLeagueStatus,
 } from '../lib/leagueApi'
+import { fetchSeasonRosterIds, saveSeasonRoster, seasonRosterQueryKey } from '../lib/seasonRosterApi'
 import { useAssignedPoolPlayerIds, usePlayerPool } from '../hooks/usePlayerPool'
 import { useTeamsWithPlayers } from '../hooks/useTeams'
 import type { PoolPlayer, TeamWithPlayers } from '../types'
 
-type SetupSection = 'players' | 'teams' | 'season'
+type SetupSection = 'players' | 'season' | 'teams' | 'league'
 type PoolStatusFilter = 'active' | 'inactive' | 'all'
 
 function isSetupSection(value: string | null): value is SetupSection {
-  return value === 'players' || value === 'teams' || value === 'season'
+  return value === 'players' || value === 'season' || value === 'teams' || value === 'league'
 }
 
 const TEAM_COLORS = [
@@ -142,6 +143,7 @@ function LeagueBrandingForm() {
 function poolOptionsForSlot(
   pool: PoolPlayer[],
   assignedIds: Set<string>,
+  seasonRosterIds: Set<string>,
   teamPoolIds: Set<string>,
   slotValue: string,
   otherSlotValue: string,
@@ -150,6 +152,7 @@ function poolOptionsForSlot(
     if (player.id === slotValue || player.id === otherSlotValue) return true
     if (teamPoolIds.has(player.id)) return true
     if (player.status !== 'active') return false
+    if (!seasonRosterIds.has(player.id)) return false
     return !assignedIds.has(player.id)
   })
 }
@@ -188,38 +191,35 @@ function PoolPlayerRow({
 
   return (
     <li
-      className={`flex flex-col gap-2 rounded-lg border px-3 py-3 sm:flex-row sm:flex-wrap sm:items-center ${
+      className={`rounded-lg border ${
         isActive
           ? 'border-emerald-200 bg-emerald-50/70'
           : 'border-slate-200 bg-slate-50'
       }`}
     >
-      <input
-        value={name}
-        aria-label={t('pool.playerNameLabel', { name: player.name })}
-        onChange={(e) => setName(e.target.value)}
-        className="min-h-11 flex-1 rounded-lg border border-green-200 bg-white px-3 py-2 text-base sm:text-sm"
-      />
-      <span
-        className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${
-          isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-200 text-gray-700'
-        }`}
-      >
-        {isActive ? t('pool.statusActive') : t('pool.statusInactive')}
-      </span>
-      <span
-        className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${
-          isAssigned ? 'bg-amber-100 text-amber-800' : 'bg-green-100 text-green-800'
-        }`}
-      >
-        {isAssigned ? t('pool.assigned') : t('pool.available')}
-      </span>
-      <span className="shrink-0 rounded-full bg-blue-100 px-2.5 py-1 text-xs font-medium text-blue-800">
-        <Link to={leaguePath(`/players/${player.id}`)} className="hover:underline">
-          {t('pool.ratingBadge', { rating: roundRating(player.rating) })}
-        </Link>
-      </span>
-      <div className="flex min-w-0 flex-col gap-1">
+      <details>
+        <summary className="flex min-h-14 cursor-pointer flex-wrap items-center gap-2 px-3 py-3">
+          <span className="min-w-0 flex-1 truncate font-semibold text-gray-900">{player.name}</span>
+          <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-200 text-gray-700'}`}>
+            {isActive ? t('pool.statusActive') : t('pool.statusInactive')}
+          </span>
+          <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${isAssigned ? 'bg-amber-100 text-amber-800' : 'bg-green-100 text-green-800'}`}>
+            {isAssigned ? t('pool.assigned') : t('pool.available')}
+          </span>
+        </summary>
+        <div className="flex flex-col gap-3 border-t border-green-100 px-3 py-3 sm:flex-row sm:flex-wrap sm:items-end">
+          <label className="min-w-0 flex-1 text-xs font-medium text-gray-700">
+            {t('pool.playerNameLabel', { name: player.name })}
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="mt-1 min-h-11 w-full rounded-lg border border-green-200 bg-white px-3 py-2 text-base sm:text-sm"
+            />
+          </label>
+          <Link to={leaguePath(`/players/${player.id}`)} className="inline-flex min-h-11 items-center rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm font-medium text-blue-800 hover:bg-blue-50">
+            {t('pool.ratingBadge', { rating: roundRating(player.rating) })}
+          </Link>
+          <div className="flex min-w-0 flex-col gap-1">
         <button
           type="button"
           onClick={() =>
@@ -244,7 +244,7 @@ function PoolPlayerRow({
             {t('pool.cannotDeactivateOnTeam')}
           </p>
         ) : null}
-      </div>
+          </div>
       <button
         type="button"
         onClick={() => onSave(player.id, trimmed)}
@@ -261,6 +261,8 @@ function PoolPlayerRow({
       >
         {t('pool.deleteButton')}
       </button>
+        </div>
+      </details>
     </li>
   )
 }
@@ -270,6 +272,7 @@ function TeamEditForm({
   seasonId,
   pool,
   assignedIds,
+  seasonRosterIds,
   onSaved,
   onDeleted,
   onError,
@@ -278,6 +281,7 @@ function TeamEditForm({
   seasonId: string
   pool: PoolPlayer[]
   assignedIds: Set<string>
+  seasonRosterIds: Set<string>
   onSaved: (message: string) => void
   onDeleted: (message: string) => void
   onError: (message: string) => void
@@ -340,6 +344,7 @@ function TeamEditForm({
   const slot1Options = poolOptionsForSlot(
     pool,
     assignedIds,
+    seasonRosterIds,
     teamPoolIds,
     poolPlayerIds[0],
     poolPlayerIds[1],
@@ -347,6 +352,7 @@ function TeamEditForm({
   const slot2Options = poolOptionsForSlot(
     pool,
     assignedIds,
+    seasonRosterIds,
     teamPoolIds,
     poolPlayerIds[1],
     poolPlayerIds[0],
@@ -446,6 +452,11 @@ export function SetupPage() {
   const { data: teams, isError, error } = useTeamsWithPlayers()
   const { data: pool = [], isError: poolError, error: poolQueryError } = usePlayerPool()
   const { data: assignedPoolIds = [] } = useAssignedPoolPlayerIds()
+  const seasonRosterQuery = useQuery({
+    queryKey: seasonRosterQueryKey(selectedSeason?.id),
+    queryFn: () => fetchSeasonRosterIds(selectedSeason!.id),
+    enabled: !!selectedSeason,
+  })
   const {
     data: sharedPlayerIdentities = [],
     isLoading: sharedPlayersLoading,
@@ -484,8 +495,10 @@ export function SetupPage() {
   const [newPoolRating, setNewPoolRating] = useState('1500')
   const [existingPoolPlayerId, setExistingPoolPlayerId] = useState('')
   const [existingPoolRating, setExistingPoolRating] = useState('1500')
+  const [addPlayerMode, setAddPlayerMode] = useState<'existing' | 'new'>('existing')
   const [poolStatusFilter, setPoolStatusFilter] = useState<PoolStatusFilter>('active')
   const [poolSearch, setPoolSearch] = useState('')
+  const [seasonRosterDraft, setSeasonRosterDraft] = useState<string[]>([])
   const [newTeam, setNewTeam] = useState({
     name: '',
     poolPlayerId1: '',
@@ -493,6 +506,17 @@ export function SetupPage() {
   })
 
   const assignedIds = useMemo(() => new Set(assignedPoolIds), [assignedPoolIds])
+  const seasonRosterIds = useMemo(
+    () => new Set(seasonRosterQuery.data ?? []),
+    [seasonRosterQuery.data],
+  )
+  const draftRosterIds = useMemo(() => new Set(seasonRosterDraft), [seasonRosterDraft])
+  const seasonRosterDirty = seasonRosterDraft.length !== seasonRosterIds.size
+    || seasonRosterDraft.some((id) => !seasonRosterIds.has(id))
+
+  useEffect(() => {
+    setSeasonRosterDraft(seasonRosterQuery.data ?? [])
+  }, [seasonRosterQuery.data, selectedSeason?.id])
   const activeSeasonAssigned = useMemo(
     () => new Set(activeSeasonAssignedIds),
     [activeSeasonAssignedIds],
@@ -500,9 +524,11 @@ export function SetupPage() {
   const activeUnassigned = useMemo(
     () =>
       pool.filter(
-        (player) => player.status === 'active' && !assignedIds.has(player.id),
+        (player) => player.status === 'active'
+          && seasonRosterIds.has(player.id)
+          && !assignedIds.has(player.id),
       ),
-    [pool, assignedIds],
+    [pool, assignedIds, seasonRosterIds],
   )
   const activeCount = useMemo(
     () => pool.filter((player) => player.status === 'active').length,
@@ -530,6 +556,7 @@ export function SetupPage() {
     queryClient.invalidateQueries({ queryKey: ['teams-with-players'] })
     queryClient.invalidateQueries({ queryKey: ['matches'] })
     queryClient.invalidateQueries({ queryKey: ['assigned-pool-players'] })
+    queryClient.invalidateQueries({ queryKey: ['season-roster'] })
   }
 
   const addPoolMutation = useMutation({
@@ -650,6 +677,14 @@ export function SetupPage() {
       setFeedback({ text: t('setup.newSeasonFailed', { message: err.message }), tone: 'error' }),
   })
 
+  const seasonRosterMutation = useMutation({
+    mutationFn: (playerIds: string[]) => saveSeasonRoster(selectedSeason!.id, playerIds),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: seasonRosterQueryKey(selectedSeason?.id) })
+      setFeedback({ text: t('setup.seasonRosterSaved'), tone: 'ok' })
+    },
+  })
+
   const createTeamMutation = useMutation({
     mutationFn: (payload: {
       name: string
@@ -750,6 +785,11 @@ export function SetupPage() {
   function handleCreateTeam(e: React.FormEvent) {
     e.preventDefault()
     if (!selectedSeason) return
+    if (!activeUnassigned.some((player) => player.id === newTeam.poolPlayerId1)
+      || !activeUnassigned.some((player) => player.id === newTeam.poolPlayerId2)) {
+      setFeedback({ text: t('setup.seasonRosterSelectionChanged'), tone: 'error' })
+      return
+    }
     createTeamMutation.mutate({
       name: newTeam.name.trim(),
       color: pickNextTeamColor((teams ?? []).map((team) => team.color)),
@@ -818,10 +858,7 @@ export function SetupPage() {
       <PageHeader
         title={t('setup.title')}
         subtitle={t('setup.subtitle')}
-        action={{ to: leaguePath('/admin/leagues/new'), label: t('league.create') }}
       />
-
-      <LeagueBrandingForm />
 
       {feedback && (
         <p
@@ -837,10 +874,10 @@ export function SetupPage() {
       )}
 
       <nav
-        className="sticky top-12 z-10 mb-6 grid grid-cols-3 gap-1 rounded-xl border border-green-200 bg-white/95 p-1.5 shadow-sm backdrop-blur sm:top-14 md:top-28"
+        className="sticky top-12 z-10 mb-6 grid grid-cols-2 gap-1 rounded-xl border border-green-200 bg-white/95 p-1.5 shadow-sm backdrop-blur sm:top-14 sm:grid-cols-4 md:top-28"
         aria-label={t('setup.sectionsLabel')}
       >
-        {(['players', 'teams', 'season'] as const).map((section) => (
+        {(['players', 'season', 'teams', 'league'] as const).map((section) => (
           <button
             key={section}
             type="button"
@@ -859,12 +896,32 @@ export function SetupPage() {
         ))}
       </nav>
 
+      {activeSection === 'league' ? (
+        <div>
+          <LeagueBrandingForm />
+          <Link to={leaguePath('/admin/leagues/new')} className="inline-flex min-h-11 items-center rounded-lg border border-green-200 bg-white px-4 py-2 text-sm font-semibold text-green-800 hover:bg-green-50">
+            {t('league.create')}
+          </Link>
+        </div>
+      ) : null}
+
       {activeSection === 'players' ? (
       <section className="mb-8 rounded-xl border border-green-200 bg-white p-5 shadow-sm">
         <h2 className="text-lg font-semibold text-green-900">{t('pool.title')}</h2>
         <p className="mt-1 text-sm text-gray-600">{t('pool.description')}</p>
 
         <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4">
+          <h3 className="text-sm font-bold text-blue-950">{t('pool.addToLeagueTitle')}</h3>
+          <div className="mt-3 grid grid-cols-2 gap-2" role="group" aria-label={t('pool.addToLeagueTitle')}>
+            <button type="button" aria-pressed={addPlayerMode === 'existing'} onClick={() => setAddPlayerMode('existing')} className={`min-h-11 rounded-lg px-3 py-2 text-sm font-semibold ${addPlayerMode === 'existing' ? 'bg-blue-700 text-white' : 'bg-white text-blue-800'}`}>
+              {t('pool.useExisting')}
+            </button>
+            <button type="button" aria-pressed={addPlayerMode === 'new'} onClick={() => setAddPlayerMode('new')} className={`min-h-11 rounded-lg px-3 py-2 text-sm font-semibold ${addPlayerMode === 'new' ? 'bg-blue-700 text-white' : 'bg-white text-blue-800'}`}>
+              {t('pool.createAndAdd')}
+            </button>
+          </div>
+          {addPlayerMode === 'existing' ? (
+          <div className="mt-4">
           <h3 className="text-sm font-bold text-blue-950">{t('pool.addExistingTitle')}</h3>
           <p className="mt-1 text-sm text-blue-800">{t('pool.addExistingDescription')}</p>
           {sharedPlayersLoading ? (
@@ -923,9 +980,10 @@ export function SetupPage() {
               </button>
             </form>
           )}
-        </div>
-
-        <h3 className="mt-5 text-sm font-bold text-green-950">{t('pool.addNewTitle')}</h3>
+          </div>
+          ) : (
+          <div className="mt-4">
+        <h3 className="text-sm font-bold text-green-950">{t('pool.addNewTitle')}</h3>
         <form onSubmit={handleAddPoolPlayer} className="mt-2 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
           <input
             value={newPoolName}
@@ -956,6 +1014,9 @@ export function SetupPage() {
             {addPoolMutation.isPending ? t('pool.adding') : t('pool.addButton')}
           </button>
         </form>
+          </div>
+          )}
+        </div>
 
         {pool.length > 0 ? (
           <div className="mt-5 rounded-xl border border-green-100 bg-green-50/40 p-2.5">
@@ -1034,7 +1095,81 @@ export function SetupPage() {
       </section>
       ) : null}
 
-      {activeSection === 'season' && activeSeason && (
+      {activeSection === 'season' && selectedSeason && isSelectedSeasonActive ? (
+        <section className="mb-6 rounded-xl border border-green-200 bg-white p-5 shadow-sm">
+          <h2 className="text-lg font-semibold text-green-900">
+            {t('setup.seasonRosterTitle', { name: selectedSeason.name })}
+          </h2>
+          <p className="mt-1 text-sm text-gray-600">{t('setup.seasonRosterHelp')}</p>
+          {seasonRosterQuery.isLoading ? <p className="mt-4 text-sm text-gray-600">{t('common.loading')}</p> : null}
+          {seasonRosterQuery.error ? <div className="mt-4"><ErrorState message={(seasonRosterQuery.error as Error).message} /></div> : null}
+          {seasonRosterQuery.isSuccess ? (
+            <>
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-semibold text-green-900">
+                  {t('setup.seasonRosterCount', { count: seasonRosterDraft.length })}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" onClick={() => setSeasonRosterDraft(pool.filter((player) => player.status === 'active').map((player) => player.id))} className="rounded-lg border border-green-200 px-3 py-2 text-sm font-semibold text-green-800 hover:bg-green-50">
+                    {t('setup.seasonRosterSelectAll')}
+                  </button>
+                  <button type="button" onClick={() => setSeasonRosterDraft([...assignedIds])} className="rounded-lg border border-green-200 px-3 py-2 text-sm font-semibold text-green-800 hover:bg-green-50">
+                    {t('setup.seasonRosterClearUnassigned')}
+                  </button>
+                </div>
+              </div>
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                {pool.map((player) => {
+                  const isAssigned = assignedIds.has(player.id)
+                  const isInactive = player.status !== 'active'
+                  return (
+                    <label key={player.id} className={`flex items-center gap-3 rounded-lg border px-3 py-3 text-sm ${isInactive ? 'border-gray-200 bg-gray-50 text-gray-500' : 'border-green-100 bg-green-50/40 text-gray-900'}`}>
+                      <input
+                        type="checkbox"
+                        checked={draftRosterIds.has(player.id)}
+                        disabled={isAssigned || (isInactive && !draftRosterIds.has(player.id)) || seasonRosterMutation.isPending}
+                        onChange={(event) => setSeasonRosterDraft((current) =>
+                          event.target.checked
+                            ? [...current, player.id]
+                            : current.filter((id) => id !== player.id),
+                        )}
+                        className="size-5 shrink-0 accent-green-700"
+                      />
+                      <span className="min-w-0 flex-1 truncate font-semibold">{player.name}</span>
+                      {isAssigned ? <span className="text-xs text-green-800">{t('setup.seasonRosterOnTeam')}</span> : null}
+                      {isInactive ? <span className="text-xs">{t('pool.statusInactive')}</span> : null}
+                    </label>
+                  )
+                })}
+              </div>
+              {pool.length === 0 ? <p className="mt-4 text-sm text-gray-600">{t('setup.seasonRosterEmpty')}</p> : null}
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  disabled={!seasonRosterDirty || seasonRosterMutation.isPending}
+                  onClick={() => seasonRosterMutation.mutate(seasonRosterDraft)}
+                  className="min-h-11 rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {seasonRosterMutation.isPending ? t('common.loading') : t('setup.seasonRosterSave')}
+                </button>
+                <p className="text-sm text-gray-600">{t('setup.seasonRosterNext')}</p>
+              </div>
+              {seasonRosterMutation.error ? <div className="mt-3"><ErrorState message={(seasonRosterMutation.error as Error).message} /></div> : null}
+            </>
+          ) : null}
+        </section>
+      ) : null}
+
+      {activeSection === 'season' && activeSeason && !isSelectedSeasonActive ? (
+        <section className="mb-8 rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
+          <p>{t('setup.seasonRosterArchived', { name: selectedSeason?.name })}</p>
+          <button type="button" onClick={() => setSelectedSeasonId(activeSeason.id)} className="mt-3 font-semibold underline underline-offset-2">
+            {t('setup.seasonRosterOpenActive', { name: activeSeason.name })}
+          </button>
+        </section>
+      ) : null}
+
+      {activeSection === 'season' && activeSeason && isSelectedSeasonActive && (
         <section className="mb-8 rounded-xl border border-amber-200 bg-white p-5 shadow-sm">
           <h2 className="text-lg font-semibold text-amber-900">{t('setup.archiveTitle')}</h2>
           <p className="mt-1 text-sm text-gray-600">{t('setup.archiveDescription')}</p>
@@ -1081,10 +1216,51 @@ export function SetupPage() {
         </section>
       )}
 
+      {activeSection === 'teams' ? (
+        <section className="mb-6">
+          <h2 className="mb-3 text-lg font-semibold text-green-900">{t('setup.currentTeams')}</h2>
+          {(teams ?? []).length === 0 ? <p className="rounded-xl border border-green-200 bg-white p-4 text-sm text-gray-600">{t('setup.noTeams')}</p> : null}
+          <div className="space-y-3">
+            {(teams ?? []).map((team) => isSelectedSeasonActive ? (
+              <details key={team.id} className="rounded-xl border border-green-200 bg-white shadow-sm">
+                <summary className="flex min-h-14 cursor-pointer items-center justify-between gap-2 px-4 py-3 font-semibold text-green-950">
+                  <span>{team.name}</span>
+                  <span className="text-xs font-normal text-gray-600">{team.players.map((player) => player.name).join(' · ')}</span>
+                </summary>
+                <div className="border-t border-green-100 p-2">
+                  <TeamEditForm
+                    team={team}
+                    seasonId={selectedSeason!.id}
+                    pool={pool}
+                    assignedIds={assignedIds}
+                    seasonRosterIds={seasonRosterIds}
+                    onSaved={(message) => setFeedback({ text: message, tone: 'ok' })}
+                    onDeleted={(message) => setFeedback({ text: message, tone: 'ok' })}
+                    onError={(message) => setFeedback({ text: message, tone: 'error' })}
+                  />
+                </div>
+              </details>
+            ) : (
+              <div key={team.id} className="rounded-xl border border-green-200 bg-white p-4 shadow-sm">
+                <h3 className="font-semibold text-green-950">{team.name}</h3>
+                <p className="mt-1 text-sm text-gray-600">{team.players.map((player) => player.name).join(' · ')}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       {activeSection === 'teams' && isSelectedSeasonActive && (
         <section className="mb-8 rounded-xl border border-green-200 bg-white p-5 shadow-sm">
           <h2 className="text-lg font-semibold text-green-900">{t('setup.createTeamTitle')}</h2>
           <p className="mt-1 text-sm text-gray-600">{t('setup.createTeamDescription')}</p>
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-blue-200 bg-blue-50 p-3">
+            <p className="text-sm font-semibold text-blue-900">{t('setup.seasonRosterTeamSummary', { count: seasonRosterIds.size, available: activeUnassigned.length })}</p>
+            <button type="button" onClick={() => setSearchParams({ section: 'season' }, { replace: true })} className="text-sm font-bold text-blue-800 underline underline-offset-2">
+              {t('setup.seasonRosterManage')}
+            </button>
+          </div>
+          {seasonRosterQuery.error ? <div className="mt-3"><ErrorState message={(seasonRosterQuery.error as Error).message} /></div> : null}
           {activeUnassigned.length < 2 && (
             <p className="mt-2 text-sm text-amber-700">{t('setup.notEnoughPlayers')}</p>
           )}
@@ -1103,30 +1279,6 @@ export function SetupPage() {
               onCreate={handleCreateBalancedTeams}
             />
           </div>
-
-          {(teams ?? []).length > 0 ? (
-            <div className="mt-6 rounded-lg border border-red-200 bg-red-50 p-4">
-              <h3 className="text-sm font-semibold text-red-900">
-                {t('setup.dangerZone')}
-              </h3>
-              <p className="mt-1 text-xs text-red-800">{t('setup.deleteTeamsHint')}</p>
-              <button
-                type="button"
-                onClick={handleDeleteAllTeams}
-                disabled={
-                  deleteTeamsMutation.isPending ||
-                  balanceTeamsMutation.isPending ||
-                  createTeamMutation.isPending ||
-                  recordedCount > 0
-                }
-                className="mt-3 min-h-11 w-full rounded-lg border border-red-300 bg-white px-4 py-3 text-sm font-medium text-red-700 hover:bg-red-100 active:bg-red-200 disabled:opacity-50 sm:w-auto sm:py-2"
-              >
-                {deleteTeamsMutation.isPending
-                  ? t('setup.deleteTeamsWorking')
-                  : t('setup.deleteTeamsButton')}
-              </button>
-            </div>
-          ) : null}
 
           <form onSubmit={handleCreateTeam} className="mt-6 space-y-3 border-t border-green-100 pt-6">
             <p className="text-sm font-medium text-green-900">{t('setup.createTeamManual')}</p>
@@ -1189,45 +1341,21 @@ export function SetupPage() {
         </section>
       )}
 
-      {activeSection === 'teams' ? (
-      <div className="space-y-6">
-        {(teams ?? []).length === 0 && (
-          <p className="text-sm text-gray-500">{t('setup.noTeams')}</p>
-        )}
-
-        {(teams ?? []).map((team) =>
-          isSelectedSeasonActive ? (
-            <TeamEditForm
-              key={team.id}
-              team={team}
-              seasonId={selectedSeason!.id}
-              pool={pool}
-              assignedIds={assignedIds}
-              onSaved={(message) => setFeedback({ text: message, tone: 'ok' })}
-              onDeleted={(message) => setFeedback({ text: message, tone: 'ok' })}
-              onError={(message) => setFeedback({ text: message, tone: 'error' })}
-            />
-          ) : (
-            <div
-              key={team.id}
-              className="rounded-xl border border-green-200 bg-white p-5 shadow-sm"
-            >
-              <h3 className="mb-4 text-base font-semibold text-gray-900">{team.name}</h3>
-              <ul className="space-y-2">
-                {team.players.map((player) => (
-                  <li
-                    key={player.id}
-                    className="rounded-lg bg-green-50 px-3 py-2 text-sm text-gray-700"
-                  >
-                    {player.name}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ),
-        )}
-      </div>
+      {activeSection === 'teams' && isSelectedSeasonActive && (teams ?? []).length > 0 ? (
+        <details className="mb-8 rounded-xl border border-red-200 bg-red-50 p-4">
+          <summary className="cursor-pointer text-sm font-semibold text-red-900">{t('setup.dangerZone')}</summary>
+          <p className="mt-3 text-sm text-red-800">{t('setup.deleteTeamsHint')}</p>
+          <button
+            type="button"
+            onClick={handleDeleteAllTeams}
+            disabled={deleteTeamsMutation.isPending || balanceTeamsMutation.isPending || createTeamMutation.isPending || recordedCount > 0}
+            className="mt-3 min-h-11 rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50"
+          >
+            {deleteTeamsMutation.isPending ? t('setup.deleteTeamsWorking') : t('setup.deleteTeamsButton')}
+          </button>
+        </details>
       ) : null}
+
     </div>
   )
 }

@@ -5,6 +5,7 @@ import type { League } from '../types'
 export interface SharedPlayerIdentity {
   id: string
   name: string
+  status: 'active' | 'inactive'
   leagueNames: string[]
 }
 
@@ -57,12 +58,13 @@ export async function fetchDefaultLeague(): Promise<League | null> {
 export async function fetchSharedPlayerIdentities(): Promise<SharedPlayerIdentity[]> {
   const { data, error } = await supabase
     .from('player_pool')
-    .select('id, name, league_players(leagues(name))')
+    .select('id, name, status, league_players(leagues(name))')
     .order('name')
   if (error) throw error
   return (data ?? []).map((player) => ({
     id: player.id,
     name: player.name,
+    status: player.status as 'active' | 'inactive',
     leagueNames: [
       ...new Set(
         (player.league_players ?? [])
@@ -77,6 +79,18 @@ export async function fetchSharedPlayerIdentities(): Promise<SharedPlayerIdentit
       ),
     ].sort((a, b) => a.localeCompare(b)),
   }))
+}
+
+export async function createSharedPlayer(name: string): Promise<void> {
+  const trimmedName = name.trim()
+  if (!trimmedName || trimmedName.length > 120) {
+    throw new Error('Player name must contain between 1 and 120 characters.')
+  }
+  const { error } = await supabase.from('player_pool').insert({
+    name: trimmedName,
+    status: 'active',
+  })
+  if (error) throw error
 }
 
 export async function addExistingPlayerToLeague(

@@ -75,6 +75,7 @@ function TeamDuelShell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {isAdmin ? <Link to="/players" className={secondaryButton}>{t('nav.players')}</Link> : null}
             <Link to="/" className={secondaryButton}>
               <span aria-hidden="true">←</span> {t('teamDuel.backToLeagues')}
             </Link>
@@ -233,6 +234,9 @@ function SquadEditor({
         ))}
       </div>
       <p className="mt-3 text-xs text-indigo-700">{t('teamDuel.rankHelp')}</p>
+      <Link to="/players" target="_blank" rel="noopener noreferrer" className="mt-2 inline-block text-sm font-bold text-indigo-700 underline underline-offset-2 hover:text-indigo-900">
+        {t('teamDuel.addMissingPlayer')}
+      </Link>
       <div className="mt-5 flex flex-wrap gap-2">
         <button type="submit" disabled={!complete || saving} className={primaryButton}>{t('common.save')}</button>
         <button type="button" onClick={onCancel} className={secondaryButton}>{t('common.cancel')}</button>
@@ -445,7 +449,7 @@ function TeamDuelHub() {
   const [tab, setTab] = useState<HubTab>('current')
   const eventsQuery = useQuery({ queryKey: teamDuelEventsQueryKey(isAdmin), queryFn: () => fetchTeamDuelEvents(isAdmin) })
   const squadsQuery = useQuery({ queryKey: teamDuelSquadsQueryKey, queryFn: fetchTeamDuelSquads, enabled: isAdmin })
-  const playersQuery = useQuery({ queryKey: teamDuelPlayersQueryKey, queryFn: fetchTeamDuelRegisteredPlayers, enabled: isAdmin })
+  const playersQuery = useQuery({ queryKey: teamDuelPlayersQueryKey, queryFn: fetchTeamDuelRegisteredPlayers, enabled: isAdmin, refetchOnWindowFocus: 'always' })
   const refresh = useCallback(async () => {
     await queryClient.invalidateQueries({ queryKey: ['team-duel'] })
   }, [queryClient])

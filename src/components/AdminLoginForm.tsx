@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext'
 export function AdminLoginForm({ onSuccess }: { onSuccess: () => void }) {
   const { t } = useTranslation()
   const { signIn } = useAuth()
-  const [email, setEmail] = useState('')
+  const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -15,10 +15,11 @@ export function AdminLoginForm({ onSuccess }: { onSuccess: () => void }) {
     setError(null)
     setIsSubmitting(true)
     try {
-      await signIn(email, password)
+      await signIn(identifier, password)
       onSuccess()
     } catch (signInError) {
-      setError((signInError as Error).message)
+      const message = (signInError as Error).message
+      setError(message === 'Invalid username or password.' ? t('auth.invalidCredentials') : message)
     } finally {
       setIsSubmitting(false)
     }
@@ -30,16 +31,17 @@ export function AdminLoginForm({ onSuccess }: { onSuccess: () => void }) {
       <h1 className="mt-1 text-2xl font-black text-green-950">{t('auth.title')}</h1>
       <form onSubmit={submit} className="mt-6 space-y-4">
         <label className="block text-sm font-semibold text-gray-800">
-          {t('auth.email')}
+          {t('auth.identifier')}
           <input
-            type="email"
-            autoComplete="email"
+            type="text"
+            autoComplete="username"
             required
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
+            value={identifier}
+            onChange={(event) => setIdentifier(event.target.value)}
             className="mt-1 min-h-11 w-full rounded-xl border border-green-200 px-3 py-2 text-base"
           />
         </label>
+        <p className="text-xs text-gray-600">{t('auth.identifierHelp')}</p>
         <label className="block text-sm font-semibold text-gray-800">
           {t('auth.password')}
           <input

@@ -16,7 +16,13 @@ const navItems = [
   { to: '/rankings', labelKey: 'nav.rankings', desktopKey: 'nav.rankings' },
   { to: '/match-planner', labelKey: 'nav.matchPlanner', desktopKey: 'nav.matchPlanner' },
   { to: '/team-duel', labelKey: 'nav.teamDuel', desktopKey: 'nav.teamDuel', global: true },
-  { to: '/setup', labelKey: 'nav.setup', desktopKey: 'nav.setup' },
+] as const
+
+const manageItems = [
+  { to: '/setup', labelKey: 'nav.setup' },
+  { to: '/players', labelKey: 'nav.players' },
+  { to: '/admin/leagues/new', labelKey: 'league.create' },
+  { to: '/account', labelKey: 'nav.account' },
 ] as const
 
 function navClassName(isActive: boolean, mobile = false) {
@@ -35,15 +41,19 @@ export function AppLayout() {
   const { league, leaguePath } = useLeague()
   const { isAdmin, signOut } = useAuth()
   const [moreOpen, setMoreOpen] = useState(false)
-  const visibleNavItems = isAdmin ? navItems : navItems.filter((item) => item.to !== '/setup')
-  const mobilePrimaryItems = visibleNavItems.slice(0, 4)
-  const mobileMoreItems = visibleNavItems.slice(4)
+  const [manageOpen, setManageOpen] = useState(false)
+  const [mobileManageOpen, setMobileManageOpen] = useState(false)
+  const mobilePrimaryItems = navItems.slice(0, 4)
+  const mobileMoreItems = navItems.slice(4)
   const itemPath = (item: (typeof navItems)[number]) =>
     'global' in item && item.global ? item.to : leaguePath(item.to)
-  const moreActive = mobileMoreItems.some((item) => location.pathname.startsWith(itemPath(item)))
+  const manageActive = manageItems.some((item) => location.pathname.startsWith(leaguePath(item.to)))
+  const moreActive = mobileMoreItems.some((item) => location.pathname.startsWith(itemPath(item))) || (isAdmin && manageActive)
 
   useEffect(() => {
     setMoreOpen(false)
+    setManageOpen(false)
+    setMobileManageOpen(false)
   }, [location.pathname])
 
   useEffect(() => {
@@ -53,7 +63,10 @@ export function AppLayout() {
   return (
     <div className="min-h-dvh bg-gradient-to-b from-green-50 to-green-100">
       <GlobalLoadingOverlay />
-      <header className="sticky top-0 z-20 border-b border-green-200 bg-white/90 backdrop-blur supports-[backdrop-filter]:bg-white/80">
+      <header
+        className="sticky top-0 z-20 border-b border-green-200 bg-white/90 backdrop-blur supports-[backdrop-filter]:bg-white/80"
+        onKeyDown={(event) => { if (event.key === 'Escape') setManageOpen(false) }}
+      >
         <div className="mx-auto max-w-5xl px-4 sm:px-6">
           <div className="flex min-h-14 items-center justify-between gap-3 py-2">
             <div className="flex min-w-0 items-center gap-2">
@@ -81,8 +94,8 @@ export function AppLayout() {
               )}
             </div>
           </div>
-          <nav className="hidden gap-1 overflow-x-auto pb-3 md:flex">
-            {visibleNavItems.map((item) => (
+          <nav className="hidden gap-1 overflow-x-auto pb-3 lg:flex">
+            {navItems.map((item) => (
               <NavLink
                 key={item.to}
                 to={itemPath(item)}
@@ -92,15 +105,40 @@ export function AppLayout() {
                 {t(item.desktopKey)}
               </NavLink>
             ))}
+            {isAdmin ? (
+              <button
+                type="button"
+                className={navClassName(manageActive || manageOpen)}
+                aria-expanded={manageOpen}
+                aria-controls="desktop-manage-menu"
+                onClick={() => setManageOpen((open) => !open)}
+              >
+                {t('nav.manage')}
+                <span aria-hidden="true" className="ml-1 text-xs">▾</span>
+              </button>
+            ) : null}
           </nav>
         </div>
+        {isAdmin && manageOpen ? (
+          <>
+            <button
+              type="button"
+              className="fixed inset-0 z-20 hidden cursor-default lg:block"
+              aria-label={t('common.close')}
+              onClick={() => setManageOpen(false)}
+            />
+            <div id="desktop-manage-menu" className="absolute right-4 top-full z-30 hidden w-64 rounded-b-2xl border border-green-200 bg-white p-2 shadow-xl lg:block">
+              <ManageLinks onNavigate={() => setManageOpen(false)} />
+            </div>
+          </>
+        ) : null}
       </header>
 
-      <main className="mx-auto max-w-5xl px-4 py-4 pb-24 sm:px-6 sm:py-6 md:pb-6">
+      <main className="mx-auto max-w-5xl px-4 py-4 pb-24 sm:px-6 sm:py-6 lg:pb-6">
         <Outlet />
       </main>
 
-      <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-green-200 bg-white/95 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur md:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-green-200 bg-white/95 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur lg:hidden">
         <div className="mx-auto flex max-w-lg items-stretch justify-between gap-1">
           {mobilePrimaryItems.map((item) => (
             <NavLink
@@ -130,13 +168,13 @@ export function AppLayout() {
         <>
           <button
             type="button"
-            className="fixed inset-0 z-20 bg-green-950/10 md:hidden"
+            className="fixed inset-0 z-20 bg-green-950/10 lg:hidden"
             aria-label={t('common.close')}
             onClick={() => setMoreOpen(false)}
           />
           <div
             id="mobile-more-menu"
-            className="fixed inset-x-3 bottom-20 z-30 mx-auto max-w-sm rounded-2xl border border-green-200 bg-white p-2 shadow-xl md:hidden"
+            className="fixed inset-x-3 bottom-20 z-30 mx-auto max-h-[calc(100dvh-6rem)] max-w-sm overflow-y-auto rounded-2xl border border-green-200 bg-white p-2 shadow-xl lg:hidden"
           >
             {mobileMoreItems.map((item) => (
               <NavLink
@@ -154,22 +192,64 @@ export function AppLayout() {
                 {t(item.labelKey)}
               </NavLink>
             ))}
-            <NavLink
-              to={isAdmin ? leaguePath('/admin/leagues/new') : leaguePath('/login')}
-              className="flex min-h-12 items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold text-green-900 hover:bg-green-50"
-            >
-              <span aria-hidden="true">{isAdmin ? '+' : '↳'}</span>
-              {isAdmin ? t('league.create') : t('auth.admin')}
-            </NavLink>
             {isAdmin ? (
-              <button type="button" onClick={() => void signOut()} className="flex min-h-12 w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-semibold text-red-700 hover:bg-red-50">
-                <span aria-hidden="true">↪</span>{t('auth.signOut')}
-              </button>
-            ) : null}
+              <>
+                <div className="border-t border-green-100 pt-1">
+                  <button
+                    type="button"
+                    className={`flex min-h-12 w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-semibold ${manageActive || mobileManageOpen ? 'bg-green-50 text-green-800' : 'text-green-900 hover:bg-green-50'}`}
+                    aria-expanded={mobileManageOpen}
+                    aria-controls="mobile-manage-menu"
+                    onClick={() => setMobileManageOpen((open) => !open)}
+                  >
+                    <NavIcon to="/setup" />
+                    <span className="flex-1">{t('nav.manage')}</span>
+                    <span aria-hidden="true">{mobileManageOpen ? '▴' : '▾'}</span>
+                  </button>
+                  {mobileManageOpen ? (
+                    <div id="mobile-manage-menu" className="border-l-2 border-green-100 pl-2">
+                      <ManageLinks onNavigate={() => setMoreOpen(false)} />
+                    </div>
+                  ) : null}
+                </div>
+                <button type="button" onClick={() => void signOut()} className="flex min-h-12 w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-semibold text-red-700 hover:bg-red-50">
+                  <span aria-hidden="true">↪</span>{t('auth.signOut')}
+                </button>
+              </>
+            ) : (
+              <NavLink to={leaguePath('/login')} className="flex min-h-12 items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold text-green-900 hover:bg-green-50">
+                <span aria-hidden="true">↳</span>{t('auth.admin')}
+              </NavLink>
+            )}
           </div>
         </>
       ) : null}
     </div>
+  )
+}
+
+function ManageLinks({ onNavigate }: { onNavigate: () => void }) {
+  const { t } = useTranslation()
+  const { leaguePath } = useLeague()
+
+  return (
+    <nav aria-label={t('nav.manage')} className="space-y-1">
+      {manageItems.map((item) => (
+        <NavLink
+          key={item.to}
+          to={leaguePath(item.to)}
+          onClick={onNavigate}
+          className={({ isActive }) =>
+            `flex min-h-11 items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 ${
+              isActive ? 'bg-green-600 text-white' : 'text-green-900 hover:bg-green-50'
+            }`
+          }
+        >
+          <NavIcon to={item.to} />
+          {t(item.labelKey)}
+        </NavLink>
+      ))}
+    </nav>
   )
 }
 
@@ -216,6 +296,13 @@ function NavIcon({ to }: { to: string }) {
           <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
         </svg>
       )
+    case '/account':
+      return (
+        <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <circle cx="12" cy="8" r="4" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M4 21a8 8 0 0116 0" />
+        </svg>
+      )
     case '/setup':
       return (
         <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -239,6 +326,18 @@ function NavIcon({ to }: { to: string }) {
         >
           VS
         </span>
+      )
+    case '/players':
+      return (
+        <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M16 20H4a2 2 0 01-2-2v-1a5 5 0 015-5h4a5 5 0 015 5v1a2 2 0 01-2 2zM9 9a3 3 0 100-6 3 3 0 000 6zM20 8v6m-3-3h6" />
+        </svg>
+      )
+    case '/admin/leagues/new':
+      return (
+        <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14m-7-7h14" />
+        </svg>
       )
     default:
       return null

@@ -1,0 +1,3 @@
+[functions.admin-username-login]
+# The endpoint verifies the submitted password with Supabase Auth before issuing a session.
+verify_jwt = false

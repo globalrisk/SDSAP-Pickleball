@@ -53,13 +53,13 @@ function ResolvedLeagueProvider({
   return <LeagueContext.Provider value={value}>{children}</LeagueContext.Provider>
 }
 
-export function DefaultLeagueRedirect() {
+export function DefaultLeagueRedirect({ path = '' }: { path?: string }) {
   const leaguesQuery = useQuery({ queryKey: ['leagues'], queryFn: fetchLeagues })
   if (leaguesQuery.isLoading) return <LoadingState />
   if (leaguesQuery.error) return <ErrorState message={(leaguesQuery.error as Error).message} />
   const leagues = leaguesQuery.data ?? []
   const fallback = leagues.find((league) => league.is_default) ?? leagues[0]
-  return fallback ? <Navigate to={`/leagues/${fallback.slug}`} replace /> : null
+  return fallback ? <Navigate to={`/leagues/${fallback.slug}${path}`} replace /> : null
 }
 
 export function useLeague() {

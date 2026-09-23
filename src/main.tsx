@@ -12,11 +12,13 @@ import { StandingsPage } from './pages/Standings'
 import { MatchesPage } from './pages/Matches'
 import { RankingsPage } from './pages/Rankings'
 import { PlayerProfilePage } from './pages/PlayerProfile'
+import { PlayersPage } from './pages/Players'
 import { SeasonRecapPage } from './pages/SeasonRecap'
 import { SetupPage } from './pages/Setup'
 import { LiveTournamentPage } from './pages/LiveTournament'
 import { MatchPlannerPage } from './pages/MatchPlanner'
 import { AdminLoginPage } from './pages/AdminLogin'
+import { AdminAccountPage } from './pages/AdminAccount'
 import { CreateLeaguePage } from './pages/CreateLeague'
 import { AdminRoute } from './components/AdminRoute'
 import { LazyTeamDuelLoginPage, LazyTeamDuelPage } from './components/LazyTeamDuelRoutes'
@@ -54,6 +56,7 @@ createRoot(document.getElementById('root')!).render(
             <Route path="team-duel" element={<LazyTeamDuelPage />} />
             <Route path="team-duel/events/:eventId" element={<LazyTeamDuelPage />} />
             <Route path="team-duel/login" element={<LazyTeamDuelLoginPage />} />
+            <Route path="players" element={<DefaultLeagueRedirect path="/players" />} />
             <Route path="leagues/:leagueSlug" element={<LeagueShell />}>
               <Route element={<AppLayout />}>
                 <Route index element={<Dashboard />} />
@@ -61,10 +64,12 @@ createRoot(document.getElementById('root')!).render(
                 <Route path="standings" element={<StandingsPage />} />
                 <Route path="matches" element={<MatchesPage />} />
                 <Route path="rankings" element={<RankingsPage />} />
+                <Route path="players" element={<AdminRoute><PlayersPage /></AdminRoute>} />
                 <Route path="players/:playerId" element={<PlayerProfilePage />} />
                 <Route path="seasons/:seasonId/recap" element={<SeasonRecapPage />} />
                 <Route path="login" element={<AdminLoginPage />} />
                 <Route path="setup" element={<AdminRoute><SetupPage /></AdminRoute>} />
+                <Route path="account" element={<AdminRoute><AdminAccountPage /></AdminRoute>} />
                 <Route path="admin/leagues/new" element={<AdminRoute><CreateLeaguePage /></AdminRoute>} />
               </Route>
               <Route path="match-planner" element={<MatchPlannerPage />} />

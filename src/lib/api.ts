@@ -1510,7 +1510,7 @@ export async function saveTeamWithPlayers(
     teamId,
   )
 
-  const { error } = await supabase.rpc('save_season_teams_atomic', {
+  const { error } = await supabase.rpc('save_selected_season_teams_atomic', {
     p_season_id: seasonId,
     p_teams: [{
       id: teamId,
@@ -1531,7 +1531,7 @@ export async function createTeamWithPlayers(
 ): Promise<TeamWithPlayers> {
   await assertPoolPlayersAvailable(seasonId, payload.poolPlayerIds)
 
-  const { data: teamIds, error } = await supabase.rpc('save_season_teams_atomic', {
+  const { data: teamIds, error } = await supabase.rpc('save_selected_season_teams_atomic', {
     p_season_id: seasonId,
     p_teams: [{
       name: payload.name.trim(),
@@ -1563,7 +1563,7 @@ export async function createManyTeamsWithPlayers(
 ): Promise<number> {
   if (teams.length === 0) return 0
 
-  const { data, error } = await supabase.rpc('save_season_teams_atomic', {
+  const { data, error } = await supabase.rpc('save_selected_season_teams_atomic', {
     p_season_id: seasonId,
     p_teams: teams.map((team) => ({
       name: team.name.trim(),
