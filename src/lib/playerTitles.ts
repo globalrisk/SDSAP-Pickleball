@@ -32,7 +32,10 @@ export interface TitlePlayerStats {
   name: string
   played: number
   wins: number
-  ratingDelta: number
+  recentRatingDelta: number | null
+  recentMatchesPlayed: number
+  recentSeasonsPlayed: number
+  matchesBeforeRecentWindow: number
   currentStreak: { result: 'W' | 'L'; count: number } | null
   bestPartner: { name: string; wins: number; played: number } | null
   secondPlaceSeasons: number
@@ -64,6 +67,8 @@ interface SeasonFinish {
 }
 
 const MIN_PLAYED_FOR_RATING_TITLES = 5
+const RECENT_TOURNAMENT_COUNT = 3
+const MIN_TREND_CHANGE = 50
 const MIN_PARTNER_GAMES = 3
 const UNDERDOG_MAX = 0.4
 const FAVORITE_MIN = 0.65
@@ -71,16 +76,15 @@ const FAVORITE_MIN = 0.65
 export function buildTitlePlayerStats(args: {
   id: string
   name: string
-  rating: number
-  initialRating: number
   history: RatingHistoryPoint[]
   matches: MatchForTitles[]
   seasonFinishes: SeasonFinish[]
 }): TitlePlayerStats {
-  const { id, name, rating, initialRating, history, matches, seasonFinishes } =
+  const { id, name, history, matches, seasonFinishes } =
     args
   const fun = computePlayerFunStats(history)
   const chrono = chronologicalMatchPoints(history)
+  const recentTrend = computeRecentRatingTrend(history)
 
   let wins = 0
   let closeWins = 0
@@ -154,7 +158,7 @@ export function buildTitlePlayerStats(args: {
     name,
     played: chrono.length,
     wins,
-    ratingDelta: rating - initialRating,
+    ...recentTrend,
     currentStreak: fun.currentStreak ?? computeCurrentStreak(chrono.map((p) => p.result!)),
     bestPartner: fun.bestPartner,
     secondPlaceSeasons,
@@ -165,6 +169,35 @@ export function buildTitlePlayerStats(args: {
     blowoutWins,
     biggestAbsSwing,
   }
+}
+
+/** Compare the last three played tournaments against the rating just before them. */
+function computeRecentRatingTrend(history: RatingHistoryPoint[]) {
+  const ordered = [...history].sort((a, b) => a.sequence - b.sequence)
+  const rated = ordered.filter((point) => point.matchId && point.result)
+  const seasons = [...new Set(rated.flatMap((point) => point.seasonId ? [point.seasonId] : []))]
+  const recentSeasons = new Set(seasons.slice(-RECENT_TOURNAMENT_COUNT))
+  const recent = rated.filter((point) => point.seasonId && recentSeasons.has(point.seasonId))
+  const first = recent[0]
+  const last = recent[recent.length - 1]
+  const baseline = first ? ordered.findLast((point) => point.sequence < first.sequence) : undefined
+
+  return {
+    // Incomplete history must not quietly shrink the comparison window.
+    recentRatingDelta: baseline && last && rated.every((point) => point.seasonId)
+      ? last.rating - baseline.rating
+      : null,
+    recentMatchesPlayed: recent.length,
+    recentSeasonsPlayed: recentSeasons.size,
+    matchesBeforeRecentWindow: first ? rated.filter((point) => point.sequence < first.sequence).length : 0,
+  }
+}
+
+function hasEstablishedRecentWindow(player: TitlePlayerStats): boolean {
+  return player.recentRatingDelta != null
+    && player.recentSeasonsPlayed === RECENT_TOURNAMENT_COUNT
+    && player.recentMatchesPlayed >= MIN_PLAYED_FOR_RATING_TITLES
+    && player.matchesBeforeRecentWindow >= MIN_PLAYED_FOR_RATING_TITLES
 }
 
 type TitleDef = {
@@ -178,14 +211,26 @@ const TITLE_DEFS: TitleDef[] = [
   {
     id: 'on_fire',
     eligible: (p) => p.currentStreak?.result === 'W' && p.currentStreak.count >= 3,
-    score: (p) => p.currentStreak?.count ?? 0,
+    score: (p) => p.currentStreak!.count,
     whyParams: (p) => ({ count: p.currentStreak?.count ?? 0 }),
   },
   {
     id: 'ice_cold',
     eligible: (p) => p.currentStreak?.result === 'L' && p.currentStreak.count >= 3,
-    score: (p) => p.currentStreak?.count ?? 0,
+    score: (p) => p.currentStreak!.count,
     whyParams: (p) => ({ count: p.currentStreak?.count ?? 0 }),
+  },
+  {
+    id: 'climbing',
+    eligible: (p) => hasEstablishedRecentWindow(p) && p.recentRatingDelta! >= MIN_TREND_CHANGE,
+    score: (p) => p.recentRatingDelta!,
+    whyParams: (p) => ({ delta: formatSigned(p.recentRatingDelta!), seasons: p.recentSeasonsPlayed, matches: p.recentMatchesPlayed }),
+  },
+  {
+    id: 'free_fall',
+    eligible: (p) => hasEstablishedRecentWindow(p) && p.recentRatingDelta! <= -MIN_TREND_CHANGE,
+    score: (p) => -p.recentRatingDelta!,
+    whyParams: (p) => ({ delta: formatSigned(p.recentRatingDelta!), seasons: p.recentSeasonsPlayed, matches: p.recentMatchesPlayed }),
   },
   {
     id: 'silver_forever',
@@ -206,27 +251,12 @@ const TITLE_DEFS: TitleDef[] = [
     whyParams: (p) => ({ count: p.underdogWins }),
   },
   {
-    id: 'climbing',
-    eligible: (p) => p.played >= MIN_PLAYED_FOR_RATING_TITLES && p.ratingDelta > 20,
-    score: (p) => p.ratingDelta,
-    whyParams: (p) => ({ delta: formatSigned(p.ratingDelta) }),
-  },
-  {
-    id: 'free_fall',
-    eligible: (p) => p.played >= MIN_PLAYED_FOR_RATING_TITLES && p.ratingDelta < -20,
-    score: (p) => -p.ratingDelta,
-    whyParams: (p) => ({ delta: formatSigned(p.ratingDelta) }),
-  },
-  {
     id: 'loyal_duo',
     eligible: (p) =>
       !!p.bestPartner &&
       p.bestPartner.played >= MIN_PARTNER_GAMES &&
       p.bestPartner.wins / p.bestPartner.played >= 0.65,
-    score: (p) => {
-      const partner = p.bestPartner!
-      return partner.wins / partner.played + partner.played * 0.01
-    },
+    score: (p) => p.bestPartner!.wins / p.bestPartner!.played + p.bestPartner!.played * 0.01,
     whyParams: (p) => ({
       partner: p.bestPartner!.name,
       wins: p.bestPartner!.wins,
@@ -265,31 +295,24 @@ function formatSigned(delta: number): string {
 }
 
 /**
- * Assign at most one unique title per player, greedily by title priority.
+ * Award each title to one holder, considering recent form before league achievements.
+ * A player who receives a higher-priority title cannot receive another one.
  */
 export function assignPlayerTitles(
   players: TitlePlayerStats[],
 ): Map<string, PlayerTitle> {
   const assigned = new Map<string, PlayerTitle>()
-  const takenPlayers = new Set<string>()
-
   for (const def of TITLE_DEFS) {
-    const candidates = players
-      .filter((p) => !takenPlayers.has(p.id) && def.eligible(p))
-      .sort((a, b) => {
-        const scoreDiff = def.score(b) - def.score(a)
-        if (scoreDiff !== 0) return scoreDiff
-        return a.name.localeCompare(b.name)
-      })
-
-    const winner = candidates[0]
-    if (!winner) continue
-
-    assigned.set(winner.id, {
+    const player = players
+      .filter((candidate) => !assigned.has(candidate.id) && def.eligible(candidate))
+      .sort((a, b) => def.score(b) - def.score(a)
+        || a.name.localeCompare(b.name)
+        || a.id.localeCompare(b.id))[0]
+    if (!player) continue
+    assigned.set(player.id, {
       id: def.id,
-      whyParams: def.whyParams(winner),
+      whyParams: def.whyParams(player),
     })
-    takenPlayers.add(winner.id)
   }
 
   return assigned

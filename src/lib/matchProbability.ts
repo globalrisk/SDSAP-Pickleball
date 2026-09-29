@@ -1,4 +1,4 @@
-import { teamWinProbability, type SkillRating } from './ratings'
+import { teamWinProbability, TRUESKILL_DEFAULTS, type SkillRating } from './ratings'
 
 interface RatedPlayer {
   rating?: number
@@ -25,7 +25,7 @@ function toSkillRatings(team: RatedTeam): SkillRating[] | null {
 
   return players.map((player) => ({
     rating: player.rating as number,
-    rd: player.ratingDeviation ?? player.rating_deviation ?? 350,
+    rd: player.ratingDeviation ?? player.rating_deviation ?? TRUESKILL_DEFAULTS.rd,
     volatility: 0,
   }))
 }

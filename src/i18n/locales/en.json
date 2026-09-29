@@ -2,6 +2,11 @@
   "app": {
     "title": "SDSAP League"
   },
+  "notFound": {
+    "title": "Page not found",
+    "message": "This page doesn't exist or the link is no longer available.",
+    "backHome": "Back to home"
+  },
   "nav": {
     "home": "Home",
     "dashboard": "Dashboard",
@@ -292,43 +297,43 @@
     },
     "silver_forever": {
       "name": "Silver Magnet",
-      "why": "Finished 2nd in {{count}} seasons — gold keeps escaping"
+      "why": "Finished 2nd in {{count}} tournaments across your league history"
     },
     "almost_there": {
       "name": "So Close",
-      "why": "Runner-up {{count}}× — one tiny step from the trophy"
+      "why": "Runner-up {{count}} times across your league history, with no tournament win yet"
     },
     "giant_killer": {
       "name": "Giant Slayer",
-      "why": "Pulled off {{count}} underdog wins"
+      "why": "Won {{count}} matches as the underdog across your league history"
     },
     "climbing": {
       "name": "To the Moon",
-      "why": "Rating climbed {{delta}} and is still going"
+      "why": "Rating changed {{delta}} over your last {{seasons}} played tournaments ({{matches}} rated matches)"
     },
     "free_fall": {
       "name": "Tumbling Down",
-      "why": "Rating moved {{delta}} — mind the step"
+      "why": "Rating changed {{delta}} over your last {{seasons}} played tournaments ({{matches}} rated matches)"
     },
     "loyal_duo": {
       "name": "Partner in Crime",
-      "why": "With {{partner}}: {{wins}} wins from {{played}} matches"
+      "why": "Across your league history with {{partner}}: {{wins}} wins from {{played}} matches"
     },
     "closer": {
       "name": "Cardiac Kid",
-      "why": "Survived {{count}} nail-biters by 2 points or fewer"
+      "why": "Won {{count}} matches by 2 points or fewer across your league history"
     },
     "blowout": {
       "name": "Steamroller",
-      "why": "Flattened the opposition {{count}} times by 5+ points"
+      "why": "Won {{count}} matches by 5 or more points across your league history"
     },
     "iron": {
-      "name": "Always Shows Up",
-      "why": "{{count}} matches played — attendance: flawless"
+      "name": "Match Veteran",
+      "why": "Played {{count}} rated matches across your league history"
     },
     "wildcard": {
       "name": "Chaos Agent",
-      "why": "One match swung the rating by {{swing}} points"
+      "why": "Your largest single-match rating change across league history was {{swing}} points"
     }
   },
   "profile": {

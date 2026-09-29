@@ -2,6 +2,11 @@
   "app": {
     "title": "Giải SDSAP"
   },
+  "notFound": {
+    "title": "Không tìm thấy trang",
+    "message": "Trang này không tồn tại hoặc liên kết không còn khả dụng.",
+    "backHome": "Về trang chủ"
+  },
   "nav": {
     "home": "Trang chủ",
     "dashboard": "Tổng quan",
@@ -291,43 +296,43 @@
     },
     "silver_forever": {
       "name": "Vua về nhì",
-      "why": "Đã về nhì {{count}} mùa"
+      "why": "Đã về nhì {{count}} giải đấu trong toàn bộ lịch sử của bạn tại giải"
     },
     "almost_there": {
       "name": "Thiếu chút nữa",
-      "why": "Về nhì {{count}} lần, vẫn chưa chạm cúp"
+      "why": "Đã về nhì {{count}} lần trong lịch sử tham gia giải, chưa từng vô địch"
     },
     "giant_killer": {
       "name": "Khắc tinh cửa trên",
-      "why": "Đã lật kèo {{count}} trận"
+      "why": "Đã thắng {{count}} trận khi là cửa dưới trong toàn bộ lịch sử tham gia giải"
     },
     "climbing": {
       "name": "Lên như diều",
-      "why": "Điểm đã tăng {{delta}}"
+      "why": "Điểm thay đổi {{delta}} trong {{seasons}} giải đấu gần nhất bạn tham gia ({{matches}} trận tính điểm)"
     },
     "free_fall": {
       "name": "Tụt không phanh",
-      "why": "Điểm đã giảm {{delta}}"
+      "why": "Điểm thay đổi {{delta}} trong {{seasons}} giải đấu gần nhất bạn tham gia ({{matches}} trận tính điểm)"
     },
     "loyal_duo": {
       "name": "Cạ cứng",
-      "why": "Đánh cặp với {{partner}}: thắng {{wins}}/{{played}} trận"
+      "why": "Trong toàn bộ lịch sử đánh cặp với {{partner}}: thắng {{wins}}/{{played}} trận"
     },
     "closer": {
       "name": "Vua sát nút",
-      "why": "Đã thắng {{count}} trận với cách biệt không quá 2 điểm"
+      "why": "Đã thắng {{count}} trận với cách biệt không quá 2 điểm trong lịch sử tham gia giải"
     },
     "blowout": {
       "name": "Vua áp đảo",
-      "why": "Đã thắng đậm {{count}} trận với cách biệt từ 5 điểm"
+      "why": "Đã thắng {{count}} trận với cách biệt từ 5 điểm trong lịch sử tham gia giải"
     },
     "iron": {
-      "name": "Cày ải",
-      "why": "Đã ra sân {{count}} trận"
+      "name": "Dày dạn trận mạc",
+      "why": "Đã chơi {{count}} trận tính điểm trong toàn bộ lịch sử tham gia giải"
     },
     "wildcard": {
       "name": "Ẩn số",
-      "why": "Một trận từng làm điểm biến động tới {{swing}}"
+      "why": "Biến động điểm lớn nhất trong một trận của bạn là {{swing}} điểm, xét toàn bộ lịch sử tham gia giải"
     }
   },
   "profile": {

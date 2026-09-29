@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "test": "vitest run",
+    "ratings:recompute": "node --env-file-if-exists=.env.local scripts/recompute-ratings.ts",
     "preview": "vite preview --host"
   },
   "dependencies": {

@@ -6,6 +6,17 @@ import {
 } from './ratings'
 
 describe('TrueSkill rating model', () => {
+  it('matches the closed-form update for a decisive result with no draw margin', () => {
+    const ratings = createInitialRatingsMap(['a', 'b', 'c', 'd'].map((id) => ({ id, initial_rating: 1500 })))
+    applyDoublesMatchToRatings(ratings, { winnerPoolIds: ['a', 'b'], loserPoolIds: ['c', 'd'] })
+    const variance = (275 / 60) ** 2 + (25 / 300) ** 2
+    const c = Math.sqrt(4 * variance + 4 * (25 / 6) ** 2)
+    const expectedGain = variance / c * Math.sqrt(2 / Math.PI) * 60
+    // The library approximates the Gaussian CDF; allow sub-millionth-point error.
+    expect(ratings.get('a')!.rating).toBeCloseTo(1500 + expectedGain, 5)
+    expect(ratings.get('c')!.rating).toBeCloseTo(1500 - expectedGain, 5)
+  })
+
   it('rewards winners, penalizes losers, and ignores score margin', () => {
     const pool = ['a', 'b', 'c', 'd'].map((id) => ({ id, initial_rating: 1500 }))
     const close = createInitialRatingsMap(pool)

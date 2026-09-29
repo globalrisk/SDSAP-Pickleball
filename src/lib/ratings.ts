@@ -1,4 +1,4 @@
-import { Rating, rate, winProbability } from 'ts-trueskill'
+import { Rating, TrueSkill } from 'ts-trueskill'
 import type { PlayerRankingRow } from '../types'
 
 /**
@@ -21,6 +21,15 @@ export const INITIAL_SIGMA = TRUESKILL_SIGMA * 0.55
 
 /** Dynamics factor for within-season sit-outs (TrueSkill tau ≈ sigma/100). */
 const TAU = TRUESKILL_SIGMA / 100
+
+// Tournament results always have a winner; never use the library's 10% draw default.
+const ratingEnvironment = new TrueSkill(
+  TRUESKILL_MU,
+  TRUESKILL_SIGMA,
+  TRUESKILL_MU / 6,
+  TAU,
+  0,
+)
 
 /** Flat RD added per season a known player is absent from the roster. */
 export const SKIP_SEASON_RD_BOOST = 75
@@ -102,7 +111,7 @@ export function createInitialRatingsMap(
 
 /**
  * Update four players after a doubles match using TrueSkill team rating.
- * Partner strength is modeled — a strong partner carries less individual credit.
+ * Team strength determines the expected result; uncertainty determines individual credit.
  */
 export function applyDoublesMatchToRatings(
   ratings: Map<string, SkillRating>,
@@ -120,7 +129,7 @@ export function applyDoublesMatchToRatings(
   const winners = winnerPoolIds.map((id) => toTrueSkill(ratings.get(id)!))
   const losers = loserPoolIds.map((id) => toTrueSkill(ratings.get(id)!))
 
-  const [newWinners, newLosers] = rate([winners, losers])
+  const [newWinners, newLosers] = ratingEnvironment.rate([winners, losers])
 
   winnerPoolIds.forEach((id, index) => {
     ratings.set(id, fromTrueSkill(newWinners[index]!))
@@ -232,7 +241,7 @@ export function teamWinProbability(
   awayPlayers: SkillRating[],
 ): number | null {
   if (homePlayers.length === 0 || awayPlayers.length === 0) return null
-  return winProbability(
+  return ratingEnvironment.winProbability(
     homePlayers.map(toTrueSkill),
     awayPlayers.map(toTrueSkill),
   )

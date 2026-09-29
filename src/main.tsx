@@ -20,6 +20,7 @@ import { MatchPlannerPage } from './pages/MatchPlanner'
 import { AdminLoginPage } from './pages/AdminLogin'
 import { AdminAccountPage } from './pages/AdminAccount'
 import { CreateLeaguePage } from './pages/CreateLeague'
+import { NotFoundPage } from './pages/NotFound'
 import { AdminRoute } from './components/AdminRoute'
 import { LazyTeamDuelLoginPage, LazyTeamDuelPage } from './components/LazyTeamDuelRoutes'
 import './i18n'
@@ -74,6 +75,7 @@ createRoot(document.getElementById('root')!).render(
               </Route>
               <Route path="match-planner" element={<MatchPlannerPage />} />
             </Route>
+            <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </BrowserRouter>
       </AuthProvider>

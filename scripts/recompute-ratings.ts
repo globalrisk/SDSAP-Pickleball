@@ -1,99 +1,54 @@
 import { createClient } from '@supabase/supabase-js'
-import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
-import { replayRatings, type FinishedMatchForRatings } from '../src/lib/ratingReplay.ts'
+import { writeFileSync } from 'node:fs'
+import { parseArgs } from 'node:util'
+import { buildRatingsReplacement } from '../src/lib/ratingRepository.ts'
 
-for (const line of readFileSync(resolve('.env.local'), 'utf8').split(/\r?\n/)) {
-  if (!line || line.startsWith('#') || !line.includes('=')) continue
-  const i = line.indexOf('=')
-  const key = line.slice(0, i).trim()
-  const value = line.slice(i + 1).trim().replace(/^["']|["']$/g, '')
-  if (!(key in process.env)) process.env[key] = value
+const { values } = parseArgs({
+  options: {
+    league: { type: 'string' },
+    apply: { type: 'boolean', default: false },
+    output: { type: 'string' },
+  },
+})
+if (!values.league) throw new Error('Specify --league <slug-or-id>. The default is a dry run.')
+
+const url = process.env.VITE_SUPABASE_URL
+const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.VITE_SUPABASE_ANON_KEY
+if (!url || !key) throw new Error('Supabase URL and API key are required.')
+const db = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } })
+
+if (values.apply && !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  const email = process.env.SUPABASE_ADMIN_EMAIL
+  const password = process.env.SUPABASE_ADMIN_PASSWORD
+  if (!email || !password) {
+    throw new Error('Applying requires admin credentials or a server-only SUPABASE_SERVICE_ROLE_KEY.')
+  }
+  const { error } = await db.auth.signInWithPassword({ email, password })
+  if (error) throw error
 }
 
-const supabase = createClient(
-  process.env.VITE_SUPABASE_URL!,
-  process.env.VITE_SUPABASE_ANON_KEY!,
-)
+const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(values.league)
+const { data: league, error: leagueError } = await db.from('leagues')
+  .select('id, slug').eq(isUuid ? 'id' : 'slug', values.league).single()
+if (leagueError) throw leagueError
 
-const [{ data: pool, error: poolError }, { data: matches, error: matchError }] =
-  await Promise.all([
-    supabase.from('player_pool').select('id, initial_rating'),
-    supabase
-      .from('matches')
-      .select(`
-        id, season_id, result_recorded_at, winner_team_id,
-        home_team_id, away_team_id, home_score, away_score,
-        home_pool_player_ids, away_pool_player_ids,
-        seasons(starts_at),
-        home_team:teams!matches_home_team_id_fkey(players(pool_player_id)),
-        away_team:teams!matches_away_team_id_fkey(players(pool_player_id))
-      `)
-      .eq('status', 'completed'),
-  ])
-if (poolError) throw poolError
-if (matchError) throw matchError
-
-const finishedMatches = (matches ?? [])
-  .map((row): FinishedMatchForRatings => {
-    const homeTeam = Array.isArray(row.home_team) ? row.home_team[0] : row.home_team
-    const awayTeam = Array.isArray(row.away_team) ? row.away_team[0] : row.away_team
-    const season = Array.isArray(row.seasons) ? row.seasons[0] : row.seasons
-    return {
-      id: row.id,
-      season_id: row.season_id,
-      season_starts_at: season?.starts_at ?? '',
-      result_recorded_at: row.result_recorded_at,
-      winner_team_id: row.winner_team_id!,
-      home_team_id: row.home_team_id,
-      away_team_id: row.away_team_id,
-      home_score: row.home_score,
-      away_score: row.away_score,
-      home_pool_player_ids: row.home_pool_player_ids,
-      away_pool_player_ids: row.away_pool_player_ids,
-      home_players: homeTeam?.players ?? [],
-      away_players: awayTeam?.players ?? [],
+for (let attempt = 0; attempt < 3; attempt += 1) {
+  const replacement = await buildRatingsReplacement(db, league.id)
+  const args = {
+    p_league_id: league.id,
+    p_history_rows: replacement.historyRows,
+    p_player_ratings: replacement.playerRatings,
+    p_expected_revision: replacement.expectedRevision,
+  }
+  if (values.output) writeFileSync(values.output, JSON.stringify(args, null, 2) + '\n')
+  if (values.apply) {
+    const { error } = await db.rpc('replace_ratings_atomic', args)
+    if (error) {
+      if (error.code === '40001' && attempt < 2) continue
+      throw error
     }
-  })
-  .sort((a, b) => {
-    const seasonDiff = a.season_starts_at.localeCompare(b.season_starts_at)
-    if (seasonDiff !== 0) return seasonDiff
-    const recordedDiff = (a.result_recorded_at ?? '').localeCompare(b.result_recorded_at ?? '')
-    return recordedDiff || a.id.localeCompare(b.id)
-  })
-
-const seasonRosters = new Map<string, string[]>()
-await Promise.all(
-  [...new Set(finishedMatches.map((match) => match.season_id))].map(async (seasonId) => {
-    const { data, error } = await supabase
-      .from('players')
-      .select('pool_player_id, teams!inner(season_id)')
-      .eq('teams.season_id', seasonId)
-    if (error) throw error
-    seasonRosters.set(seasonId, [...new Set((data ?? []).map((row) => row.pool_player_id))])
-  }),
-)
-
-const { data: state, error: stateError } = await supabase
-  .from('rating_state')
-  .select('revision')
-  .eq('id', true)
-  .single()
-if (stateError) throw stateError
-
-const replacement = replayRatings({
-  pool: pool ?? [],
-  finishedMatches,
-  seasonRosters,
-  recordedAt: new Date().toISOString(),
-})
-const { error: replaceError } = await supabase.rpc('replace_ratings_atomic', {
-  p_history_rows: replacement.historyRows,
-  p_player_ratings: replacement.playerRatings,
-  p_expected_revision: state.revision,
-})
-if (replaceError) throw replaceError
-
-console.log(
-  `Recomputed ratings for ${(pool ?? []).length} players across ${finishedMatches.length} matches`,
-)
+  }
+  const matchCount = new Set(replacement.historyRows.flatMap((row) => row.match_id ? [row.match_id] : [])).size
+  console.log(`${values.apply ? 'Recomputed' : 'Dry run:'} ${league.slug}: ${replacement.playerRatings.length} players, ${matchCount} matches, ${replacement.historyRows.length} history rows; revision ${replacement.expectedRevision}`)
+  break
+}

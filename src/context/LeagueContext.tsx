@@ -2,6 +2,7 @@ import { createContext, useContext, useMemo, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Navigate, useParams } from 'react-router-dom'
 import { ErrorState, LoadingState } from '../components/Layout'
+import { NotFoundPage } from '../pages/NotFound'
 import { fetchLeagues } from '../lib/leagueApi'
 import type { League } from '../types'
 
@@ -25,8 +26,7 @@ export function LeagueProvider({ children }: { children: ReactNode }) {
   const leagues = leaguesQuery.data ?? []
   const league = leagues.find((candidate) => candidate.slug === leagueSlug)
   if (!league) {
-    const fallback = leagues.find((candidate) => candidate.is_default) ?? leagues[0]
-    return fallback ? <Navigate to={`/leagues/${fallback.slug}`} replace /> : null
+    return <NotFoundPage />
   }
 
   return <ResolvedLeagueProvider leagues={leagues} league={league}>{children}</ResolvedLeagueProvider>

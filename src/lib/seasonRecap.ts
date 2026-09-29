@@ -1,6 +1,7 @@
 import { calculateMatchProbability } from './matchProbability'
 import { resolveMatchLineups, scoreLabelForMatch } from './playerMatches'
-import { roundRating } from './ratings'
+import { roundRating, TRUESKILL_DEFAULTS } from './ratings'
+import { buildPreMatchRatings } from './historicalRatings'
 import { computeStandings } from './standings'
 import type {
   MatchWithTeams,
@@ -32,7 +33,7 @@ export interface SeasonRecapInput {
 
 const MIN_IMPROVED_MATCHES = 3
 const MIN_PARTNERSHIP_MATCHES = 3
-const DEFAULT_RD = 350
+const DEFAULT_RD = TRUESKILL_DEFAULTS.rd
 
 function toTeamAward(
   row: ReturnType<typeof computeStandings>[number],
@@ -64,84 +65,6 @@ function percentileRanks(values: number[]): Map<number, number> {
     map.set(value, i / (sorted.length - 1))
   }
   return map
-}
-
-/**
- * Build pre-match ratings: for each (player, match), use the most recent
- * rating_history row with sequence strictly less than the first post-match row
- * for that match, else the latest row before any of the player's season matches.
- */
-function buildPreMatchRatings(
-  matches: MatchWithTeams[],
-  ratingHistory: RatingHistoryRow[],
-  defaultRd: number,
-): Map<string, { rating: number; rd: number }> {
-  const byPlayer = new Map<string, RatingHistoryRow[]>()
-  for (const row of ratingHistory) {
-    const list = byPlayer.get(row.pool_player_id) ?? []
-    list.push(row)
-    byPlayer.set(row.pool_player_id, list)
-  }
-  for (const list of byPlayer.values()) {
-    list.sort((a, b) => a.sequence - b.sequence)
-  }
-
-  const postMatchMinSequence = new Map<string, Map<string, number>>()
-  for (const row of ratingHistory) {
-    if (!row.match_id) continue
-    let perMatch = postMatchMinSequence.get(row.pool_player_id)
-    if (!perMatch) {
-      perMatch = new Map()
-      postMatchMinSequence.set(row.pool_player_id, perMatch)
-    }
-    const existing = perMatch.get(row.match_id)
-    if (existing == null || row.sequence < existing) {
-      perMatch.set(row.match_id, row.sequence)
-    }
-  }
-
-  const result = new Map<string, { rating: number; rd: number }>()
-
-  for (const match of matches) {
-    if (match.status !== 'completed') continue
-    const { homeIds, awayIds } = resolveMatchLineups(match)
-    for (const playerId of [...homeIds, ...awayIds]) {
-      const key = `${match.id}:${playerId}`
-      const history = byPlayer.get(playerId) ?? []
-      const postSeq = postMatchMinSequence.get(playerId)?.get(match.id)
-
-      let chosen: RatingHistoryRow | null = null
-      if (postSeq != null) {
-        for (const row of history) {
-          if (row.sequence >= postSeq) break
-          chosen = row
-        }
-      } else {
-        // No post-match history for this match: use latest overall history before end
-        chosen = history.length > 0 ? history[history.length - 1]! : null
-        // Prefer starting (match_id null) if that's all we have at sequence 0
-        const start = history.find((row) => row.match_id == null)
-        if (start && history.every((row) => row.sequence >= (postSeq ?? Infinity))) {
-          chosen = start
-        }
-      }
-
-      // If still nothing useful, walk history for any row not tied to this match
-      if (!chosen) {
-        for (const row of history) {
-          if (row.match_id === match.id) break
-          chosen = row
-        }
-      }
-
-      result.set(key, {
-        rating: chosen?.rating ?? 1500,
-        rd: chosen?.rating_deviation ?? defaultRd,
-      })
-    }
-  }
-
-  return result
 }
 
 function seasonRatingDelta(
@@ -234,7 +157,10 @@ export function computeSeasonRecap(input: SeasonRecapInput): SeasonRecap {
   )
 
   // Biggest upset (historical pre-match ratings)
-  const preMatch = buildPreMatchRatings(completed, ratingHistory, defaultRd)
+  const preMatch = buildPreMatchRatings(ratingHistory, new Map(), {
+    rating: TRUESKILL_DEFAULTS.rating,
+    rd: defaultRd,
+  })
   let biggestUpset: SeasonRecapUpset | null = null
 
   for (const match of completed) {

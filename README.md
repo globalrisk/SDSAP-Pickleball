@@ -92,6 +92,24 @@ The authorization check uses `app_metadata`, not user-editable metadata. Databas
 - Leave someone out of a season in **Setup → Season players**. Use **Inactive** only when their league membership is unavailable longer term. Players already on a team must be removed from that team before being excluded from the season.
 - Archiving a season preserves its history. Permanent league deletion is intentionally not supported.
 
+## Rating maintenance
+
+The app and maintenance script use the same league-scoped TrueSkill replay. Seeded
+players start with 275 points of uncertainty; decisive matches use zero draw probability.
+
+With Node.js 22.18+ (or 24+), preview a rebuild without changing the database:
+
+```bash
+npm run ratings:recompute -- --league sdsap
+```
+
+Use a league slug or UUID. Add `--output <path>` to save the replacement payload for
+inspection. To apply it, provide `SUPABASE_ADMIN_EMAIL` and `SUPABASE_ADMIN_PASSWORD`
+in the shell environment, then add `--apply`. A server-only `SUPABASE_SERVICE_ROLE_KEY`
+can be used instead. Never prefix these secrets with `VITE_` or commit them.
+Concurrent rating changes trigger a fresh read and retry rather than overwriting
+results from an older snapshot.
+
 ## Verification
 
 ```bash

@@ -78,6 +78,34 @@ where id = '63000000-0000-4000-8000-000000000001';
 
 do $$
 begin
+  if exists (
+    select 1 from league_players
+    where league_id in (
+      '61000000-0000-4000-8000-000000000001',
+      '61000000-0000-4000-8000-000000000002',
+      '61000000-0000-4000-8000-000000000003'
+    ) and (rating_deviation <> 275 or volatility <> 0)
+  ) then
+    raise exception 'league setup and player linking must use the same TrueSkill prior';
+  end if;
+
+  if exists (
+    select 1 from rating_history
+    where league_id in (
+      '61000000-0000-4000-8000-000000000001',
+      '61000000-0000-4000-8000-000000000002',
+      '61000000-0000-4000-8000-000000000003'
+    ) and rating_deviation <> 275
+  ) then
+    raise exception 'initial history uncertainty disagrees with replay';
+  end if;
+
+  begin
+    perform claim_rating_revision('61000000-0000-4000-8000-000000000003', 0);
+    raise exception 'stale replay revision was accepted';
+  exception when serialization_failure then null;
+  end;
+
   if (
     select count(*) from seasons
     where status = 'active'

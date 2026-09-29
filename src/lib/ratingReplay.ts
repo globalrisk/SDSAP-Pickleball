@@ -4,7 +4,7 @@ import {
   createInitialRatingsMap,
   TRUESKILL_DEFAULTS,
   type DoublesMatchPlayers,
-} from './ratings'
+} from './ratings.ts'
 
 export interface ReplayPoolPlayer {
   id: string
