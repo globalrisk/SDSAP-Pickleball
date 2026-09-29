@@ -92,6 +92,17 @@ The authorization check uses `app_metadata`, not user-editable metadata. Databas
 - Leave someone out of a season in **Setup → Season players**. Use **Inactive** only when their league membership is unavailable longer term. Players already on a team must be removed from that team before being excluded from the season.
 - Archiving a season preserves its history. Permanent league deletion is intentionally not supported.
 
+## Player tournament view
+
+On Home or a tournament recap, players can select their name to see
+their fixtures, rated win–loss record, and rating change for that tournament.
+Remaining matchups include rivalry records and have no fixed playing order;
+only actual court and queue assignments receive Playing now or Up next labels.
+The optional **Remember on this device** setting stores the choice separately
+for each league in the current browser. **Clear selection** removes it; no
+account or extra permissions are created. Completed personal recaps can be
+copied into a group chat.
+
 ## Rating maintenance
 
 The app and maintenance script use the same league-scoped TrueSkill replay. Seeded

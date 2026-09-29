@@ -2,6 +2,7 @@ import { Link, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { ErrorState, PageHeader, SetupBanner } from '../components/Layout'
 import { SeasonRecapCard } from '../components/SeasonRecapCard'
+import { PersonalTournamentCard } from '../components/PersonalTournamentCard'
 import { useSeasonRecap } from '../hooks/useSeasonRecap'
 import { useLeague } from '../context/LeagueContext'
 
@@ -36,6 +37,7 @@ export function SeasonRecapPage() {
         subtitle={t('recap.subtitle', { season: recap.seasonName })}
       />
 
+      <PersonalTournamentCard seasonId={seasonId} />
       <SeasonRecapCard recap={recap} />
     </div>
   )

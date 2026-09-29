@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { DashboardHighlights } from '../components/DashboardHighlights'
+import { PersonalTournamentCard } from '../components/PersonalTournamentCard'
 import { MatchCard } from '../components/MatchCard'
 import { ArchivedSeasonBanner } from '../components/ArchivedSeasonBanner'
 import { ErrorState, PageHeader, SetupBanner } from '../components/Layout'
@@ -68,6 +69,8 @@ export function Dashboard() {
             : undefined
         }
       />
+
+      <PersonalTournamentCard />
 
       {setupIncomplete && isAdmin && league.status === 'active' ? (
         <section className="mb-8 overflow-hidden rounded-2xl border border-green-300 bg-white shadow-sm">
