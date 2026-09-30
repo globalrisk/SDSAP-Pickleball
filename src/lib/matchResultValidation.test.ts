@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { resultFromScores, validateForfeitTeam, validateMatchResult } from './matchResultValidation'
+import { MatchResultValidationError, resultFromScores, validateForfeitTeam, validateMatchResult } from './matchResultValidation'
 
 const base = {
   homeTeamId: 'home',
@@ -34,6 +34,20 @@ describe('resultFromScores', () => {
 })
 
 describe('validateMatchResult', () => {
+  it.each([
+    [{ ...base, homeScore: 11, awayScore: 11 }, 'scoresTied'],
+    [{ ...base, homeScore: -1, awayScore: 11 }, 'scoresInvalid'],
+    [{ ...base, homeScore: 11 }, 'scoresRequired'],
+  ])('provides a validation code for translated field errors %#', (input, code) => {
+    expect.assertions(2)
+    try {
+      validateMatchResult(input)
+    } catch (error) {
+      expect(error).toBeInstanceOf(MatchResultValidationError)
+      expect(error).toMatchObject({ code })
+    }
+  })
+
   it('allows a scoreless result', () => {
     expect(() => validateMatchResult(base)).not.toThrow()
   })

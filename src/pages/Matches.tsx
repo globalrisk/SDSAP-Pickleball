@@ -30,10 +30,13 @@ export function MatchesPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [teamFilterId, setTeamFilterId] = useState<string>('all')
   const [message, setMessage] = useState<string | null>(null)
-  const { data: matches, isError, error } = useMatches()
+  const { data: matches, isError, error, isLoading } = useMatches()
   const { data: teams } = useTeams()
 
   const matchCount = matches?.length ?? 0
+  const hasForfeits = matches?.some((match) => match.status === 'forfeit') ?? false
+  const activeStatusFilter = statusFilter === 'forfeit' && !hasForfeits ? 'all' : statusFilter
+  const statusFilters = STATUS_FILTERS.filter(({ key }) => key !== 'forfeit' || hasForfeits)
   const teamCount = teams?.length ?? 0
   const canCreateMatches =
     isAdmin &&
@@ -59,7 +62,7 @@ export function MatchesPage() {
 
   const filtered = useMemo(() => {
     return (matches ?? []).filter((m) => {
-      if (statusFilter !== 'all' && m.status !== statusFilter) return false
+      if (activeStatusFilter !== 'all' && m.status !== activeStatusFilter) return false
 
       if (teamFilterId !== 'all') {
         return m.home_team_id === teamFilterId || m.away_team_id === teamFilterId
@@ -67,7 +70,7 @@ export function MatchesPage() {
 
       return true
     })
-  }, [matches, statusFilter, teamFilterId])
+  }, [matches, activeStatusFilter, teamFilterId])
 
   if (isError) return <ErrorState message={(error as Error).message} />
 
@@ -80,7 +83,7 @@ export function MatchesPage() {
         subtitle={t('matches.subtitle', { count: matchCount })}
       />
 
-      {isAdmin && league.status === 'active' && isSelectedSeasonActive && (
+      {isAdmin && league.status === 'active' && isSelectedSeasonActive && !isLoading && matchCount === 0 && (
         <section className="mb-6 rounded-xl border border-green-200 bg-white p-4 shadow-sm sm:p-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -88,9 +91,6 @@ export function MatchesPage() {
                 {t('matches.createTitle')}
               </h2>
               <p className="mt-1 text-sm text-gray-600">{t('matches.createDescription')}</p>
-              {matchCount > 0 && (
-                <p className="mt-1 text-sm text-amber-700">{t('matches.createAlreadyExists')}</p>
-              )}
               {matchCount === 0 && teamCount < 2 && (
                 <p className="mt-1 text-sm text-amber-700">{t('matches.createNeedTeams')}</p>
               )}
@@ -151,15 +151,15 @@ export function MatchesPage() {
         </div>
       </div>
 
-      <div className="mb-6 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-        {STATUS_FILTERS.map(({ key, labelKey }) => (
+      <div className={`mb-6 grid gap-2 sm:flex sm:flex-wrap ${hasForfeits ? 'grid-cols-2' : 'grid-cols-3'}`}>
+        {statusFilters.map(({ key, labelKey }) => (
           <button
             key={key}
             type="button"
-            aria-pressed={statusFilter === key}
+            aria-pressed={activeStatusFilter === key}
             onClick={() => setStatusFilter(key)}
             className={`min-h-11 rounded-full px-4 py-2.5 text-sm font-medium transition-colors sm:py-1.5 ${
-              statusFilter === key
+              activeStatusFilter === key
                 ? 'bg-green-600 text-white'
                 : 'border border-green-200 bg-white text-green-800 hover:bg-green-50 active:bg-green-100'
             }`}

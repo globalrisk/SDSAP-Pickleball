@@ -8,12 +8,12 @@ export function SeasonSelector() {
   if (isLoading || seasons.length === 0) return null
 
   return (
-    <label className="flex items-center gap-2">
+    <label className="flex min-w-0 flex-1 items-center gap-2 lg:flex-none">
       <span className="sr-only">{t('season.label')}</span>
       <select
         value={selectedSeason?.id ?? ''}
         onChange={(e) => setSelectedSeasonId(e.target.value)}
-        className="min-h-9 max-w-[9rem] truncate rounded-lg border border-green-200 bg-white px-2 py-1.5 text-xs font-medium text-green-800 sm:max-w-[11rem] sm:text-sm"
+        className="min-h-11 w-full min-w-0 truncate rounded-lg border border-green-200 bg-white px-2 py-1.5 text-xs font-medium text-green-800 sm:text-sm lg:min-h-9 lg:w-auto lg:max-w-[11rem]"
         aria-label={t('season.label')}
       >
         {seasons.map((season) => (

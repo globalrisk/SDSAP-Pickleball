@@ -23,6 +23,9 @@ export function PersonalTournamentCard({ seasonId: seasonIdOverride }: { seasonI
   const player = pool.data?.find((item) => item.id === preference.playerId)
   const profile = usePlayerProfile(player?.id)
   const selectId = useId()
+  const [expandedMatchupScope, setExpandedMatchupScope] = useState<string | null>(null)
+  const matchupScope = `${season?.id ?? ''}:${player?.id ?? ''}`
+  const matchupsExpanded = expandedMatchupScope === matchupScope
   const [copyResult, setCopyResult] = useState<{ text: string; status: 'copied' | 'failed' } | null>(null)
   const summary = player && season && matches.data
     ? buildPersonalTournament(player.id, season.id, matches.data, profile.data?.history ?? []) : null
@@ -48,7 +51,13 @@ export function PersonalTournamentCard({ seasonId: seasonIdOverride }: { seasonI
   }
   const remainingMatchups = (summary?.remainingMatches ?? [])
     .map((match) => ({ match, names: matchNames(match) }))
-    .sort((a, b) => a.names.opponents.localeCompare(b.names.opponents) || a.match.id.localeCompare(b.match.id))
+    .sort((a, b) => {
+      const priority = (match: MatchWithTeams) => match.id === summary?.playingMatch?.id ? 0
+        : match.id === summary?.upNextMatch?.id ? 1 : 2
+      return priority(a.match) - priority(b.match)
+        || a.names.opponents.localeCompare(b.names.opponents) || a.match.id.localeCompare(b.match.id)
+    })
+  const visibleMatchups = matchupsExpanded ? remainingMatchups : remainingMatchups.slice(0, 2)
   const isRecap = Boolean(summary?.hasFixtures && summary.remaining === 0)
   const recapText = player && season && summary ? [
     `${player.name} · ${season.name}`,
@@ -71,6 +80,7 @@ export function PersonalTournamentCard({ seasonId: seasonIdOverride }: { seasonI
 
   function changePlayer(id: string | null) {
     preference.selectPlayer(id)
+    setExpandedMatchupScope(null)
     setCopyResult(null)
   }
 
@@ -124,8 +134,8 @@ export function PersonalTournamentCard({ seasonId: seasonIdOverride }: { seasonI
                 <div className="mt-4">
                   <h3 className="text-sm font-bold text-green-950">{t('personal.remainingMatchups', { count: remainingMatchups.length })}</h3>
                   <p className="mt-1 text-xs text-gray-600">{t('personal.flexibleOrder')}</p>
-                  <ul className="mt-3 grid gap-3 sm:grid-cols-2">
-                    {remainingMatchups.map(({ match, names: matchupNames }) => {
+                  <ul id={`${selectId}-matchups`} className="mt-3 grid gap-3 sm:grid-cols-2">
+                    {visibleMatchups.map(({ match, names: matchupNames }) => {
                       const queueStatus = match.id === summary.playingMatch?.id ? 'playing'
                         : match.id === summary.upNextMatch?.id ? 'upNext' : null
                       return <li key={match.id} className={`rounded-xl border p-3 ${queueStatus ? 'border-green-300 bg-green-50' : 'border-gray-200'}`}>
@@ -140,6 +150,17 @@ export function PersonalTournamentCard({ seasonId: seasonIdOverride }: { seasonI
                       </li>
                     })}
                   </ul>
+                  {remainingMatchups.length > 2 ? (
+                    <button
+                      type="button"
+                      aria-expanded={matchupsExpanded}
+                      aria-controls={`${selectId}-matchups`}
+                      onClick={() => setExpandedMatchupScope(matchupsExpanded ? null : matchupScope)}
+                      className="mt-3 min-h-11 w-full rounded-xl border border-green-200 px-4 py-2 text-sm font-semibold text-green-800 hover:bg-green-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600"
+                    >
+                      {t(matchupsExpanded ? 'personal.showFewerMatchups' : 'personal.viewAllMatchups', { count: remainingMatchups.length })}
+                    </button>
+                  ) : null}
                 </div>
               ) : <p className="mt-4 text-sm font-semibold text-green-800">{t('personal.allDone')}</p>}
 

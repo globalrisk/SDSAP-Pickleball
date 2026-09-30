@@ -68,8 +68,8 @@ export function AppLayout() {
         onKeyDown={(event) => { if (event.key === 'Escape') setManageOpen(false) }}
       >
         <div className="mx-auto max-w-5xl px-4 sm:px-6">
-          <div className="flex min-h-14 items-center justify-between gap-3 py-2">
-            <div className="flex min-w-0 items-center gap-2">
+          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 py-2 lg:flex lg:min-h-14">
+            <div className="order-1 flex min-w-0 items-center gap-2">
               {league.logo_url ? (
                 <img src={league.logo_url} alt="" className="h-9 w-9 shrink-0 rounded-xl object-cover" />
               ) : (
@@ -79,9 +79,11 @@ export function AppLayout() {
               )}
               <span className="truncate text-base font-bold text-green-800 sm:text-lg">{league.name}</span>
             </div>
-            <div className="flex items-center gap-1.5 sm:gap-2">
+            <div className="order-3 col-span-2 flex min-w-0 gap-2 lg:order-2 lg:ml-auto">
               <LeagueSelector />
               <SeasonSelector />
+            </div>
+            <div className="order-2 flex shrink-0 items-center gap-1.5 lg:order-3 lg:gap-2">
               <LanguageSwitcher />
               {isAdmin ? (
                 <button type="button" onClick={() => void signOut()} className="hidden min-h-9 rounded-lg border border-green-200 px-2 text-xs font-bold text-green-800 sm:inline-flex sm:items-center">

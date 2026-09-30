@@ -1,3 +1,20 @@
+export type MatchResultValidationCode =
+  | 'winnerInvalid'
+  | 'scoresRequired'
+  | 'scoresInvalid'
+  | 'scoresTied'
+  | 'winnerMismatch'
+
+export class MatchResultValidationError extends Error {
+  readonly code: MatchResultValidationCode
+
+  constructor(code: MatchResultValidationCode, message: string) {
+    super(message)
+    this.name = 'MatchResultValidationError'
+    this.code = code
+  }
+}
+
 export interface MatchResultInput {
   homeTeamId: string
   awayTeamId: string
@@ -25,13 +42,13 @@ export function validateMatchResult(input: MatchResultInput): void {
   const { homeTeamId, awayTeamId, winnerTeamId, homeScore, awayScore } = input
 
   if (winnerTeamId !== homeTeamId && winnerTeamId !== awayTeamId) {
-    throw new Error('Winner must be one of the teams in this match')
+    throw new MatchResultValidationError('winnerInvalid', 'Winner must be one of the teams in this match')
   }
 
   const hasHomeScore = homeScore != null
   const hasAwayScore = awayScore != null
   if (hasHomeScore !== hasAwayScore) {
-    throw new Error('Enter both team scores or leave both blank')
+    throw new MatchResultValidationError('scoresRequired', 'Enter both team scores or leave both blank')
   }
   if (!hasHomeScore || !hasAwayScore) return
 
@@ -41,15 +58,15 @@ export function validateMatchResult(input: MatchResultInput): void {
     homeScore < 0 ||
     awayScore < 0
   ) {
-    throw new Error('Scores must be nonnegative whole numbers')
+    throw new MatchResultValidationError('scoresInvalid', 'Scores must be nonnegative whole numbers')
   }
   if (homeScore === awayScore) {
-    throw new Error('Match scores cannot be tied')
+    throw new MatchResultValidationError('scoresTied', 'Match scores cannot be tied')
   }
 
   const scoreWinnerId = homeScore > awayScore ? homeTeamId : awayTeamId
   if (winnerTeamId !== scoreWinnerId) {
-    throw new Error('Selected winner does not match the entered scores')
+    throw new MatchResultValidationError('winnerMismatch', 'Selected winner does not match the entered scores')
   }
 }
 

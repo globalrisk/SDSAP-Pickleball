@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -13,7 +13,11 @@ import {
   isLikelyConnectionError,
   type MatchResultSnapshot,
 } from '../lib/matchSaveRecovery'
-import { resultFromScores } from '../lib/matchResultValidation'
+import {
+  MatchResultValidationError,
+  resultFromScores,
+  type MatchResultValidationCode,
+} from '../lib/matchResultValidation'
 import type { MatchWithTeams } from '../types'
 
 interface RecordResultFormProps {
@@ -63,6 +67,17 @@ export function RecordResultForm({
     match.away_score != null ? String(match.away_score) : '',
   )
   const [error, setError] = useState<string | null>(null)
+  const [validationCode, setValidationCode] = useState<MatchResultValidationCode | null>(null)
+  const errorId = useId()
+  const homeInput = useRef<HTMLInputElement>(null)
+  const awayInput = useRef<HTMLInputElement>(null)
+  const scoreInvalid = (score: string) => !Number.isInteger(Number(score)) || Number(score) < 0
+  const homeInvalid = validationCode === 'scoresRequired' ? homeScore === ''
+    : validationCode === 'scoresInvalid' ? scoreInvalid(homeScore)
+    : validationCode === 'scoresTied'
+  const awayInvalid = validationCode === 'scoresRequired' ? awayScore === ''
+    : validationCode === 'scoresInvalid' ? scoreInvalid(awayScore)
+    : validationCode === 'scoresTied'
   const [failedPayload, setFailedPayload] = useState<ResultMutationPayload | null>(
     null,
   )
@@ -124,6 +139,7 @@ export function RecordResultForm({
         queryClient.invalidateQueries({ queryKey: ['player-profile'] }),
       ])
       setError(null)
+      setValidationCode(null)
       setFailedPayload(null)
       const winnerTeamId = payload.type === 'result' ? payload.winnerTeamId : null
       if (winnerTeamId) {
@@ -158,7 +174,7 @@ export function RecordResultForm({
         return
       }
       setFailedPayload(null)
-      setError(err.message)
+      setError(err instanceof MatchResultValidationError ? t(`record.validation.${err.code}`) : err.message)
     },
   })
 
@@ -173,9 +189,13 @@ export function RecordResultForm({
   }
 
   function handleSave() {
+    setValidationCode(null)
     if (homeScore === '' || awayScore === '') {
       setFailedPayload(null)
+      setValidationCode('scoresRequired')
       setError(t('record.scoresRequired'))
+      if (homeScore === '') homeInput.current?.focus()
+      else awayInput.current?.focus()
       return
     }
     try {
@@ -188,7 +208,14 @@ export function RecordResultForm({
       submitPayload({ type: 'result', ...result }, failedPayload !== null)
     } catch (err) {
       setFailedPayload(null)
-      setError(err instanceof Error ? err.message : String(err))
+      if (err instanceof MatchResultValidationError) {
+        setValidationCode(err.code)
+        setError(t(`record.validation.${err.code}`))
+        if (err.code === 'scoresInvalid' && !scoreInvalid(homeScore)) awayInput.current?.focus()
+        else homeInput.current?.focus()
+      } else {
+        setError(err instanceof Error ? err.message : String(err))
+      }
       return
     }
   }
@@ -224,10 +251,11 @@ export function RecordResultForm({
 
       {error ? (
         <div
+          id={errorId}
           className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800"
           role="alert"
         >
-          <p>{error}</p>
+          <p>{validationCode ? t(`record.validation.${validationCode}`) : error}</p>
           {failedPayload ? (
             <button
               type="button"
@@ -257,6 +285,9 @@ export function RecordResultForm({
             {match.home_team.name}
           </span>
           <input
+            ref={homeInput}
+            aria-invalid={homeInvalid}
+            aria-describedby={homeInvalid ? errorId : undefined}
             type="number"
             inputMode="numeric"
             min="0"
@@ -265,8 +296,11 @@ export function RecordResultForm({
             disabled={mutation.isPending}
             placeholder={t('record.scorePlaceholder')}
             value={homeScore}
-            onChange={(e) => setHomeScore(e.target.value)}
-            className={inputClass}
+            onChange={(e) => {
+              setHomeScore(e.target.value)
+              if (validationCode) { setValidationCode(null); setError(null) }
+            }}
+            className={`${inputClass} ${homeInvalid ? 'border-red-400 bg-red-50 ring-1 ring-red-400' : ''}`}
           />
         </label>
         <label className="min-w-0">
@@ -274,6 +308,9 @@ export function RecordResultForm({
             {match.away_team.name}
           </span>
           <input
+            ref={awayInput}
+            aria-invalid={awayInvalid}
+            aria-describedby={awayInvalid ? errorId : undefined}
             type="number"
             inputMode="numeric"
             min="0"
@@ -282,8 +319,11 @@ export function RecordResultForm({
             disabled={mutation.isPending}
             placeholder={t('record.scorePlaceholder')}
             value={awayScore}
-            onChange={(e) => setAwayScore(e.target.value)}
-            className={inputClass}
+            onChange={(e) => {
+              setAwayScore(e.target.value)
+              if (validationCode) { setValidationCode(null); setError(null) }
+            }}
+            className={`${inputClass} ${awayInvalid ? 'border-red-400 bg-red-50 ring-1 ring-red-400' : ''}`}
           />
         </label>
       </div>

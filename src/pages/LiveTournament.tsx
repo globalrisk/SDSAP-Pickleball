@@ -51,6 +51,8 @@ export function LiveTournamentPage() {
   const remainingCount = tournament.totalCount - tournament.completedCount
   const courtCount = selectedSeason?.live_court_count ?? 1
   const canManage = isAdmin && league.status === 'active' && isSelectedSeasonActive
+  const attendancePlayers = teamsQuery.data?.flatMap((team) => team.players) ?? []
+  const presentCount = attendancePlayers.filter((player) => player.is_present === true).length
   const rankedMatches = useMemo(
     () => rankAvailableMatches(matchesQuery.data ?? [], standingsQuery.standings),
     [matchesQuery.data, standingsQuery.standings],
@@ -212,7 +214,7 @@ export function LiveTournamentPage() {
               </div>
             </div>
             <div className="rounded-2xl bg-white/10 px-5 py-3 text-center backdrop-blur-sm">
-              <p className="text-xs uppercase tracking-wide text-green-100">{t('live.courtsConfigured')}</p>
+              <p className="text-xs uppercase tracking-wide text-green-100">{t('live.matchesRemaining')}</p>
               <p className="mt-0.5 text-lg font-black">{t('live.remaining', { count: remainingCount })}</p>
             </div>
           </div>
@@ -253,53 +255,6 @@ export function LiveTournamentPage() {
               <option key={count} value={count}>{t('live.courtCount', { count })}</option>
             ))}
           </select>
-        </section>
-      ) : null}
-
-      {teamsQuery.data && teamsQuery.data.length > 0 ? (
-        <section className="mb-6 rounded-2xl border border-green-200 bg-white p-4 shadow-sm sm:p-5">
-          <div className="mb-4">
-            <p className="text-xs font-bold uppercase tracking-wider text-green-700">{t('live.attendanceEyebrow')}</p>
-            <h2 className="text-lg font-black text-green-950">{t('live.playerAttendance')}</h2>
-            <p className="mt-1 text-sm text-gray-600">{t('live.attendanceHint')}</p>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {teamsQuery.data.map((team) => (
-              <div key={team.id} className="rounded-xl border border-gray-200 p-3">
-                <div className="mb-2 flex items-center gap-2">
-                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: team.color }} />
-                  <p className="truncate text-xs font-bold uppercase tracking-wide text-gray-600">{team.name}</p>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  {team.players.map((player) => {
-                    const isPresent = player.is_present === true
-                    const isThisPending =
-                      presenceMutation.isPending &&
-                      presenceMutation.variables?.playerId === player.id
-                    return (
-                      <button
-                        key={player.id}
-                        type="button"
-                        disabled={!canManage || presenceMutation.isPending}
-                        onClick={() => presenceMutation.mutate({ playerId: player.id, isPresent: !isPresent })}
-                        className={`min-h-11 rounded-xl border px-2 py-2 text-left text-xs font-bold transition-colors disabled:opacity-50 ${
-                          isPresent
-                            ? 'border-green-300 bg-green-50 text-green-900 hover:bg-green-100'
-                            : 'border-red-200 bg-red-50 text-red-800 hover:bg-red-100'
-                        }`}
-                        aria-pressed={isPresent}
-                      >
-                        <span className="block truncate">{player.name}</span>
-                        <span className="mt-0.5 block text-[10px] font-semibold uppercase tracking-wide opacity-75">
-                          {isThisPending ? t('common.loading') : isPresent ? t('live.present') : t('live.notPresent')}
-                        </span>
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
         </section>
       ) : null}
 
@@ -359,6 +314,56 @@ export function LiveTournamentPage() {
                 })}
               </div>
             </section>
+
+            {teamsQuery.data && teamsQuery.data.length > 0 ? (
+              <details id="live-attendance" className="group rounded-2xl border border-green-200 bg-white p-4 shadow-sm sm:p-5">
+                <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 [&::-webkit-details-marker]:hidden">
+                  <span>
+                    <span className="block text-base font-black text-green-950">{t('live.playerAttendance')}</span>
+                    <span className="mt-1 block text-xs text-gray-600">{t('live.attendanceCount', { present: presentCount, total: attendancePlayers.length })}</span>
+                  </span>
+                  <span aria-hidden="true" className="text-green-800 transition-transform group-open:rotate-180">⌄</span>
+                </summary>
+                <p className="mb-4 mt-3 text-sm text-gray-600">{t('live.attendanceHint')}</p>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {teamsQuery.data.map((team) => (
+                    <div key={team.id} className="rounded-xl border border-gray-200 p-3">
+                      <div className="mb-2 flex items-center gap-2">
+                        <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: team.color }} />
+                        <p className="truncate text-xs font-bold uppercase tracking-wide text-gray-600">{team.name}</p>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        {team.players.map((player) => {
+                          const isPresent = player.is_present === true
+                          const isThisPending =
+                            presenceMutation.isPending &&
+                            presenceMutation.variables?.playerId === player.id
+                          return (
+                            <button
+                              key={player.id}
+                              type="button"
+                              disabled={!canManage || presenceMutation.isPending}
+                              onClick={() => presenceMutation.mutate({ playerId: player.id, isPresent: !isPresent })}
+                              className={`min-h-11 rounded-xl border px-2 py-2 text-left text-xs font-bold transition-colors disabled:opacity-50 ${
+                                isPresent
+                                  ? 'border-green-300 bg-green-50 text-green-900 hover:bg-green-100'
+                                  : 'border-red-200 bg-red-50 text-red-800 hover:bg-red-100'
+                              }`}
+                              aria-pressed={isPresent}
+                            >
+                              <span className="block truncate">{player.name}</span>
+                              <span className="mt-0.5 block text-[10px] font-semibold uppercase tracking-wide opacity-75">
+                                {isThisPending ? t('common.loading') : isPresent ? t('live.present') : t('live.notPresent')}
+                              </span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            ) : null}
 
             <section>
               <h2 className="mb-3 text-lg font-black text-green-950">{t('live.upNext')}</h2>
