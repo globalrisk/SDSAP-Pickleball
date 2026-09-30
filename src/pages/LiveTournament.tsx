@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -15,13 +15,12 @@ import {
   type TournamentConnectionStatus,
 } from '../hooks/useTournamentRealtime'
 import {
-  seedMatchUpNext,
   setLiveCourtCount,
   setMatchLiveStatus,
   setPlayerPresence,
 } from '../lib/api'
-import { recommendNextMatch } from '../lib/matchRecommendation'
-import { buildTournamentView } from '../lib/tournamentMode'
+import { rankAvailableMatches } from '../lib/matchRecommendation'
+import { buildTournamentView, shouldReleaseQueuedMatch } from '../lib/tournamentMode'
 import type { MatchLiveStatus, MatchWithTeams } from '../types'
 import { useAuth } from '../context/AuthContext'
 import { useLeague } from '../context/LeagueContext'
@@ -52,15 +51,30 @@ export function LiveTournamentPage() {
   const remainingCount = tournament.totalCount - tournament.completedCount
   const courtCount = selectedSeason?.live_court_count ?? 1
   const canManage = isAdmin && league.status === 'active' && isSelectedSeasonActive
-  const recommendedMatch = useMemo(
-    () => recommendNextMatch(matchesQuery.data ?? [], standingsQuery.standings),
+  const rankedMatches = useMemo(
+    () => rankAvailableMatches(matchesQuery.data ?? [], standingsQuery.standings),
     [matchesQuery.data, standingsQuery.standings],
   )
+  const upNextMatch = tournament.upNext ?? rankedMatches[0] ?? null
+  const availableMatches = rankedMatches.filter((match) => match.id !== upNextMatch?.id)
 
   const queueMutation = useMutation({
-    mutationFn: ({ matchId, liveStatus }: { matchId: string; liveStatus: MatchLiveStatus }) =>
-      setMatchLiveStatus(matchId, liveStatus),
-    onSuccess: () =>
+    mutationFn: async ({ matchId, liveStatus }: { matchId: string; liveStatus: MatchLiveStatus }) => {
+      const selected = matchesQuery.data?.find((match) => match.id === matchId)
+      const queued = matchesQuery.data?.find(
+        (match) => match.status === 'scheduled' && match.live_status === 'up_next',
+      )
+      if (
+        liveStatus === 'playing' && selected && queued &&
+        shouldReleaseQueuedMatch(selected, queued, courtCount, tournament.playing)
+      ) {
+        // Starting a different match invalidates a single-court queue. On
+        // multiple courts, release a queued match only if its teams are taken.
+        await setMatchLiveStatus(queued.id, 'available')
+      }
+      await setMatchLiveStatus(matchId, liveStatus)
+    },
+    onSettled: () =>
       queryClient.invalidateQueries({ queryKey: ['matches', selectedSeason?.id] }),
   })
 
@@ -74,35 +88,10 @@ export function LiveTournamentPage() {
       ]),
   })
 
-  const seedMutation = useMutation({
-    mutationFn: seedMatchUpNext,
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ['matches', selectedSeason?.id] }),
-  })
-
   const courtCountMutation = useMutation({
     mutationFn: (count: number) => setLiveCourtCount(selectedSeason!.id, count),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['seasons'] }),
   })
-
-  const seedUpNext = seedMutation.mutate
-  useEffect(() => {
-    if (
-      !canManage ||
-      tournament.upNext ||
-      !recommendedMatch ||
-      seedMutation.isPending
-    ) {
-      return
-    }
-    seedUpNext(recommendedMatch.id)
-  }, [
-    canManage,
-    recommendedMatch,
-    seedMutation.isPending,
-    seedUpNext,
-    tournament.upNext,
-  ])
 
   if (seasonLoading || matchesQuery.isLoading || standingsQuery.isLoading || teamsQuery.isLoading) {
     return <LoadingState />
@@ -111,7 +100,7 @@ export function LiveTournamentPage() {
   const error = matchesQuery.error ?? standingsQuery.error ?? teamsQuery.error
   if (error) return <ErrorState message={(error as Error).message} />
   const actionError =
-    queueMutation.error ?? presenceMutation.error ?? seedMutation.error ?? courtCountMutation.error
+    queueMutation.error ?? presenceMutation.error ?? courtCountMutation.error
 
   function moveMatch(match: MatchWithTeams, liveStatus: MatchLiveStatus) {
     queueMutation.reset()
@@ -141,7 +130,7 @@ export function LiveTournamentPage() {
       <>
         <button
           type="button"
-          disabled={queueMutation.isPending || tournament.playing.length >= courtCount}
+          disabled={queueMutation.isPending || courtCountMutation.isPending || tournament.playing.length >= courtCount}
           onClick={() => moveMatch(match, 'playing')}
           className={`${actionClass} bg-green-600 text-white hover:bg-green-700`}
         >
@@ -149,7 +138,7 @@ export function LiveTournamentPage() {
         </button>
         <button
           type="button"
-          disabled={queueMutation.isPending}
+          disabled={queueMutation.isPending || courtCountMutation.isPending}
           onClick={() => moveMatch(match, 'up_next')}
           className={`${actionClass} bg-amber-100 text-amber-900 hover:bg-amber-200`}
         >
@@ -162,7 +151,7 @@ export function LiveTournamentPage() {
   function upNextActions(match: MatchWithTeams) {
     return (
       <>
-        <button type="button" disabled={queueMutation.isPending || tournament.playing.length >= courtCount} onClick={() => moveMatch(match, 'playing')} className={`${actionClass} bg-green-600 text-white hover:bg-green-700`}>
+        <button type="button" disabled={queueMutation.isPending || courtCountMutation.isPending || tournament.playing.length >= courtCount} onClick={() => moveMatch(match, 'playing')} className={`${actionClass} bg-green-600 text-white hover:bg-green-700`}>
           {t('live.playNow')}
         </button>
       </>
@@ -373,12 +362,12 @@ export function LiveTournamentPage() {
 
             <section>
               <h2 className="mb-3 text-lg font-black text-green-950">{t('live.upNext')}</h2>
-              {tournament.upNext ? (
+              {upNextMatch ? (
                 <LiveMatchCard
-                  match={tournament.upNext}
-                  label={t('live.autoSelected')}
+                  match={upNextMatch}
+                  label={t(tournament.upNext ? 'live.queuedNext' : 'live.autoSelected')}
                   tone="next"
-                  actions={canManage ? upNextActions(tournament.upNext) : null}
+                  actions={canManage ? upNextActions(upNextMatch) : null}
                 />
               ) : (
                 <p className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900">{t('live.noUpNext')}</p>
@@ -391,10 +380,10 @@ export function LiveTournamentPage() {
                   <p className="text-xs font-bold uppercase tracking-wider text-green-700">{t('live.anyRound')}</p>
                   <h2 className="text-lg font-black text-green-950">{t('live.availableMatches')}</h2>
                 </div>
-                <span className="text-xs font-semibold text-gray-500">{t('live.matchCount', { count: tournament.available.length })}</span>
+                <span className="text-xs font-semibold text-gray-500">{t('live.matchCount', { count: availableMatches.length })}</span>
               </div>
               <div className="space-y-3">
-                {tournament.available.map((match) => (
+                {availableMatches.map((match) => (
                   <LiveMatchCard key={match.id} match={match} label={t('live.ready')} actions={canManage ? queueActions(match) : null} />
                 ))}
               </div>

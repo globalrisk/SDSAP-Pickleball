@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { recommendNextMatch } from './matchRecommendation'
+import { rankAvailableMatches, recommendNextMatch } from './matchRecommendation'
 import type { MatchLiveStatus, MatchStatus, MatchWithTeams, StandingRow, Team } from '../types'
 
 function match(
@@ -11,6 +11,7 @@ function match(
     liveStatus?: MatchLiveStatus
     recordedAt?: string
     absentHome?: boolean
+    round?: number
   } = {},
 ): MatchWithTeams {
   const team = (teamId: string, absent = false) => ({
@@ -33,7 +34,7 @@ function match(
     home_score: null,
     away_score: null,
     winner_team_id: options.status === 'completed' ? home : null,
-    round_number: 1,
+    round_number: options.round ?? 1,
     home_pool_player_ids: null,
     away_pool_player_ids: null,
     result_recorded_at: options.recordedAt ?? null,
@@ -58,6 +59,64 @@ function standing(teamId: string, played: number, points = 0, rank = 1): Standin
 }
 
 describe('recommendNextMatch', () => {
+  it('reorders the full queue after a match is played out of round order', () => {
+    const matches = [
+      match('random', 'A', 'B', { status: 'completed', recordedAt: '2026-08-14T01:00:00Z', round: 5 }),
+      match('old-round', 'A', 'C', { round: 1 }),
+      match('fair-first', 'D', 'E', { round: 7 }),
+      match('fair-second', 'C', 'F', { round: 2 }),
+    ]
+
+    expect(rankAvailableMatches(matches, [])?.map((item) => item.id)).toEqual([
+      'fair-second', 'fair-first', 'old-round',
+    ])
+  })
+
+  it('plans rest across the displayed queue instead of ranking each match in isolation', () => {
+    const matches = [
+      match('first', 'A', 'B', { round: 1 }),
+      match('same-team', 'A', 'C', { round: 2 }),
+      match('rested', 'C', 'D', { round: 3 }),
+    ]
+
+    expect(rankAvailableMatches(matches, []).map((item) => item.id)).toEqual([
+      'first', 'rested', 'same-team',
+    ])
+  })
+
+  it('plans the available order after an explicitly queued match', () => {
+    const matches = [
+      match('queued', 'A', 'B', { liveStatus: 'up_next', round: 5 }),
+      match('same-team', 'A', 'C', { round: 1 }),
+      match('rested', 'C', 'D', { round: 2 }),
+    ]
+
+    expect(rankAvailableMatches(matches, []).map((item) => item.id)).toEqual([
+      'rested', 'same-team',
+    ])
+  })
+
+  it('does not offer a team on court and accounts for its pending game', () => {
+    const matches = [
+      match('on-court', 'A', 'B', { liveStatus: 'playing' }),
+      match('blocked', 'A', 'C', { round: 1 }),
+      match('ready', 'C', 'D', { round: 2 }),
+    ]
+
+    expect(rankAvailableMatches(matches, []).map((item) => item.id)).toEqual(['ready'])
+  })
+
+  it('ignores a stale queued match that shares a team with Court 1', () => {
+    const matches = [
+      match('court-1', 'A', 'B', { liveStatus: 'playing' }),
+      match('stale-queue', 'A', 'C', { liveStatus: 'up_next' }),
+      match('court-2-first', 'C', 'D', { round: 1 }),
+      match('court-2-later', 'E', 'F', { round: 2 }),
+    ]
+
+    expect(rankAvailableMatches(matches, [])[0]?.id).toBe('court-2-first')
+  })
+
   it('prioritizes equal match counts before other preferences', () => {
     const matches = [
       match('played', 'A', 'B', { status: 'completed', recordedAt: '2026-08-14T01:00:00Z' }),

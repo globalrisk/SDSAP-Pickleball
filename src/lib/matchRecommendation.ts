@@ -1,4 +1,4 @@
-import { areAllMatchPlayersPresent } from './tournamentMode'
+import { areAllMatchPlayersPresent, matchesShareTeam } from './tournamentMode'
 import type { MatchWithTeams, StandingRow } from '../types'
 
 interface CandidateScore {
@@ -59,10 +59,10 @@ function compareScores(a: CandidateScore, b: CandidateScore) {
   )
 }
 
-export function recommendNextMatch(
+export function rankAvailableMatches(
   matches: MatchWithTeams[],
   standings: StandingRow[],
-): MatchWithTeams | null {
+): MatchWithTeams[] {
   const completed = matches
     .filter((match) => match.status !== 'scheduled')
     .sort((a, b) =>
@@ -75,16 +75,27 @@ export function recommendNextMatch(
       match.live_status === 'available' &&
       areAllMatchPlayersPresent(match),
   )
-  if (candidates.length === 0) return null
+  if (candidates.length === 0) return []
 
-  const teamIds = new Set<string>()
+  const teamIds = new Set(
+    candidates.flatMap((match) => [match.home_team_id, match.away_team_id]),
+  )
+  const playing = matches.filter(
+    (match) => match.status === 'scheduled' && match.live_status === 'playing',
+  )
+  const queued = matches.find(
+    (match) =>
+      match.status === 'scheduled' &&
+      match.live_status === 'up_next' &&
+      !playing.some((active) => matchesShareTeam(match, active)),
+  )
+  if (queued) {
+    teamIds.add(queued.home_team_id)
+    teamIds.add(queued.away_team_id)
+  }
   const played = new Map<string, number>()
   const lastPlayedIndex = new Map<string, number>()
 
-  for (const match of matches) {
-    teamIds.add(match.home_team_id)
-    teamIds.add(match.away_team_id)
-  }
   completed.forEach((match, index) => {
     played.set(match.home_team_id, (played.get(match.home_team_id) ?? 0) + 1)
     played.set(match.away_team_id, (played.get(match.away_team_id) ?? 0) + 1)
@@ -92,28 +103,38 @@ export function recommendNextMatch(
     lastPlayedIndex.set(match.away_team_id, index)
   })
 
-  const playing = matches.filter(
-    (match) => match.status === 'scheduled' && match.live_status === 'playing',
-  )
-  const playingTeamIds = new Set(
-    playing.flatMap((match) => [match.home_team_id, match.away_team_id]),
-  )
   const alternativesWithoutPlayingTeams = playing.length > 0
     ? candidates.filter(
-        (match) =>
-          !playingTeamIds.has(match.home_team_id) &&
-          !playingTeamIds.has(match.away_team_id),
+        (match) => !playing.some((active) => matchesShareTeam(match, active)),
       )
     : candidates
   const eligible = playing.length > 0 ? alternativesWithoutPlayingTeams : candidates
-  if (eligible.length === 0) return null
+  if (eligible.length === 0) return []
+
+  // Count games already on court when balancing the next slot. Concurrent
+  // court games share one rest position until their results arrive.
+  let historyLength = completed.length
+  for (const match of playing) {
+    played.set(match.home_team_id, (played.get(match.home_team_id) ?? 0) + 1)
+    played.set(match.away_team_id, (played.get(match.away_team_id) ?? 0) + 1)
+    lastPlayedIndex.set(match.home_team_id, historyLength)
+    lastPlayedIndex.set(match.away_team_id, historyLength)
+  }
+  if (playing.length > 0) historyLength += 1
+  if (queued) {
+    played.set(queued.home_team_id, (played.get(queued.home_team_id) ?? 0) + 1)
+    played.set(queued.away_team_id, (played.get(queued.away_team_id) ?? 0) + 1)
+    lastPlayedIndex.set(queued.home_team_id, historyLength)
+    lastPlayedIndex.set(queued.away_team_id, historyLength)
+    historyLength += 1
+  }
 
   const restFor = (teamId: string) => {
     const lastIndex = lastPlayedIndex.get(teamId)
-    return lastIndex == null ? completed.length + 1 : completed.length - 1 - lastIndex
+    return lastIndex == null ? historyLength + 1 : historyLength - 1 - lastIndex
   }
 
-  const scored = eligible.map((match): CandidateScore => {
+  const score = (match: MatchWithTeams): CandidateScore => {
     const projectedCounts = [...teamIds].map((teamId) =>
       (played.get(teamId) ?? 0) +
       (teamId === match.home_team_id || teamId === match.away_team_id ? 1 : 0),
@@ -130,7 +151,27 @@ export function recommendNextMatch(
       totalRest: homeRest + awayRest,
       standingImpact: standingsImpact(match, standings),
     }
-  })
+  }
 
-  return scored.sort(compareScores)[0]?.match ?? null
+  const remaining = [...eligible]
+  const ordered: MatchWithTeams[] = []
+  while (remaining.length > 0) {
+    const best = remaining.map(score).sort(compareScores)[0].match
+    ordered.push(best)
+    remaining.splice(remaining.findIndex((match) => match.id === best.id), 1)
+    played.set(best.home_team_id, (played.get(best.home_team_id) ?? 0) + 1)
+    played.set(best.away_team_id, (played.get(best.away_team_id) ?? 0) + 1)
+    lastPlayedIndex.set(best.home_team_id, historyLength)
+    lastPlayedIndex.set(best.away_team_id, historyLength)
+    historyLength += 1
+  }
+
+  return ordered
+}
+
+export function recommendNextMatch(
+  matches: MatchWithTeams[],
+  standings: StandingRow[],
+): MatchWithTeams | null {
+  return rankAvailableMatches(matches, standings)[0] ?? null
 }

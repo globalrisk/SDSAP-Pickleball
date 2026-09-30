@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildTournamentView } from './tournamentMode'
+import { buildTournamentView, shouldReleaseQueuedMatch } from './tournamentMode'
 import type { MatchLiveStatus, MatchStatus } from '../types'
 
 function match(
@@ -22,6 +22,32 @@ function match(
 }
 
 describe('buildTournamentView', () => {
+  it('releases an outdated single-court queue after a different match starts', () => {
+    const queued = match('queued', 1)
+    const other = match('other', 2)
+
+    expect(shouldReleaseQueuedMatch(other, queued, 1)).toBe(true)
+    expect(shouldReleaseQueuedMatch(queued, queued, 1)).toBe(false)
+  })
+
+  it('preserves an independent queue after increasing from one court to two', () => {
+    const queued = { ...match('queued', 1), home_team_id: 'A', away_team_id: 'B' }
+    const independent = { ...match('independent', 2), home_team_id: 'C', away_team_id: 'D' }
+    const overlapping = { ...match('overlapping', 2), home_team_id: 'B', away_team_id: 'C' }
+
+    expect(shouldReleaseQueuedMatch(independent, queued, 1)).toBe(true)
+    expect(shouldReleaseQueuedMatch(independent, queued, 2)).toBe(false)
+    expect(shouldReleaseQueuedMatch(overlapping, queued, 2)).toBe(true)
+  })
+
+  it('releases a stale queue that conflicts with Court 1 before starting Court 2', () => {
+    const queued = { ...match('queued', 2), home_team_id: 'A', away_team_id: 'C' }
+    const court1 = { ...match('court-1', 1), home_team_id: 'A', away_team_id: 'B' }
+    const court2 = { ...match('court-2', 3), home_team_id: 'D', away_team_id: 'E' }
+
+    expect(shouldReleaseQueuedMatch(court2, queued, 2, [court1])).toBe(true)
+  })
+
   it('groups the single-court queue independently of round order', () => {
     const view = buildTournamentView([
       {
@@ -87,5 +113,27 @@ describe('buildTournamentView', () => {
     }
 
     expect(buildTournamentView([playing, blocked]).available).toEqual([])
+  })
+
+  it('does not offer a stored up-next match using a team on Court 1', () => {
+    const playing = {
+      ...match('court-1', 1, 'scheduled', 'playing'),
+      home_team_id: 'A',
+      away_team_id: 'B',
+    }
+    const queued = {
+      ...match('queued', 2, 'scheduled', 'up_next'),
+      home_team_id: 'A',
+      away_team_id: 'C',
+    }
+    const available = {
+      ...match('court-2', 3),
+      home_team_id: 'C',
+      away_team_id: 'D',
+    }
+
+    const view = buildTournamentView([playing, queued, available])
+    expect(view.upNext).toBeNull()
+    expect(view.available.map((item) => item.id)).toEqual(['court-2'])
   })
 })

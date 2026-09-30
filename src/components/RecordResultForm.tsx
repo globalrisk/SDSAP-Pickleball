@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   fetchMatchResultSnapshot,
-  recordForfeit,
   recordResult,
   revertMatchToScheduled,
 } from '../lib/api'
@@ -14,7 +13,7 @@ import {
   isLikelyConnectionError,
   type MatchResultSnapshot,
 } from '../lib/matchSaveRecovery'
-import { validateMatchResult } from '../lib/matchResultValidation'
+import { resultFromScores } from '../lib/matchResultValidation'
 import type { MatchWithTeams } from '../types'
 
 interface RecordResultFormProps {
@@ -26,14 +25,14 @@ interface RecordResultFormProps {
 }
 
 export interface SavedMatchResult {
-  type: 'result' | 'forfeit' | 'revert'
+  type: 'result' | 'revert'
   winnerTeamId: string | null
 }
 
-interface ResultMutationPayload {
-  type: 'result' | 'forfeit' | 'revert'
-  winnerTeamId?: string
-  forfeitTeamId?: string
+type ResultMutationPayload = (
+  | { type: 'result'; winnerTeamId: string; homeScore: number; awayScore: number }
+  | { type: 'revert' }
+) & {
   reconcile?: boolean
 }
 
@@ -41,8 +40,6 @@ class MatchSaveConflictError extends Error {}
 
 const btnPrimary =
   'min-h-11 w-full rounded-lg bg-green-600 px-4 py-3 text-sm font-medium text-white hover:bg-green-700 active:bg-green-800 disabled:opacity-50 sm:py-2'
-const btnSecondary =
-  'min-h-11 w-full rounded-lg border border-red-300 px-4 py-3 text-sm text-red-600 hover:bg-red-50 active:bg-red-100 disabled:opacity-50 sm:py-1.5 sm:text-xs'
 const btnGhost =
   'min-h-11 w-full rounded-lg border border-gray-300 px-4 py-3 text-sm text-gray-600 hover:bg-gray-50 active:bg-gray-100 disabled:opacity-50 sm:py-2'
 const inputClass =
@@ -85,22 +82,11 @@ export function RecordResultForm({
         awayScore: null,
       }
     }
-    if (payload.type === 'forfeit') {
-      return {
-        status: 'forfeit',
-        winnerTeamId:
-          payload.forfeitTeamId === match.home_team_id
-            ? match.away_team_id
-            : match.home_team_id,
-        homeScore: null,
-        awayScore: null,
-      }
-    }
     return {
       status: 'completed',
-      winnerTeamId: payload.winnerTeamId ?? null,
-      homeScore: homeScore === '' ? null : Number(homeScore),
-      awayScore: awayScore === '' ? null : Number(awayScore),
+      winnerTeamId: payload.winnerTeamId,
+      homeScore: payload.homeScore,
+      awayScore: payload.awayScore,
     }
   }
 
@@ -122,20 +108,11 @@ export function RecordResultForm({
         await revertMatchToScheduled(match.id)
         return
       }
-      if (payload.type === 'forfeit' && payload.forfeitTeamId) {
-        await recordForfeit(
-          match.id,
-          payload.forfeitTeamId,
-          match.home_team_id,
-          match.away_team_id,
-        )
-        return
-      }
-      if (payload.type === 'result' && payload.winnerTeamId) {
+      if (payload.type === 'result') {
         await recordResult(match.id, {
           winnerTeamId: payload.winnerTeamId,
-          homeScore: homeScore ? Number(homeScore) : undefined,
-          awayScore: awayScore ? Number(awayScore) : undefined,
+          homeScore: payload.homeScore,
+          awayScore: payload.awayScore,
         })
       }
     },
@@ -148,14 +125,7 @@ export function RecordResultForm({
       ])
       setError(null)
       setFailedPayload(null)
-      const winnerTeamId =
-        payload.type === 'result'
-          ? payload.winnerTeamId ?? null
-          : payload.type === 'forfeit'
-            ? payload.forfeitTeamId === match.home_team_id
-              ? match.away_team_id
-              : match.home_team_id
-            : null
+      const winnerTeamId = payload.type === 'result' ? payload.winnerTeamId : null
       if (winnerTeamId) {
         const winnerName =
           winnerTeamId === match.home_team_id
@@ -202,32 +172,25 @@ export function RecordResultForm({
     mutation.mutate({ ...payload, reconcile })
   }
 
-  function handleWinner(winnerTeamId: string) {
+  function handleSave() {
+    if (homeScore === '' || awayScore === '') {
+      setFailedPayload(null)
+      setError(t('record.scoresRequired'))
+      return
+    }
     try {
-      validateMatchResult({
-        homeTeamId: match.home_team_id,
-        awayTeamId: match.away_team_id,
-        winnerTeamId,
-        homeScore: homeScore === '' ? undefined : Number(homeScore),
-        awayScore: awayScore === '' ? undefined : Number(awayScore),
-      })
+      const result = resultFromScores(
+        match.home_team_id,
+        match.away_team_id,
+        Number(homeScore),
+        Number(awayScore),
+      )
+      submitPayload({ type: 'result', ...result }, failedPayload !== null)
     } catch (err) {
       setFailedPayload(null)
       setError(err instanceof Error ? err.message : String(err))
       return
     }
-    submitPayload(
-      { type: 'result', winnerTeamId },
-      failedPayload !== null,
-    )
-  }
-
-  function handleForfeit(forfeitTeamId: string) {
-    if (!confirm(t('record.confirmForfeit'))) return
-    submitPayload(
-      { type: 'forfeit', forfeitTeamId },
-      failedPayload !== null,
-    )
   }
 
   function handleRevert() {
@@ -297,6 +260,9 @@ export function RecordResultForm({
             type="number"
             inputMode="numeric"
             min="0"
+            step="1"
+            required
+            disabled={mutation.isPending}
             placeholder={t('record.scorePlaceholder')}
             value={homeScore}
             onChange={(e) => setHomeScore(e.target.value)}
@@ -311,6 +277,9 @@ export function RecordResultForm({
             type="number"
             inputMode="numeric"
             min="0"
+            step="1"
+            required
+            disabled={mutation.isPending}
             placeholder={t('record.scorePlaceholder')}
             value={awayScore}
             onChange={(e) => setAwayScore(e.target.value)}
@@ -319,43 +288,14 @@ export function RecordResultForm({
         </label>
       </div>
 
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <button
-          type="button"
-          disabled={mutation.isPending}
-          onClick={() => handleWinner(match.home_team_id)}
-          className={btnPrimary}
-        >
-          {t('record.teamWins', { name: match.home_team.name })}
-        </button>
-        <button
-          type="button"
-          disabled={mutation.isPending}
-          onClick={() => handleWinner(match.away_team_id)}
-          className={btnPrimary}
-        >
-          {t('record.teamWins', { name: match.away_team.name })}
-        </button>
-      </div>
-
-      <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <button
-          type="button"
-          disabled={mutation.isPending}
-          onClick={() => handleForfeit(match.home_team_id)}
-          className={btnSecondary}
-        >
-          {t('record.teamForfeit', { name: match.home_team.name })}
-        </button>
-        <button
-          type="button"
-          disabled={mutation.isPending}
-          onClick={() => handleForfeit(match.away_team_id)}
-          className={btnSecondary}
-        >
-          {t('record.teamForfeit', { name: match.away_team.name })}
-        </button>
-      </div>
+      <button
+        type="button"
+        disabled={mutation.isPending}
+        onClick={handleSave}
+        className={btnPrimary}
+      >
+        {t('record.saveResult')}
+      </button>
 
       {editing && (
         <button

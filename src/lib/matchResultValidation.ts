@@ -6,6 +6,21 @@ export interface MatchResultInput {
   awayScore?: number
 }
 
+export function resultFromScores(
+  homeTeamId: string,
+  awayTeamId: string,
+  homeScore: number,
+  awayScore: number,
+) {
+  const result = {
+    winnerTeamId: homeScore > awayScore ? homeTeamId : awayTeamId,
+    homeScore,
+    awayScore,
+  }
+  validateMatchResult({ homeTeamId, awayTeamId, ...result })
+  return result
+}
+
 export function validateMatchResult(input: MatchResultInput): void {
   const { homeTeamId, awayTeamId, winnerTeamId, homeScore, awayScore } = input
 

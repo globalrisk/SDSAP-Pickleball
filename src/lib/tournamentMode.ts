@@ -40,6 +40,28 @@ export function areAllMatchPlayersPresent(match: TournamentMatch) {
   return players.length === 4 && players.every((player) => player.is_present === true)
 }
 
+export function shouldReleaseQueuedMatch(
+  selected: Pick<TournamentMatch, 'id' | 'home_team_id' | 'away_team_id'>,
+  queued: Pick<TournamentMatch, 'id' | 'home_team_id' | 'away_team_id'> | null,
+  courtCount: number,
+  playing: Pick<TournamentMatch, 'home_team_id' | 'away_team_id'>[] = [],
+) {
+  if (!queued || selected.id === queued.id) return false
+  return courtCount === 1 ||
+    matchesShareTeam(selected, queued) ||
+    playing.some((active) => matchesShareTeam(queued, active))
+}
+
+export function matchesShareTeam(
+  a: Pick<TournamentMatch, 'home_team_id' | 'away_team_id'>,
+  b: Pick<TournamentMatch, 'home_team_id' | 'away_team_id'>,
+) {
+  return a.home_team_id === b.home_team_id ||
+    a.home_team_id === b.away_team_id ||
+    a.away_team_id === b.home_team_id ||
+    a.away_team_id === b.away_team_id
+}
+
 export function buildTournamentView<T extends TournamentMatch>(matches: T[]): TournamentView<T> {
   const sorted = [...matches].sort(byRoundThenId)
   const completed = sorted.filter((match) => match.status !== 'scheduled')
@@ -47,9 +69,8 @@ export function buildTournamentView<T extends TournamentMatch>(matches: T[]): To
   const playing = scheduled
     .filter((match) => match.live_status === 'playing')
     .sort((a, b) => (a.live_court_number ?? 0) - (b.live_court_number ?? 0))
-  const playingTeamIds = new Set(
-    playing.flatMap((match) => [match.home_team_id, match.away_team_id]),
-  )
+  const isBlockedByPlaying = (match: T) =>
+    playing.some((active) => matchesShareTeam(match, active))
   const rounds = [...new Set(sorted.map((match) => match.round_number))].sort((a, b) => a - b)
   const recentResult = [...completed].sort((a, b) => {
     const aTime = a.result_recorded_at ? Date.parse(a.result_recorded_at) : 0
@@ -66,14 +87,16 @@ export function buildTournamentView<T extends TournamentMatch>(matches: T[]): To
     playing,
     upNext:
       scheduled.find(
-        (match) => match.live_status === 'up_next' && areAllMatchPlayersPresent(match),
+        (match) =>
+          match.live_status === 'up_next' &&
+          areAllMatchPlayersPresent(match) &&
+          !isBlockedByPlaying(match),
       ) ?? null,
     available: scheduled.filter(
       (match) =>
         match.live_status === 'available' &&
         areAllMatchPlayersPresent(match) &&
-        !playingTeamIds.has(match.home_team_id) &&
-        !playingTeamIds.has(match.away_team_id),
+        !isBlockedByPlaying(match),
     ),
     waiting: scheduled.filter(
       (match) => match.live_status !== 'playing' && !areAllMatchPlayersPresent(match),

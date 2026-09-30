@@ -1,11 +1,37 @@
 import { describe, expect, it } from 'vitest'
-import { validateForfeitTeam, validateMatchResult } from './matchResultValidation'
+import { resultFromScores, validateForfeitTeam, validateMatchResult } from './matchResultValidation'
 
 const base = {
   homeTeamId: 'home',
   awayTeamId: 'away',
   winnerTeamId: 'home',
 }
+
+describe('resultFromScores', () => {
+  it.each([
+    [11, 7, 'home'],
+    [7, 11, 'away'],
+    [11, 0, 'home'],
+    [0, 11, 'away'],
+  ])('derives the winner from %i–%i and preserves both scores', (homeScore, awayScore, winnerTeamId) => {
+    expect(resultFromScores('home', 'away', homeScore, awayScore)).toEqual({
+      winnerTeamId, homeScore, awayScore,
+    })
+  })
+
+  it.each([
+    [11, 11],
+    [0, 0],
+    [-1, 11],
+    [11, -1],
+    [11.5, 7],
+    [11, 7.5],
+    [NaN, 11],
+    [11, Infinity],
+  ])('rejects tied or invalid scores %s–%s', (homeScore, awayScore) => {
+    expect(() => resultFromScores('home', 'away', homeScore, awayScore)).toThrow()
+  })
+})
 
 describe('validateMatchResult', () => {
   it('allows a scoreless result', () => {

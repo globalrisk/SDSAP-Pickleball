@@ -1348,14 +1348,6 @@ export async function setPlayerPresence(playerId: string, isPresent: boolean): P
   if (error) throw error
 }
 
-export async function seedMatchUpNext(matchId: string): Promise<boolean> {
-  const { data, error } = await supabase.rpc('seed_match_up_next', {
-    p_match_id: matchId,
-  })
-  if (error) throw error
-  return data as boolean
-}
-
 export async function setLiveCourtCount(seasonId: string, courtCount: number): Promise<void> {
   const { error } = await supabase.rpc('set_live_court_count', {
     p_season_id: seasonId,
