@@ -1,6 +1,7 @@
 export type MatchStatus = 'scheduled' | 'completed' | 'forfeit'
 export type MatchLiveStatus = 'available' | 'playing' | 'up_next'
 export type SeasonStatus = 'active' | 'archived'
+export type SeasonFormat = 'round_robin' | 'team_duel'
 export type LeagueStatus = 'active' | 'archived'
 export type PoolPlayerStatus = 'active' | 'inactive'
 
@@ -24,6 +25,8 @@ export interface Season {
   ends_at: string | null
   created_at: string
   live_court_count: number
+  format?: SeasonFormat
+  duel_draft_rating_revision?: number | null
 }
 
 export interface Team {
@@ -170,6 +173,7 @@ export interface SeasonRecapUpset {
 }
 
 export interface SeasonRecap {
+  format?: SeasonFormat
   seasonId: string
   seasonName: string
   isPartial: boolean
@@ -208,6 +212,7 @@ export interface Player {
   pool_player_id: string
   created_at: string
   is_present: boolean
+  duel_rank?: number | null
 }
 
 export interface TeamWithPlayers extends Team {
@@ -230,17 +235,18 @@ export interface Match {
   away_pool_player_ids: string[] | null
   result_recorded_at: string | null
   created_at: string
+  duel_sequence_number?: number | null
 }
 
 export interface MatchWithTeams extends Match {
   home_team: Pick<Team, 'id' | 'name' | 'color'> & {
-    players?: (Pick<Player, 'name' | 'pool_player_id' | 'is_present'> & {
+    players?: (Pick<Player, 'name' | 'pool_player_id' | 'is_present' | 'duel_rank'> & {
       rating?: number
       ratingDeviation?: number
     })[]
   }
   away_team: Pick<Team, 'id' | 'name' | 'color'> & {
-    players?: (Pick<Player, 'name' | 'pool_player_id' | 'is_present'> & {
+    players?: (Pick<Player, 'name' | 'pool_player_id' | 'is_present' | 'duel_rank'> & {
       rating?: number
       ratingDeviation?: number
     })[]

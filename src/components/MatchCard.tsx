@@ -50,6 +50,7 @@ export function MatchCard({ match, showForm = true }: MatchCardProps) {
         <span className="text-xs font-medium text-gray-500">
           {recordedLabel ?? '\u00a0'}
         </span>
+        {match.duel_sequence_number != null ? <span className="text-xs font-semibold text-green-800">{t('leagueDuel.gameLabel', { game: match.duel_sequence_number, round: match.round_number })}</span> : null}
         <StatusBadge status={match.status} />
       </div>
 

@@ -149,7 +149,7 @@ export function computeSeasonRecap(input: SeasonRecapInput): SeasonRecap {
   const scheduledLeft = matches.filter((match) => match.status === 'scheduled').length
   const isPartial = season.status === 'archived' && scheduledLeft > 0
 
-  const standings = computeStandings(teams, finishedForStandings)
+  const standings = computeStandings(teams, finishedForStandings, season.format)
   const champions = standings.filter((row) => row.rank === 1).map(toTeamAward)
   const runnersUp = standings.filter((row) => row.rank === 2).map(toTeamAward)
   const championPlayerIds = new Set(
@@ -240,7 +240,7 @@ export function computeSeasonRecap(input: SeasonRecapInput): SeasonRecap {
 
   // Best partnership (team win rate)
   let bestPartnership: SeasonRecapTeamAward | null = null
-  for (const row of standings) {
+  for (const row of season.format === 'team_duel' ? [] : standings) {
     if (row.played < MIN_PARTNERSHIP_MATCHES) continue
     const winRate = row.wins / row.played
     const currentRate = bestPartnership
@@ -322,6 +322,7 @@ export function computeSeasonRecap(input: SeasonRecapInput): SeasonRecap {
     biggestUpset,
     mostImproved,
     bestPartnership,
+    format: season.format,
     mvp,
   }
 }

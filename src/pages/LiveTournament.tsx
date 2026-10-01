@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { ArchivedSeasonBanner } from '../components/ArchivedSeasonBanner'
 import { LiveMatchCard } from '../components/LiveMatchCard'
+import { LeagueTeamDuelScoreboard } from '../components/LeagueTeamDuelScoreboard'
 import { ErrorState, LoadingState, SetupBanner } from '../components/Layout'
 import type { SavedMatchResult } from '../components/RecordResultForm'
 import { useSeason } from '../context/SeasonContext'
@@ -221,6 +222,8 @@ export function LiveTournamentPage() {
         </div>
       </section>
 
+      <LeagueTeamDuelScoreboard />
+
       {lastWinner ? (
         <div className="mb-5 flex items-start gap-3 rounded-2xl border border-lime-300 bg-lime-50 px-4 py-3 text-lime-950 shadow-sm" role="status">
           <span className="mt-0.5 text-xl" aria-hidden="true">↗</span>
@@ -325,7 +328,7 @@ export function LiveTournamentPage() {
                   <span aria-hidden="true" className="text-green-800 transition-transform group-open:rotate-180">⌄</span>
                 </summary>
                 <p className="mb-4 mt-3 text-sm text-gray-600">{t('live.attendanceHint')}</p>
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <div className={`grid gap-3 sm:grid-cols-2 ${selectedSeason?.format === 'team_duel' ? '' : 'lg:grid-cols-3'}`}>
                   {teamsQuery.data.map((team) => (
                     <div key={team.id} className="rounded-xl border border-gray-200 p-3">
                       <div className="mb-2 flex items-center gap-2">
@@ -333,7 +336,7 @@ export function LiveTournamentPage() {
                         <p className="truncate text-xs font-bold uppercase tracking-wide text-gray-600">{team.name}</p>
                       </div>
                       <div className="grid grid-cols-2 gap-2">
-                        {team.players.map((player) => {
+                        {[...team.players].sort((a, b) => (a.duel_rank ?? 0) - (b.duel_rank ?? 0)).map((player) => {
                           const isPresent = player.is_present === true
                           const isThisPending =
                             presenceMutation.isPending &&
@@ -351,7 +354,7 @@ export function LiveTournamentPage() {
                               }`}
                               aria-pressed={isPresent}
                             >
-                              <span className="block truncate">{player.name}</span>
+                              <span className="block truncate">{player.duel_rank ? `#${player.duel_rank} ` : ''}{player.name}</span>
                               <span className="mt-0.5 block text-[10px] font-semibold uppercase tracking-wide opacity-75">
                                 {isThisPending ? t('common.loading') : isPresent ? t('live.present') : t('live.notPresent')}
                               </span>

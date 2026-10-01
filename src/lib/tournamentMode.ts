@@ -9,6 +9,8 @@ type TournamentMatch = {
   result_recorded_at: string | null
   home_team_id: string
   away_team_id: string
+  home_pool_player_ids?: string[] | null
+  away_pool_player_ids?: string[] | null
   home_team?: { id?: string; players?: { is_present?: boolean }[] }
   away_team?: { id?: string; players?: { is_present?: boolean }[] }
 }
@@ -41,10 +43,10 @@ export function areAllMatchPlayersPresent(match: TournamentMatch) {
 }
 
 export function shouldReleaseQueuedMatch(
-  selected: Pick<TournamentMatch, 'id' | 'home_team_id' | 'away_team_id'>,
-  queued: Pick<TournamentMatch, 'id' | 'home_team_id' | 'away_team_id'> | null,
+  selected: Pick<TournamentMatch, 'id' | 'home_team_id' | 'away_team_id' | 'home_pool_player_ids' | 'away_pool_player_ids'>,
+  queued: Pick<TournamentMatch, 'id' | 'home_team_id' | 'away_team_id' | 'home_pool_player_ids' | 'away_pool_player_ids'> | null,
   courtCount: number,
-  playing: Pick<TournamentMatch, 'home_team_id' | 'away_team_id'>[] = [],
+  playing: Pick<TournamentMatch, 'home_team_id' | 'away_team_id' | 'home_pool_player_ids' | 'away_pool_player_ids'>[] = [],
 ) {
   if (!queued || selected.id === queued.id) return false
   return courtCount === 1 ||
@@ -53,9 +55,14 @@ export function shouldReleaseQueuedMatch(
 }
 
 export function matchesShareTeam(
-  a: Pick<TournamentMatch, 'home_team_id' | 'away_team_id'>,
-  b: Pick<TournamentMatch, 'home_team_id' | 'away_team_id'>,
+  a: Pick<TournamentMatch, 'home_team_id' | 'away_team_id' | 'home_pool_player_ids' | 'away_pool_player_ids'>,
+  b: Pick<TournamentMatch, 'home_team_id' | 'away_team_id' | 'home_pool_player_ids' | 'away_pool_player_ids'>,
 ) {
+  if (a.home_pool_player_ids?.length === 2 && a.away_pool_player_ids?.length === 2
+    && b.home_pool_player_ids?.length === 2 && b.away_pool_player_ids?.length === 2) {
+    const players = new Set([...a.home_pool_player_ids, ...a.away_pool_player_ids])
+    return [...b.home_pool_player_ids, ...b.away_pool_player_ids].some((id) => players.has(id))
+  }
   return a.home_team_id === b.home_team_id ||
     a.home_team_id === b.away_team_id ||
     a.away_team_id === b.home_team_id ||

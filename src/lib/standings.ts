@@ -1,4 +1,4 @@
-import type { MatchWithTeams, StandingRow, Team, TeamWithPlayers } from '../types'
+import type { MatchWithTeams, SeasonFormat, StandingRow, Team, TeamWithPlayers } from '../types'
 
 const FINISHED_STATUSES = new Set(['completed', 'forfeit'])
 
@@ -80,6 +80,7 @@ function resolveTieGroup(group: TeamStats[], matches: MatchWithTeams[]): TeamSta
 export function computeStandings(
   teams: TeamWithPlayers[],
   matches: MatchWithTeams[],
+  format: SeasonFormat = 'round_robin',
 ): StandingRow[] {
   const stats = new Map(
     teams.map((team) => [
@@ -129,7 +130,7 @@ export function computeStandings(
 
   const rankBlocks = [...groupsByPoints.entries()]
     .sort(([pointsA], [pointsB]) => pointsB - pointsA)
-    .flatMap(([, group]) => resolveTieGroup(group, matches))
+    .flatMap(([, group]) => format === 'team_duel' ? [group] : resolveTieGroup(group, matches))
 
   let nextRank = 1
   return rankBlocks.flatMap((block) => {

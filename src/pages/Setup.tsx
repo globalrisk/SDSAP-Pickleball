@@ -22,6 +22,8 @@ import type { BalancedTeam } from '../lib/balanceTeams'
 import { roundRating } from '../lib/ratings'
 import { ArchivedSeasonBanner } from '../components/ArchivedSeasonBanner'
 import { BalancedTeamsBuilder } from '../components/BalancedTeamsBuilder'
+import { LeagueTeamDuelSetup } from '../components/LeagueTeamDuelSetup'
+import { SeasonFormatSelector } from '../components/SeasonFormatSelector'
 import { ErrorState, PageHeader, SetupBanner } from '../components/Layout'
 import { useSeason } from '../context/SeasonContext'
 import { useLeague } from '../context/LeagueContext'
@@ -34,7 +36,7 @@ import {
 import { fetchSeasonRosterIds, saveSeasonRoster, seasonRosterQueryKey } from '../lib/seasonRosterApi'
 import { useAssignedPoolPlayerIds, usePlayerPool } from '../hooks/usePlayerPool'
 import { useTeamsWithPlayers } from '../hooks/useTeams'
-import type { PoolPlayer, TeamWithPlayers } from '../types'
+import type { PoolPlayer, SeasonFormat, TeamWithPlayers } from '../types'
 
 type SetupSection = 'players' | 'season' | 'teams' | 'league'
 type PoolStatusFilter = 'active' | 'inactive' | 'all'
@@ -487,6 +489,9 @@ export function SetupPage() {
     tone: 'ok' | 'error'
   } | null>(null)
   const [newSeasonName, setNewSeasonName] = useState('')
+  const [newSeasonFormat, setNewSeasonFormat] = useState<SeasonFormat>('round_robin')
+  const isDuel = selectedSeason?.format === 'team_duel'
+  const duelRosterLocked = isDuel && (!activeSeasonMatches || activeSeasonMatches.length > 0)
   const requestedSection = searchParams.get('section')
   const activeSection: SetupSection = isSetupSection(requestedSection)
     ? requestedSection
@@ -666,7 +671,7 @@ export function SetupPage() {
   })
 
   const createSeasonMutation = useMutation({
-    mutationFn: (name: string) => createSeason(name, league.id),
+    mutationFn: (name: string) => createSeason(name, league.id, newSeasonFormat),
     onSuccess: (season) => {
       invalidateSeasonData()
       setSelectedSeasonId(season.id)
@@ -681,6 +686,8 @@ export function SetupPage() {
     mutationFn: (playerIds: string[]) => saveSeasonRoster(selectedSeason!.id, playerIds),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: seasonRosterQueryKey(selectedSeason?.id) })
+      invalidateSeasonData()
+      queryClient.invalidateQueries({ queryKey: ['league-duel-draft'] })
       setFeedback({ text: t('setup.seasonRosterSaved'), tone: 'ok' })
     },
   })
@@ -1095,12 +1102,14 @@ export function SetupPage() {
       </section>
       ) : null}
 
+      {activeSection === 'season' && selectedSeason && isSelectedSeasonActive ? <SeasonFormatSelector season={selectedSeason} locked={!activeSeasonMatches || activeSeasonMatches.length > 0} /> : null}
+
       {activeSection === 'season' && selectedSeason && isSelectedSeasonActive ? (
         <section className="mb-6 rounded-xl border border-green-200 bg-white p-5 shadow-sm">
           <h2 className="text-lg font-semibold text-green-900">
             {t('setup.seasonRosterTitle', { name: selectedSeason.name })}
           </h2>
-          <p className="mt-1 text-sm text-gray-600">{t('setup.seasonRosterHelp')}</p>
+          <p className="mt-1 text-sm text-gray-600">{t(isDuel ? 'leagueDuel.rosterHelp' : 'setup.seasonRosterHelp')}</p>
           {seasonRosterQuery.isLoading ? <p className="mt-4 text-sm text-gray-600">{t('common.loading')}</p> : null}
           {seasonRosterQuery.error ? <div className="mt-4"><ErrorState message={(seasonRosterQuery.error as Error).message} /></div> : null}
           {seasonRosterQuery.isSuccess ? (
@@ -1110,10 +1119,10 @@ export function SetupPage() {
                   {t('setup.seasonRosterCount', { count: seasonRosterDraft.length })}
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  <button type="button" onClick={() => setSeasonRosterDraft(pool.filter((player) => player.status === 'active').map((player) => player.id))} className="rounded-lg border border-green-200 px-3 py-2 text-sm font-semibold text-green-800 hover:bg-green-50">
+                  <button type="button" disabled={duelRosterLocked} onClick={() => setSeasonRosterDraft(pool.filter((player) => player.status === 'active').map((player) => player.id))} className="rounded-lg border border-green-200 px-3 py-2 text-sm font-semibold text-green-800 hover:bg-green-50 disabled:opacity-50">
                     {t('setup.seasonRosterSelectAll')}
                   </button>
-                  <button type="button" onClick={() => setSeasonRosterDraft([...assignedIds])} className="rounded-lg border border-green-200 px-3 py-2 text-sm font-semibold text-green-800 hover:bg-green-50">
+                  <button type="button" disabled={duelRosterLocked} onClick={() => setSeasonRosterDraft([...assignedIds])} className="rounded-lg border border-green-200 px-3 py-2 text-sm font-semibold text-green-800 hover:bg-green-50 disabled:opacity-50">
                     {t('setup.seasonRosterClearUnassigned')}
                   </button>
                 </div>
@@ -1127,7 +1136,7 @@ export function SetupPage() {
                       <input
                         type="checkbox"
                         checked={draftRosterIds.has(player.id)}
-                        disabled={isAssigned || (isInactive && !draftRosterIds.has(player.id)) || seasonRosterMutation.isPending}
+                        disabled={duelRosterLocked || (!isDuel && isAssigned) || (isInactive && !draftRosterIds.has(player.id)) || seasonRosterMutation.isPending}
                         onChange={(event) => setSeasonRosterDraft((current) =>
                           event.target.checked
                             ? [...current, player.id]
@@ -1146,7 +1155,7 @@ export function SetupPage() {
               <div className="mt-4 flex flex-wrap items-center gap-3">
                 <button
                   type="button"
-                  disabled={!seasonRosterDirty || seasonRosterMutation.isPending}
+                  disabled={duelRosterLocked || !seasonRosterDirty || seasonRosterMutation.isPending}
                   onClick={() => seasonRosterMutation.mutate(seasonRosterDraft)}
                   className="min-h-11 rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-50"
                 >
@@ -1182,7 +1191,7 @@ export function SetupPage() {
           <button
             type="button"
             onClick={handleArchiveSeason}
-            disabled={archiveMutation.isPending}
+            disabled={archiveMutation.isPending || (isDuel && activeSeasonMatches?.some((m) => m.status === 'scheduled'))}
             className="mt-4 min-h-11 w-full rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900 hover:bg-amber-100 active:bg-amber-200 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:py-2"
           >
             {archiveMutation.isPending ? t('setup.archiving') : t('setup.archiveButton')}
@@ -1195,6 +1204,9 @@ export function SetupPage() {
           <h2 className="text-lg font-semibold text-green-900">{t('setup.newSeasonTitle')}</h2>
           <p className="mt-1 text-sm text-gray-600">{t('setup.newSeasonDescription')}</p>
           <form onSubmit={handleStartNewSeason} className="mt-4 flex flex-col gap-3 sm:flex-row">
+            <select aria-label={t('leagueDuel.chooseFormat')} value={newSeasonFormat} onChange={(e) => setNewSeasonFormat(e.target.value as SeasonFormat)} className={selectClass}>
+              <option value="round_robin">{t('leagueDuel.roundRobin')}</option><option value="team_duel">{t('leagueDuel.title')}</option>
+            </select>
             <input
               value={newSeasonName}
               aria-label={t('setup.newSeasonPlaceholder')}
@@ -1216,7 +1228,9 @@ export function SetupPage() {
         </section>
       )}
 
-      {activeSection === 'teams' ? (
+      {activeSection === 'teams' && isDuel && selectedSeason ? <LeagueTeamDuelSetup key={selectedSeason.id} season={selectedSeason} rosterIds={seasonRosterQuery.data ?? []} teams={teams ?? []} hasFixtures={!activeSeasonMatches || activeSeasonMatches.length > 0 || !isSelectedSeasonActive} editable={isSelectedSeasonActive} /> : null}
+
+      {activeSection === 'teams' && !isDuel ? (
         <section className="mb-6">
           <h2 className="mb-3 text-lg font-semibold text-green-900">{t('setup.currentTeams')}</h2>
           {(teams ?? []).length === 0 ? <p className="rounded-xl border border-green-200 bg-white p-4 text-sm text-gray-600">{t('setup.noTeams')}</p> : null}
@@ -1250,7 +1264,7 @@ export function SetupPage() {
         </section>
       ) : null}
 
-      {activeSection === 'teams' && isSelectedSeasonActive && (
+      {activeSection === 'teams' && !isDuel && isSelectedSeasonActive && (
         <section className="mb-8 rounded-xl border border-green-200 bg-white p-5 shadow-sm">
           <h2 className="text-lg font-semibold text-green-900">{t('setup.createTeamTitle')}</h2>
           <p className="mt-1 text-sm text-gray-600">{t('setup.createTeamDescription')}</p>
@@ -1341,7 +1355,7 @@ export function SetupPage() {
         </section>
       )}
 
-      {activeSection === 'teams' && isSelectedSeasonActive && (teams ?? []).length > 0 ? (
+      {activeSection === 'teams' && !isDuel && isSelectedSeasonActive && (teams ?? []).length > 0 ? (
         <details className="mb-8 rounded-xl border border-red-200 bg-red-50 p-4">
           <summary className="cursor-pointer text-sm font-semibold text-red-900">{t('setup.dangerZone')}</summary>
           <p className="mt-3 text-sm text-red-800">{t('setup.deleteTeamsHint')}</p>

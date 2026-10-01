@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   fetchMatchResultSnapshot,
   recordResult,
+  recordForfeit,
   revertMatchToScheduled,
 } from '../lib/api'
 import { useSeason } from '../context/SeasonContext'
@@ -19,6 +20,7 @@ import {
   type MatchResultValidationCode,
 } from '../lib/matchResultValidation'
 import type { MatchWithTeams } from '../types'
+import { validateTeamDuelScore } from '../lib/teamDuelSchedule'
 
 interface RecordResultFormProps {
   match: MatchWithTeams
@@ -35,6 +37,7 @@ export interface SavedMatchResult {
 
 type ResultMutationPayload = (
   | { type: 'result'; winnerTeamId: string; homeScore: number; awayScore: number }
+  | { type: 'forfeit'; winnerTeamId: string; forfeitTeamId: string }
   | { type: 'revert' }
 ) & {
   reconcile?: boolean
@@ -97,6 +100,7 @@ export function RecordResultForm({
         awayScore: null,
       }
     }
+    if (payload.type === 'forfeit') return { status: 'forfeit', winnerTeamId: payload.winnerTeamId, homeScore: null, awayScore: null }
     return {
       status: 'completed',
       winnerTeamId: payload.winnerTeamId,
@@ -130,6 +134,7 @@ export function RecordResultForm({
           awayScore: payload.awayScore,
         })
       }
+      if (payload.type === 'forfeit') await recordForfeit(match.id, payload.forfeitTeamId, match.home_team_id, match.away_team_id)
     },
     onSuccess: async (_data, payload) => {
       await Promise.all([
@@ -141,7 +146,7 @@ export function RecordResultForm({
       setError(null)
       setValidationCode(null)
       setFailedPayload(null)
-      const winnerTeamId = payload.type === 'result' ? payload.winnerTeamId : null
+      const winnerTeamId = payload.type !== 'revert' ? payload.winnerTeamId : null
       if (winnerTeamId) {
         const winnerName =
           winnerTeamId === match.home_team_id
@@ -156,7 +161,7 @@ export function RecordResultForm({
           message: t('record.savedWinnerAt', { name: winnerName, time: savedAt }),
         })
       }
-      onSaved?.({ type: payload.type, winnerTeamId })
+      onSaved?.({ type: payload.type === 'revert' ? 'revert' : 'result', winnerTeamId })
       onDone?.()
     },
     onError: (err: Error, payload) => {
@@ -205,6 +210,10 @@ export function RecordResultForm({
         Number(homeScore),
         Number(awayScore),
       )
+      if (match.duel_sequence_number != null) {
+        try { validateTeamDuelScore(result.homeScore, result.awayScore) }
+        catch { setError(t('leagueDuel.scoreRule')); return }
+      }
       submitPayload({ type: 'result', ...result }, failedPayload !== null)
     } catch (err) {
       setFailedPayload(null)
@@ -223,6 +232,12 @@ export function RecordResultForm({
   function handleRevert() {
     if (!confirm(t('record.confirmRevert'))) return
     submitPayload({ type: 'revert' }, failedPayload !== null)
+  }
+
+  function handleForfeit(forfeitTeamId: string) {
+    const name = forfeitTeamId === match.home_team_id ? match.home_team.name : match.away_team.name
+    if (!confirm(t('leagueDuel.forfeitConfirm', { name }))) return
+    submitPayload({ type: 'forfeit', forfeitTeamId, winnerTeamId: forfeitTeamId === match.home_team_id ? match.away_team_id : match.home_team_id }, failedPayload !== null)
   }
 
   return (
@@ -336,6 +351,12 @@ export function RecordResultForm({
       >
         {t('record.saveResult')}
       </button>
+
+      {match.duel_sequence_number != null ? <details className="mt-3 text-sm">
+        <summary className="min-h-11 cursor-pointer py-2 font-semibold text-amber-900">{t('leagueDuel.forfeit')}</summary>
+        <p className="mb-2 text-xs text-gray-600">{t('leagueDuel.forfeitHelp')}</p>
+        <div className="flex flex-wrap gap-2">{[match.home_team, match.away_team].map((team) => <button key={team.id} type="button" disabled={mutation.isPending} onClick={() => handleForfeit(team.id)} className="min-h-11 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900 disabled:opacity-50">{t('leagueDuel.forfeitSide', { name: team.name })}</button>)}</div>
+      </details> : null}
 
       {editing && (
         <button

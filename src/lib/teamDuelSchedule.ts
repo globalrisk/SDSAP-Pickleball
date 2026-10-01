@@ -17,6 +17,17 @@ export function generateTeamDuelSchedule(size: number): GeneratedTeamDuelRound[]
     throw new Error('Team Duel squads must contain 4, 5, or 6 players.')
   }
 
+  return generateRankedSquadSchedule(size)
+}
+
+export function generateLeagueTeamDuelSchedule(size: number): GeneratedTeamDuelRound[] {
+  if (!Number.isInteger(size) || size < 4 || size > 7) {
+    throw new Error('League Team Duel squads must contain 4–7 players.')
+  }
+  return generateRankedSquadSchedule(size)
+}
+
+function generateRankedSquadSchedule(size: number): GeneratedTeamDuelRound[] {
   const rotation: (number | null)[] = Array.from({ length: size }, (_, index) => index + 1)
   if (size % 2 === 1) rotation.push(null)
 

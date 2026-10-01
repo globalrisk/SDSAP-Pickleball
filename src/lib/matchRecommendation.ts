@@ -63,6 +63,7 @@ export function rankAvailableMatches(
   matches: MatchWithTeams[],
   standings: StandingRow[],
 ): MatchWithTeams[] {
+  if (matches.some((match) => match.duel_sequence_number != null)) return rankDuelMatches(matches)
   const completed = matches
     .filter((match) => match.status !== 'scheduled')
     .sort((a, b) =>
@@ -174,4 +175,35 @@ export function recommendNextMatch(
   standings: StandingRow[],
 ): MatchWithTeams | null {
   return rankAvailableMatches(matches, standings)[0] ?? null
+}
+
+function rankDuelMatches(matches: MatchWithTeams[]): MatchWithTeams[] {
+  const ids = (match: MatchWithTeams) => [...(match.home_pool_player_ids ?? []), ...(match.away_pool_player_ids ?? [])]
+  const playing = matches.filter((m) => m.status === 'scheduled' && m.live_status === 'playing')
+  const history = matches.filter((m) => m.status !== 'scheduled').sort((a, b) => (a.result_recorded_at ?? '').localeCompare(b.result_recorded_at ?? '') || a.id.localeCompare(b.id))
+  const queued = matches.filter((m) => m.status === 'scheduled' && m.live_status === 'up_next')
+  const counts = new Map<string, number>()
+  const last = new Map<string, number>()
+  let position = 0
+  for (const m of [...history, ...playing, ...queued]) {
+    for (const id of ids(m)) { counts.set(id, (counts.get(id) ?? 0) + 1); last.set(id, position) }
+    position++
+  }
+  const remaining = matches.filter((m) => m.status === 'scheduled' && m.live_status === 'available'
+    && areAllMatchPlayersPresent(m) && !playing.some((active) => matchesShareTeam(m, active)))
+  const result: MatchWithTeams[] = []
+  while (remaining.length) {
+    const score = (m: MatchWithTeams) => {
+      const participants = ids(m)
+      return { count: Math.max(...participants.map((id) => counts.get(id) ?? 0)),
+        rest: Math.min(...participants.map((id) => position - (last.get(id) ?? -1))) }
+    }
+    remaining.sort((a, b) => { const first = score(a), second = score(b)
+      return first.count - second.count || second.rest - first.rest || (a.duel_sequence_number ?? 0) - (b.duel_sequence_number ?? 0) })
+    const selected = remaining.shift()!
+    result.push(selected)
+    for (const id of ids(selected)) { counts.set(id, (counts.get(id) ?? 0) + 1); last.set(id, position) }
+    position++
+  }
+  return result
 }

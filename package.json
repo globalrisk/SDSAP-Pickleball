@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "test": "vitest run",
+    "test:database": "node scripts/test-database.mjs",
     "ratings:recompute": "node --env-file-if-exists=.env.local scripts/recompute-ratings.ts",
     "preview": "vite preview --host"
   },
@@ -23,6 +24,7 @@
     "ts-trueskill": "^5.1.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "@tailwindcss/vite": "^4.3.2",
     "@types/node": "^24.13.2",
     "@types/react": "^19.2.17",

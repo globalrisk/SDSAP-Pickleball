@@ -11,6 +11,7 @@ A shared pickleball platform for multiple independent leagues. Players have one 
 - One shared player directory with league-specific membership and ratings
 - Administrators can add players from **Manage → Players** without assigning a league; these players are immediately available to Team Duel and can join a league later from that league's Setup page
 - Setup follows **League roster → Season players → Teams → League settings**. League membership persists across seasons; choose each season's participants separately before building teams.
+- Seasons support doubles round robin or **Team Duel**: two rated squads of 4–7, rotating partnerships, shared squad points, and individual rated games. See [setup and rollout notes](docs/league-team-duel.md).
 - Multiple leagues can each have an active season at the same time
 - Administrator-only setup and result entry; public pages are read-only
 - Guided creation of a league, first season, roster, teams, and schedule
@@ -89,7 +90,7 @@ The authorization check uses `app_metadata`, not user-editable metadata. Databas
 - Use **Manage → Create league** for the guided first-season flow.
 - Renaming a shared player updates that identity across every league and historical roster display.
 - Removing or deactivating a player from one league does not remove them from another.
-- Leave someone out of a season in **Setup → Season players**. Use **Inactive** only when their league membership is unavailable longer term. Players already on a team must be removed from that team before being excluded from the season.
+- Leave someone out of a season in **Setup → Season players**. Use **Inactive** only when their league membership is unavailable longer term. Round-robin players already on a team must be removed from that team first. Changing an unstarted Team Duel roster clears its draft squads; generated duel rosters are frozen.
 - Archiving a season preserves its history. Permanent league deletion is intentionally not supported.
 
 ## Player tournament view
@@ -125,15 +126,17 @@ results from an older snapshot.
 
 ```bash
 npm test
+npm run test:database
 npm run lint
 npm run build
 ```
 
-Database integration checks live in `supabase/tests/database`. Run them against a disposable/local Supabase database after migrations are applied.
+Database integration checks live in `supabase/tests/database`. `test:database` applies all migrations to disposable PostgreSQL through PGlite and runs the SQL assertions. Application API tests also exercise the real SQL through a local test transport; Supabase auth/storage plumbing and Realtime are not emulated fully.
 
 ## Standings rules
 
 - Win = 1 point
 - Loss or forfeit = 0 points
-- Teams tied on points are ranked by head-to-head wins, then scored point differential
+- Round-robin teams tied on points are ranked by head-to-head wins, then scored point differential
 - Teams that still cannot be separated share the same rank
+- Team Duel squads with equal final game wins are joint champions; point differential does not break the tie. All scheduled games must finish, even after a squad clinches victory.

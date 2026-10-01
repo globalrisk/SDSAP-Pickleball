@@ -7,6 +7,8 @@ import { buildRatingsReplacement, type PendingRatingMatch } from './ratingReposi
 import { fetchAllPages } from './pagination'
 import { buildPreMatchRatings } from './historicalRatings'
 import { buildRoundRobinMatches } from './schedule'
+import { generateLeagueDuelSeasonMatches } from './leagueTeamDuelApi'
+import { validateTeamDuelScore } from './teamDuelSchedule'
 import { partnershipKey } from './balanceTeams'
 import { validateForfeitTeam, validateMatchResult } from './matchResultValidation'
 import { computePlayerFunStats } from './engagement'
@@ -29,6 +31,7 @@ import type {
   PoolPlayer,
   RatingHistoryPoint,
   Season,
+  SeasonFormat,
   SeasonRecap,
   Team,
   TeamWithPlayers,
@@ -36,8 +39,8 @@ import type {
 
 const MATCH_SELECT = `
   *,
-  home_team:teams!matches_home_team_id_fkey(id, name, color, players(name, pool_player_id, is_present)),
-  away_team:teams!matches_away_team_id_fkey(id, name, color, players(name, pool_player_id, is_present)),
+  home_team:teams!matches_home_team_id_fkey(id, name, color, players(name, pool_player_id, is_present, duel_rank)),
+  away_team:teams!matches_away_team_id_fkey(id, name, color, players(name, pool_player_id, is_present, duel_rank)),
   winner:teams!matches_winner_team_id_fkey(id, name, color)
 `
 
@@ -96,10 +99,10 @@ export async function fetchActiveSeason(leagueId: string): Promise<Season | null
   return data
 }
 
-export async function createSeason(name: string, leagueId: string): Promise<Season> {
+export async function createSeason(name: string, leagueId: string, format: SeasonFormat = 'round_robin'): Promise<Season> {
   const { data, error } = await supabase
     .from('seasons')
-    .insert({ name, league_id: leagueId, status: 'active' })
+    .insert({ name, league_id: leagueId, status: 'active', format })
     .select()
     .single()
 
@@ -206,7 +209,7 @@ export async function fetchPlayerTitlesMap(leagueId: string): Promise<Map<string
 
   const { data: seasons, error: seasonsError } = await fetchAllPages((from, to) => supabase
     .from('seasons')
-    .select('id, status, name, starts_at')
+    .select('id, status, name, starts_at, format')
     .eq('league_id', leagueId)
     .order('id')
     .range(from, to),
@@ -249,7 +252,7 @@ export async function fetchPlayerTitlesMap(leagueId: string): Promise<Map<string
     const doneRatio = totalFixtures > 0 ? finished.length / totalFixtures : 0
     if (season.status !== 'archived' && doneRatio < 0.8) continue
 
-    const standings = computeStandings(seasonTeams, finished)
+    const standings = computeStandings(seasonTeams, finished, season.format)
     const ranks = new Map<string, number>()
     for (const row of standings) {
       for (const player of row.players) {
@@ -1072,6 +1075,7 @@ export async function fetchMatches(
       .select(MATCH_SELECT)
       .eq('season_id', seasonId)
       .order('result_recorded_at', { ascending: false, nullsFirst: true })
+      .order('duel_sequence_number', { ascending: true, nullsFirst: false })
       .order('id').range(from, to)),
     fetchAllPages((from, to) => supabase
       .from('league_players')
@@ -1095,7 +1099,7 @@ export async function fetchMatches(
     ...match,
     home_team: {
       ...match.home_team,
-      players: match.home_team.players?.map((player) => ({
+      players: match.home_team.players?.filter((player) => match.duel_sequence_number == null || match.home_pool_player_ids?.includes(player.pool_player_id)).sort((a, b) => (a.duel_rank ?? 0) - (b.duel_rank ?? 0)).map((player) => ({
         ...player,
         rating: ratings.get(player.pool_player_id)?.rating,
         ratingDeviation: ratings.get(player.pool_player_id)?.ratingDeviation,
@@ -1103,7 +1107,7 @@ export async function fetchMatches(
     },
     away_team: {
       ...match.away_team,
-      players: match.away_team.players?.map((player) => ({
+      players: match.away_team.players?.filter((player) => match.duel_sequence_number == null || match.away_pool_player_ids?.includes(player.pool_player_id)).sort((a, b) => (a.duel_rank ?? 0) - (b.duel_rank ?? 0)).map((player) => ({
         ...player,
         rating: ratings.get(player.pool_player_id)?.rating,
         ratingDeviation: ratings.get(player.pool_player_id)?.ratingDeviation,
@@ -1150,6 +1154,9 @@ export async function fetchSeasonRecap(
 }
 
 export async function createSeasonMatches(seasonId: string): Promise<number> {
+  const season = await supabase.from('seasons').select('format').eq('id', seasonId).single()
+  if (season.error) throw season.error
+  if (season.data.format === 'team_duel') return generateLeagueDuelSeasonMatches(seasonId)
   const teams = await fetchTeams(seasonId)
   if (teams.length < 2) {
     throw new Error('Need at least 2 teams to create matches')
@@ -1201,7 +1208,7 @@ export async function recordResult(
   const { data: match, error: matchError } = await supabase
     .from('matches')
     .select(
-      'home_team_id, away_team_id, home_pool_player_ids, away_pool_player_ids, result_recorded_at, seasons!inner(league_id)',
+      'home_team_id, away_team_id, home_pool_player_ids, away_pool_player_ids, result_recorded_at, duel_sequence_number, seasons!inner(league_id)',
     )
     .eq('id', matchId)
     .single()
@@ -1216,6 +1223,7 @@ export async function recordResult(
     homeScore: payload.homeScore,
     awayScore: payload.awayScore,
   })
+  if (match.duel_sequence_number != null) validateTeamDuelScore(payload.homeScore!, payload.awayScore!)
 
   let homeIds = match.home_pool_player_ids ?? []
   let awayIds = match.away_pool_player_ids ?? []
@@ -1304,7 +1312,7 @@ export async function recordForfeit(
 export async function revertMatchToScheduled(matchId: string): Promise<void> {
   const { data: matchRow, error } = await supabase
     .from('matches')
-    .select('seasons!inner(league_id)')
+    .select('home_pool_player_ids, away_pool_player_ids, duel_sequence_number, seasons!inner(league_id)')
     .eq('id', matchId)
     .single()
   if (error) throw error
@@ -1321,8 +1329,8 @@ export async function revertMatchToScheduled(matchId: string): Promise<void> {
       winnerTeamId: null,
       homeScore: null,
       awayScore: null,
-      homePoolPlayerIds: null,
-      awayPoolPlayerIds: null,
+      homePoolPlayerIds: matchRow.duel_sequence_number != null ? matchRow.home_pool_player_ids : null,
+      awayPoolPlayerIds: matchRow.duel_sequence_number != null ? matchRow.away_pool_player_ids : null,
       resultRecordedAt: null,
     },
     { matchId, mode: 'exclude' },

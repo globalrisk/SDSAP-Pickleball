@@ -29,7 +29,7 @@ export function SeasonRecapCard({ recap }: SeasonRecapCardProps) {
 
       <div className="mb-5 grid gap-3 sm:grid-cols-2">
         <TeamPodium
-          label={t('recap.champion')}
+          label={t(recap.format === 'team_duel' ? recap.champions.length > 1 ? 'leagueDuel.jointChampions' : 'leagueDuel.squadChampions' : 'recap.champion')}
           teams={recap.champions}
           tone="gold"
         />
@@ -83,7 +83,7 @@ export function SeasonRecapCard({ recap }: SeasonRecapCardProps) {
           <AwardTile eyebrow={t('recap.mostImproved')} title={t('recap.none')} />
         )}
 
-        {recap.bestPartnership ? (
+        {recap.format !== 'team_duel' ? recap.bestPartnership ? (
           <AwardTile
             eyebrow={t('recap.bestPartnership')}
             title={recap.bestPartnership.teamName}
@@ -95,7 +95,7 @@ export function SeasonRecapCard({ recap }: SeasonRecapCardProps) {
           />
         ) : (
           <AwardTile eyebrow={t('recap.bestPartnership')} title={t('recap.none')} />
-        )}
+        ) : null}
 
         {recap.biggestUpset ? (
           <AwardTile

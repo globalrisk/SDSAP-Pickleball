@@ -36,6 +36,7 @@ export function LiveMatchCard({
         <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-green-800">
           {tone === 'playing' ? <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" /> : null}
           {label}
+          {match.duel_sequence_number != null ? <span className="normal-case"> · {t('leagueDuel.gameLabel', { game: match.duel_sequence_number, round: match.round_number })}</span> : null}
         </span>
       </div>
 

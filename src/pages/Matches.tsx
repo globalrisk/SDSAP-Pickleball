@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { createSeasonMatches } from '../lib/api'
 import { MatchCard } from '../components/MatchCard'
+import { LeagueTeamDuelScoreboard } from '../components/LeagueTeamDuelScoreboard'
 import { ArchivedSeasonBanner } from '../components/ArchivedSeasonBanner'
 import { ErrorState, PageHeader, SetupBanner } from '../components/Layout'
 import { useSeason } from '../context/SeasonContext'
@@ -27,6 +28,7 @@ export function MatchesPage() {
   const { isAdmin } = useAuth()
   const { league } = useLeague()
   const { selectedSeason, isSelectedSeasonActive } = useSeason()
+  const isDuel = selectedSeason?.format === 'team_duel'
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [teamFilterId, setTeamFilterId] = useState<string>('all')
   const [message, setMessage] = useState<string | null>(null)
@@ -56,7 +58,7 @@ export function MatchesPage() {
 
   function handleCreateMatches() {
     if (!selectedSeason || !canCreateMatches) return
-    if (!confirm(t('matches.createConfirm', { teams: teamCount }))) return
+    if (!confirm(t(isDuel ? 'leagueDuel.generateConfirm' : 'matches.createConfirm', { teams: teamCount }))) return
     createMatchesMutation.mutate()
   }
 
@@ -83,6 +85,8 @@ export function MatchesPage() {
         subtitle={t('matches.subtitle', { count: matchCount })}
       />
 
+      <LeagueTeamDuelScoreboard />
+
       {isAdmin && league.status === 'active' && isSelectedSeasonActive && !isLoading && matchCount === 0 && (
         <section className="mb-6 rounded-xl border border-green-200 bg-white p-4 shadow-sm sm:p-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -90,7 +94,7 @@ export function MatchesPage() {
               <h2 className="text-base font-semibold text-green-900">
                 {t('matches.createTitle')}
               </h2>
-              <p className="mt-1 text-sm text-gray-600">{t('matches.createDescription')}</p>
+              <p className="mt-1 text-sm text-gray-600">{t(isDuel ? 'leagueDuel.generateDescription' : 'matches.createDescription')}</p>
               {matchCount === 0 && teamCount < 2 && (
                 <p className="mt-1 text-sm text-amber-700">{t('matches.createNeedTeams')}</p>
               )}

@@ -15,11 +15,16 @@ select create_league_atomic(
     jsonb_build_object('id','73000000-0000-4000-8000-000000000002','name','Player 2','is_new',true,'initial_rating',1500),
     jsonb_build_object('id','73000000-0000-4000-8000-000000000003','name','Player 3','is_new',true,'initial_rating',1500)
   ),
-  jsonb_build_array(
-    jsonb_build_object('id','74000000-0000-4000-8000-000000000001','name','First team','color','#008000','poolPlayerIds',jsonb_build_array('73000000-0000-4000-8000-000000000001','73000000-0000-4000-8000-000000000002'))
-  ),
+  '[]'::jsonb,
   '[]'::jsonb
 );
+
+-- Create a partial team after deferred league setup; the full league wizard
+-- correctly requires at least four players and two teams.
+select save_season_teams_atomic('72000000-0000-4000-8000-000000000001'::uuid,
+  jsonb_build_array(jsonb_build_object('id','74000000-0000-4000-8000-000000000001',
+    'name','First team','color','#008000','poolPlayerIds',
+    jsonb_build_array('73000000-0000-4000-8000-000000000001','73000000-0000-4000-8000-000000000002'))));
 
 do $$
 begin
