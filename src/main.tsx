@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter, Outlet, Route, Routes } from 'react-router-dom'
 import { AppLayout } from './App'
+import { ConfirmationProvider } from './components/ConfirmationProvider'
 import { AuthProvider } from './context/AuthContext'
 import { DefaultLeagueRedirect, LeagueProvider } from './context/LeagueContext'
 import { SeasonProvider } from './context/SeasonContext'
@@ -52,6 +53,7 @@ createRoot(document.getElementById('root')!).render(
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <BrowserRouter>
+          <ConfirmationProvider>
           <Routes>
             <Route path="/" element={<DefaultLeagueRedirect />} />
             <Route path="team-duel" element={<LazyTeamDuelPage />} />
@@ -77,6 +79,7 @@ createRoot(document.getElementById('root')!).render(
             </Route>
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
+          </ConfirmationProvider>
         </BrowserRouter>
       </AuthProvider>
     </QueryClientProvider>

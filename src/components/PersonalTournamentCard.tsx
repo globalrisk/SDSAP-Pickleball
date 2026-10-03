@@ -1,3 +1,4 @@
+import { Select } from './Select'
 import { useId, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -98,12 +99,12 @@ export function PersonalTournamentCard({ seasonId: seasonIdOverride }: { seasonI
         <div className="mt-3 flex flex-wrap items-end gap-3">
           <div className="min-w-0 flex-1 sm:max-w-xs">
             <label htmlFor={selectId} className="mb-1 block text-xs font-semibold text-green-900">{t('personal.selectName')}</label>
-            <select id={selectId} value={player?.id ?? ''} disabled={pool.isLoading || pool.isError}
-              onChange={(event) => changePlayer(event.target.value || null)}
+            <Select id={selectId} value={player?.id ?? ''} disabled={pool.isLoading || pool.isError}
+              onValueChange={(value) => changePlayer(value || null)}
               className="min-h-11 w-full rounded-xl border border-green-300 bg-white px-3 py-2 text-sm font-bold text-green-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600">
               <option value="">{t('personal.chooseName')}</option>
               {[...(pool.data ?? [])].sort((a, b) => a.name.localeCompare(b.name)).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-            </select>
+            </Select>
           </div>
           {preference.playerId ? <button type="button" onClick={() => changePlayer(null)} className="min-h-11 rounded-xl border border-green-200 px-3 text-sm font-semibold text-green-800 hover:bg-green-100">{t('personal.clear')}</button> : null}
         </div>

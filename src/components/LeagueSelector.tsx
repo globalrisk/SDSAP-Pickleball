@@ -1,3 +1,4 @@
+import { Select } from './Select'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useLeague } from '../context/LeagueContext'
@@ -12,9 +13,9 @@ export function LeagueSelector() {
   return (
     <label className="flex min-w-0 flex-1 items-center gap-2 lg:flex-none">
       <span className="sr-only">{t('league.label')}</span>
-      <select
+      <Select
         value={league.slug}
-        onChange={(event) => navigate(`/leagues/${event.target.value}`)}
+        onValueChange={(value) => navigate(`/leagues/${value}`)}
         className="min-h-11 w-full min-w-0 truncate rounded-lg border border-green-200 bg-white px-2 py-1.5 text-xs font-semibold text-green-900 sm:text-sm lg:min-h-9 lg:w-auto lg:max-w-[12rem]"
         aria-label={t('league.label')}
       >
@@ -23,7 +24,7 @@ export function LeagueSelector() {
             {item.name}{item.status === 'archived' ? ` (${t('league.archived')})` : ''}
           </option>
         ))}
-      </select>
+      </Select>
     </label>
   )
 }

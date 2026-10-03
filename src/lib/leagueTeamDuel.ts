@@ -2,7 +2,7 @@ import { partnershipKey } from './balanceTeams'
 import type { MatchWithTeams, PoolPlayer } from '../types'
 import { assignLeagueDuelTiers, buildTierMatchedDuelSchedule, compareDuelPlayers, duelTierCounts, type LeagueDuelSchedule } from './leagueDuelSchedule'
 
-export { DUEL_BALANCE_TARGET, LEAGUE_DUEL_ROSTER_SIZES } from './leagueDuelSchedule'
+export { LEAGUE_DUEL_ROSTER_SIZES } from './leagueDuelSchedule'
 
 export interface LeagueDuelDraft {
   id: string
@@ -13,7 +13,6 @@ export interface LeagueDuelDraft {
   recentPartnerRepeats: number[]
   opponentRepeats: number
   schedule: LeagueDuelSchedule
-  meetsTarget: boolean
 }
 
 /** Enumerate each split once, with the strongest player anchoring side A. */
@@ -52,7 +51,7 @@ export function generateLeagueDuelDrafts(
       drafts.push({
         id: squads.map((squad) => squad.map((p) => p.id).sort().join(':')).join('|'),
         squads, repeatedPartnerships, partnerHistoryOccurrences, recentPartnerRepeats, schedule,
-        worstFavorite: schedule.worstFavorite, opponentRepeats: schedule.opponentRepeats, meetsTarget: schedule.meetsTarget,
+        worstFavorite: schedule.worstFavorite, opponentRepeats: schedule.opponentRepeats,
       })
       return
     }
@@ -65,9 +64,9 @@ export function generateLeagueDuelDrafts(
     || a.recentPartnerRepeats[0]! - b.recentPartnerRepeats[0]!
     || a.recentPartnerRepeats[1]! - b.recentPartnerRepeats[1]!
     || a.recentPartnerRepeats[2]! - b.recentPartnerRepeats[2]!
+    || a.opponentRepeats - b.opponentRepeats
     || a.worstFavorite - b.worstFavorite
     || a.schedule.totalImbalance - b.schedule.totalImbalance
-    || a.opponentRepeats - b.opponentRepeats
     || a.id.localeCompare(b.id),
   ).slice(0, 3)
 }

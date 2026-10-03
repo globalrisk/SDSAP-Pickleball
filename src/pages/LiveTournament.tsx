@@ -1,3 +1,5 @@
+import { Select } from '../components/Select'
+import { useConfirm } from '../lib/confirmation'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -30,6 +32,7 @@ const actionClass =
   'inline-flex min-h-10 flex-1 items-center justify-center rounded-xl px-3 py-2 text-xs font-bold transition-colors disabled:opacity-50 sm:flex-none'
 
 export function LiveTournamentPage() {
+  const confirm = useConfirm()
   const { t } = useTranslation()
   const { isAdmin } = useAuth()
   const { league, leaguePath } = useLeague()
@@ -110,9 +113,9 @@ export function LiveTournamentPage() {
     queueMutation.mutate({ matchId: match.id, liveStatus })
   }
 
-  function cancelPlayingMatch(match: MatchWithTeams) {
+  async function cancelPlayingMatch(match: MatchWithTeams) {
     if (
-      !confirm(
+      !await confirm(
         t('live.confirmCancelMatch', {
           home: match.home_team.name,
           away: match.away_team.name,
@@ -247,17 +250,17 @@ export function LiveTournamentPage() {
             <h2 className="text-sm font-black text-green-950">{t('live.numberOfCourts')}</h2>
             <p className="mt-0.5 text-xs text-gray-600">{t('live.courtCountHint')}</p>
           </div>
-          <select
+          <Select
             value={courtCount}
             disabled={courtCountMutation.isPending}
-            onChange={(event) => courtCountMutation.mutate(Number(event.target.value))}
+            onValueChange={(value) => courtCountMutation.mutate(Number(value))}
             aria-label={t('live.numberOfCourts')}
             className="min-h-11 rounded-xl border border-green-300 bg-green-50 px-4 py-2 text-sm font-bold text-green-900"
           >
             {[1, 2, 3, 4].map((count) => (
               <option key={count} value={count}>{t('live.courtCount', { count })}</option>
             ))}
-          </select>
+          </Select>
         </section>
       ) : null}
 

@@ -1,3 +1,4 @@
+import { Select } from '../components/Select'
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
@@ -203,7 +204,7 @@ export function CreateLeaguePage() {
                     <input type="color" value={team.color} onChange={(event) => setTeams((current) => current.map((item, index) => index === teamIndex ? { ...item, color: event.target.value } : item))} className="h-11 w-full rounded-xl border border-green-200 p-1" aria-label={t('leagueCreate.teamColor')} />
                   </div>
                   <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                    {[0, 1].map((slot) => <select key={slot} value={team.poolPlayerIds[slot]} onChange={(event) => setTeams((current) => current.map((item, index) => index === teamIndex ? { ...item, poolPlayerIds: slot === 0 ? [event.target.value, item.poolPlayerIds[1]] : [item.poolPlayerIds[0], event.target.value] } : item))} className="min-h-11 rounded-xl border border-green-200 px-3">{selectedPlayers.map((player) => <option key={player.id} value={player.id}>{player.name}</option>)}</select>)}
+                    {[0, 1].map((slot) => <Select key={slot} value={team.poolPlayerIds[slot]} onValueChange={(value) => setTeams((current) => current.map((item, index) => index === teamIndex ? { ...item, poolPlayerIds: slot === 0 ? [value, item.poolPlayerIds[1]] : [item.poolPlayerIds[0], value] } : item))} className="min-h-11 rounded-xl border border-green-200 px-3">{selectedPlayers.map((player) => <option key={player.id} value={player.id}>{player.name}</option>)}</Select>)}
                   </div>
                 </div>
               ))}

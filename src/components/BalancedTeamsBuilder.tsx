@@ -1,3 +1,4 @@
+import { Select } from './Select'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
@@ -112,10 +113,10 @@ export function BalancedTeamsBuilder({
       {hasOddPlayer ? (
         <label className="block text-sm font-medium text-blue-950">
           {t('setup.balancedTeamsSitOutLabel')}
-          <select
+          <Select
             value={validExcludedPlayerId}
-            onChange={(event) => {
-              setExcludedPlayerId(event.target.value)
+            onValueChange={(value) => {
+              setExcludedPlayerId(value)
               setOptions([])
               setDraftTeams([])
             }}
@@ -127,7 +128,7 @@ export function BalancedTeamsBuilder({
                 {player.name} · {roundRating(player.rating)}
               </option>
             ))}
-          </select>
+          </Select>
           <span className="mt-1 block text-xs font-normal text-blue-800">
             {t('setup.balancedTeamsSitOutHint')}
           </span>
@@ -217,10 +218,10 @@ export function BalancedTeamsBuilder({
                   </div>
                   <div className="grid gap-2 sm:grid-cols-2">
                     {([0, 1] as const).map((slotIndex) => (
-                      <select
+                      <Select
                         key={slotIndex}
                         value={team.poolPlayerIds[slotIndex]}
-                        onChange={(event) => swapPlayer(teamIndex, slotIndex, event.target.value)}
+                        onValueChange={(value) => swapPlayer(teamIndex, slotIndex, value)}
                         aria-label={t('setup.balancedTeamsPlayerSlot', {
                           team: teamIndex + 1,
                           slot: slotIndex + 1,
@@ -232,7 +233,7 @@ export function BalancedTeamsBuilder({
                             {player.name} · {roundRating(player.rating)}
                           </option>
                         ))}
-                      </select>
+                      </Select>
                     ))}
                   </div>
                 </div>

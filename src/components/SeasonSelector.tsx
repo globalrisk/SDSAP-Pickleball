@@ -1,3 +1,4 @@
+import { Select } from './Select'
 import { useTranslation } from 'react-i18next'
 import { useSeason } from '../context/SeasonContext'
 
@@ -10,9 +11,9 @@ export function SeasonSelector() {
   return (
     <label className="flex min-w-0 flex-1 items-center gap-2 lg:flex-none">
       <span className="sr-only">{t('season.label')}</span>
-      <select
+      <Select
         value={selectedSeason?.id ?? ''}
-        onChange={(e) => setSelectedSeasonId(e.target.value)}
+        onValueChange={(value) => setSelectedSeasonId(value)}
         className="min-h-11 w-full min-w-0 truncate rounded-lg border border-green-200 bg-white px-2 py-1.5 text-xs font-medium text-green-800 sm:text-sm lg:min-h-9 lg:w-auto lg:max-w-[11rem]"
         aria-label={t('season.label')}
       >
@@ -22,7 +23,7 @@ export function SeasonSelector() {
             {season.status === 'archived' ? ` (${t('season.archived')})` : ''}
           </option>
         ))}
-      </select>
+      </Select>
     </label>
   )
 }

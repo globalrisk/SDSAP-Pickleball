@@ -10,6 +10,7 @@ import { replayRatings, type FinishedMatchForRatings } from './ratingReplay'
 import { buildPersonalTournament } from './personalTournament'
 import { buildPlayerMatchEvents } from './playerMatches'
 import type { MatchWithTeams, PoolPlayer, TeamWithPlayers } from '../types'
+import { season13RatingSnapshot } from './testFixtures/season13RatingSnapshot'
 
 function pool(count = 14): PoolPlayer[] {
   return Array.from({ length: count }, (_, i) => ({ id: `p${String(i + 1).padStart(2, '0')}`, name: `Player ${i + 1}`, status: 'active', rating: 1500, rating_deviation: 275, initial_rating: 1500, volatility: 0, created_at: '' }))
@@ -104,13 +105,12 @@ describe('league duel drafts', () => {
     expect(preferRecent[0]!.id).toBe(first.id)
     expect(preferRecent[0]!.recentPartnerRepeats).toEqual([0, 0, 12])
   })
-  it('uses provisional uncertainty and clearly returns fallback imbalance', () => {
+  it('uses provisional uncertainty to report predicted balance', () => {
     const players = pool(8).map((p, i) => ({ ...p, rating: i === 0 ? 5000 : 800, rating_deviation: 20 }))
     const options = generateLeagueDuelDrafts(players)
-    expect(options.every((o) => !o.meetsTarget && o.worstFavorite > 0.65)).toBe(true)
+    expect(options.every((o) => o.worstFavorite > 0.9)).toBe(true)
     const uncertain = generateLeagueDuelDrafts(players.map((p, i) => ({ ...p, rating: i === 0 ? 1650 : 1400, rating_deviation: 275 })))
     expect(uncertain[0]!.worstFavorite).toBeLessThan(options[0]!.worstFavorite)
-    expect(uncertain[0]!.meetsTarget).toBe(true)
   })
   it('rejects unsupported rosters, duplicates and inactive players', () => {
     for (const count of [6, 9, 16]) expect(() => generateLeagueDuelDrafts(pool(count))).toThrow()
@@ -157,6 +157,26 @@ describe('tier-matched schedules', () => {
     expect(draft.opponentRepeats).toBe(73)
   })
 
+  it('spreads top-tier opponents for the Season 13 squads despite imbalanced games', () => {
+    const players = pool(14).map((player, index) => ({
+      ...player, rating: season13RatingSnapshot[index]!.rating,
+      rating_deviation: season13RatingSnapshot[index]!.rd,
+    }))
+    const squads: [PoolPlayer[], PoolPlayer[]] = [
+      players.filter((_, index) => index % 2 === 0),
+      players.filter((_, index) => index % 2 === 1),
+    ]
+    const schedule = buildTierMatchedDuelSchedule(squads)
+    const appearances = schedule.games.filter((game) => game.homePoolPlayerIds.includes(players[0]!.id))
+    const opponentCounts = squads[1].slice(0, 2).map((opponent) =>
+      appearances.filter((game) => game.awayPoolPlayerIds.includes(opponent.id)).length)
+
+    expect(appearances).toHaveLength(6)
+    expect(opponentCounts.sort((a, b) => a - b)).toEqual([3, 4])
+    expect(schedule.opponentRepeats).toBe(73)
+    expect(schedule.worstFavorite).toBeGreaterThan(0.71)
+  })
+
   it('rejects unequal tiers and invalid uncertainty', () => {
     const players = pool(14)
     expect(() => buildTierMatchedDuelSchedule([players.slice(0, 7), players.slice(7)])).toThrow(/equal/)
@@ -174,7 +194,6 @@ describe('tier-matched schedules', () => {
     expect(bestBalanced.worstFavorite).toBeCloseTo(0.5)
     expect(fresh.repeatedPartnerships).toBe(0)
     expect(fresh.worstFavorite).toBeGreaterThan(bestBalanced.worstFavorite)
-    expect(fresh.meetsTarget).toBe(false)
   })
 })
 

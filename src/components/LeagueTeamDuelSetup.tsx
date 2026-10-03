@@ -1,3 +1,4 @@
+import { useConfirm } from '../lib/confirmation'
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
@@ -7,6 +8,7 @@ import { clearUnplayedLeagueDuelFixtures, fetchLeagueDuelDraftPreview, generateL
 import { LEAGUE_DUEL_ROSTER_SIZES } from '../lib/leagueTeamDuel'
 import { duelTierForRank } from '../lib/leagueDuelSchedule'
 import { ErrorState } from './Layout'
+import { LeagueDuelTeamNameForm } from './LeagueDuelTeamNameForm'
 import type { MatchWithTeams, Season, TeamWithPlayers } from '../types'
 
 const buttonClass = 'min-h-11 rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white hover:bg-green-800 disabled:opacity-50'
@@ -14,6 +16,7 @@ const buttonClass = 'min-h-11 rounded-lg bg-green-700 px-4 py-2 text-sm font-sem
 export function LeagueTeamDuelSetup({ season, rosterIds, teams, fixtures, hasFixtures, editable }: {
   season: Season; rosterIds: string[]; teams: TeamWithPlayers[]; fixtures: MatchWithTeams[] | undefined; hasFixtures: boolean; editable: boolean
 }) {
+  const confirm = useConfirm()
   const { t } = useTranslation()
   const { league, leaguePath } = useLeague()
   const client = useQueryClient()
@@ -64,17 +67,19 @@ export function LeagueTeamDuelSetup({ season, rosterIds, teams, fixtures, hasFix
     {teams.length > 0 ? <div className="grid gap-4 sm:grid-cols-2">
       {teams.map((team) => <div key={team.id} className="rounded-lg border border-green-100 p-3">
         <h3 className="font-bold" style={{ color: team.color }}>{team.name}</h3>
+        {editable ? <LeagueDuelTeamNameForm team={team} disabled={save.isPending || generate.isPending || clear.isPending} /> : null}
         <ol className="mt-2 space-y-1 text-sm">{[...team.players].sort((a, b) => (a.duel_rank ?? 0) - (b.duel_rank ?? 0)).map((player) =>
           <li key={player.id}>#{player.duel_rank} {player.name}{player.duel_tier ? <span className="ml-2 rounded bg-green-50 px-2 py-0.5 text-xs font-semibold text-green-800">{t(`leagueDuel.tier.${player.duel_tier}`)}</span> : null}</li>)}</ol>
       </div>)}
     </div> : null}
+    {editable && teams.length > 0 ? <p className="text-sm text-gray-600">{t('leagueDuel.renameHelp')}</p> : null}
     {hasFixtures ? <p className="text-sm font-semibold text-green-800">{t('leagueDuel.frozen')}</p> : null}
     {editable && hasFixtures && fixtures?.length ? <div className="rounded-lg border border-red-200 bg-red-50 p-4">
       <p className="mb-3 text-sm text-red-900">{t(canClear ? 'leagueDuel.clearHelp' : 'leagueDuel.clearBlocked')}</p>
       <button type="button" disabled={!canClear || clear.isPending || save.isPending || generate.isPending}
-        onClick={() => {
+        onClick={async () => {
           const ids = fixtures.map((match) => match.id)
-          if (confirm(t('leagueDuel.clearConfirm', { name: season.name, count: ids.length }))) clear.mutate(ids)
+          if (await confirm(t('leagueDuel.clearConfirm', { name: season.name, count: ids.length }), { tone: 'danger' })) clear.mutate(ids)
         }} className="min-h-11 rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-800 hover:bg-red-100 disabled:opacity-50">
         {clear.isPending ? t('common.loading') : t('leagueDuel.clearFixtures')}
       </button>
@@ -89,7 +94,6 @@ export function LeagueTeamDuelSetup({ season, rosterIds, teams, fixtures, hasFix
         </div>
         {preview.isFetching ? <p role="status">{t('common.loading')}</p> : null}
         {preview.error ? <ErrorState message={(preview.error as Error).message} /> : null}
-        {selected?.meetsTarget === false ? <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{t('leagueDuel.imbalanceWarning')}</p> : null}
         <p className="text-sm text-green-900">{t('leagueDuel.tierComposition')}</p>
         <p className="text-xs text-gray-600">{t('leagueDuel.balanceHelp')}</p>
         <div className="space-y-3">{preview.data?.drafts.map((draft, index) => <label key={draft.id} className={`block cursor-pointer rounded-lg border p-4 ${draft.id === selected?.id ? 'border-green-500 bg-green-50' : 'border-gray-200'}`}>

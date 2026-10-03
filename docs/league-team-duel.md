@@ -15,19 +15,21 @@ The selected roster is sorted by current league rating, descending, with player 
 
 Draft options prioritize avoiding previously played partnerships from the three immediately preceding seasons in the same league. Season order uses start date, then ID; empty seasons still occupy a place in the three-season window. Both round-robin and Team Duel matches count. Completed match snapshots identify the actual partners; older round-robin matches without snapshots use their two-player team. Scheduled games and forfeits are excluded. A partnership counts once per previous season, regardless of how many games that pair played together.
 
-Every eligible squad split is considered. Options minimize distinct repeated partnerships, then prior-season occurrences, then repeats in the most recent seasons. Balance and opponent variety break ties. The strongest selected player anchors squad A. The three highest-ranked distinct options are shown.
+Every eligible squad split is considered. Options minimize distinct repeated partnerships, then prior-season occurrences, then repeats in the most recent seasons. Opponent variety breaks ties before match balance. The strongest selected player anchors squad A. The three highest-ranked distinct options are shown.
 
-Fresh partners take priority over the 65% predicted favorite target. The target is advisory; a less balanced draft with fewer past partners remains eligible and shows a warning. History-loading failures block saving a new preview.
+Fresh partners and varied opponents take priority over match balance. Predicted win probabilities are informational and only break ties between equally varied schedules; there is no predicted win target. History-loading failures block saving a new preview.
 
 ## Fixtures and frozen history
 
 Every player partners with every squadmate exactly once. Each game matches the same unordered tier combination on both sides, such as top+middle against top+middle. The two partnerships can have different squad ranks.
 
-The planner enumerates tier-preserving away-player permutations, compatible circle-round assignments, and same-tier partnership permutations. Among fixture candidates meeting the 65% target, it minimizes repeated opponent encounters, then worst and total imbalance. Otherwise it minimizes worst imbalance first. Opponent repetition is the sum of `count * (count - 1) / 2` for each cross-squad opponent pair. Final ties use player IDs. This optimization never changes the draft's partner-history score.
+The planner enumerates tier-preserving away-player permutations, compatible circle-round assignments, and same-tier partnership permutations. It always minimizes repeated opponent encounters first, then worst and total imbalance. Opponent repetition is the sum of `count * (count - 1) / 2` for each cross-squad opponent pair. Final ties use player IDs. This optimization never changes the draft's partner-history score.
 
 Rounds have no repeated participant. Seven-player squads generate 21 fixtures in seven rounds of three games. Every player plays six games with six unique partners and rests for one round. Live courts also independently enforce actual participant attendance and double-booking protections.
 
 New drafts freeze each player's `duel_tier` and set the season's `duel_schedule_mode` to `tier_matched`. Existing seasons retain NULL metadata and their historical mirror validation. Their stored fixtures and ratings are not rewritten. Membership, ranks, tiers, mode, and lineups freeze after generation; attendance, result correction, undo, and forfeits retain their existing behavior.
+
+Administrators can rename either squad in **Setup → Teams → Rename team** during the active season, including after fixture generation or recorded results. The update changes only the team name; team IDs, membership, lineups, fixtures, results, and ratings remain intact. Archived seasons keep their read-only setup view. Renaming uses the existing admin write policy and roster guards, so no database migration is required.
 
 ## Setup and rollout
 

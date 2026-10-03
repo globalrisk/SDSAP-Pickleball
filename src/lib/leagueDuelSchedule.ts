@@ -2,7 +2,6 @@ import type { DuelTier, PoolPlayer } from '../types'
 import { teamWinProbability } from './ratings'
 import { generateLeagueTeamDuelSchedule } from './teamDuelSchedule'
 
-export const DUEL_BALANCE_TARGET = 0.65
 export const LEAGUE_DUEL_ROSTER_SIZES = [8, 10, 12, 14] as const
 type Pair = readonly [number, number]
 
@@ -18,7 +17,6 @@ export interface LeagueDuelSchedule {
   worstFavorite: number
   totalImbalance: number
   opponentRepeats: number
-  meetsTarget: boolean
 }
 
 export function compareDuelPlayers(a: PoolPlayer, b: PoolPlayer): number {
@@ -142,7 +140,7 @@ export function buildTierMatchedDuelSchedule(input: readonly [readonly PoolPlaye
   }
   const candidateId = (candidate: Candidate) => candidate.awayPairs.map((pair) =>
     pair.map((rank) => squads[1]![rank]!.id).sort().join(':')).join('|')
-  let best: { candidate: Candidate; worst: number; imbalance: number; meets: boolean } | undefined
+  let best: { candidate: Candidate; worst: number; imbalance: number } | undefined
   for (const candidate of patterns.candidates) {
     let worst = 0.5, imbalance = 0
     candidate.awayPairs.forEach((away, i) => {
@@ -151,13 +149,11 @@ export function buildTierMatchedDuelSchedule(input: readonly [readonly PoolPlaye
       imbalance += value - 0.5
     })
     imbalance = Math.round(imbalance * 1e12) / 1e12
-    const meets = worst <= DUEL_BALANCE_TARGET
-    const comparison = !best ? -1 : Number(best.meets) - Number(meets)
-      || (meets ? candidate.opponentRepeats - best.candidate.opponentRepeats : worst - best.worst)
-      || (meets ? worst - best.worst : imbalance - best.imbalance)
-      || (meets ? imbalance - best.imbalance : candidate.opponentRepeats - best.candidate.opponentRepeats)
+    const comparison = !best ? -1 : candidate.opponentRepeats - best.candidate.opponentRepeats
+      || worst - best.worst
+      || imbalance - best.imbalance
       || candidateId(candidate).localeCompare(candidateId(best.candidate))
-    if (comparison < 0) best = { candidate, worst, imbalance, meets }
+    if (comparison < 0) best = { candidate, worst, imbalance }
   }
   if (!best) throw new Error('No valid tier-matched schedule was found.')
   return {
@@ -167,6 +163,6 @@ export function buildTierMatchedDuelSchedule(input: readonly [readonly PoolPlaye
       awayPoolPlayerIds: best.candidate.awayPairs[i]!.map((rank) => squads[1]![rank]!.id) as [string, string],
     })),
     worstFavorite: best.worst, totalImbalance: best.imbalance,
-    opponentRepeats: best.candidate.opponentRepeats, meetsTarget: best.meets,
+    opponentRepeats: best.candidate.opponentRepeats,
   }
 }

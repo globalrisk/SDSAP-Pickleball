@@ -12,6 +12,14 @@ export async function setSeasonFormat(seasonId: string, format: SeasonFormat): P
   if (error) throw error
 }
 
+export async function renameLeagueDuelTeam(seasonId: string, teamId: string, name: string): Promise<void> {
+  const trimmed = name.trim()
+  if (!trimmed || trimmed.length > 120) throw new Error('Team names must contain between 1 and 120 characters.')
+  const { error } = await supabase.from('teams').update({ name: trimmed })
+    .eq('id', teamId).eq('season_id', seasonId).select('id').single()
+  if (error) throw error
+}
+
 export async function clearUnplayedLeagueDuelFixtures(seasonId: string, expectedMatchIds: string[]): Promise<number> {
   const { data, error } = await supabase.rpc('clear_unplayed_league_duel_fixtures_atomic', {
     p_season_id: seasonId, p_expected_match_ids: expectedMatchIds,

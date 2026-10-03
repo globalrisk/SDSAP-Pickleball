@@ -9,8 +9,8 @@ vi.mock('./supabase', () => ({ supabase: {
   from(table: string) { return state.client!.from(table) },
   rpc(name: string, args: Record<string, unknown>) { return state.client!.rpc(name, args) },
 } }))
-import { fetchMatches, fetchTeamsWithPlayers } from './api'
-import { fetchLeagueDuelDraftPreview, generateLeagueDuelSeasonMatches, saveLeagueDuelDraft, setSeasonFormat } from './leagueTeamDuelApi'
+import { fetchMatches, fetchTeamsWithPlayers, recordResult } from './api'
+import { fetchLeagueDuelDraftPreview, generateLeagueDuelSeasonMatches, renameLeagueDuelTeam, saveLeagueDuelDraft, setSeasonFormat } from './leagueTeamDuelApi'
 import { partnershipKey } from './balanceTeams'
 import { season13RatingSnapshot } from './testFixtures/season13RatingSnapshot'
 
@@ -42,6 +42,42 @@ async function fixtureCount(seasonId: string) {
 }
 
 describe('fresh tier generation through PostgreSQL and the application API', () => {
+  it('renames squads before and after recorded games without altering frozen data, and requires admin access', async () => {
+    const setup = await prepare()
+    const [home, away] = setup.teams
+    await renameLeagueDuelTeam(setup.seasonId, home!.id, '  New draft name  ')
+    expect((await fetchTeamsWithPlayers(setup.seasonId)).find((team) => team.id === home!.id)?.name).toBe('New draft name')
+    await generateLeagueDuelSeasonMatches(setup.seasonId)
+    const first = (await fetchMatches(setup.seasonId, setup.leagueId))[0]!
+    await recordResult(first.id, { winnerTeamId: first.home_team_id, homeScore: 11, awayScore: 7 })
+    const unchangedTables = ['seasons', 'season_roster', 'players', 'matches', 'league_players', 'rating_history', 'rating_state']
+    const snapshot = async () => Promise.all(unchangedTables.map(async (table) =>
+      (await api.db.query(`SELECT to_jsonb(row) AS data FROM public.${table} AS row ORDER BY to_jsonb(row)::text`)).rows))
+    const original = await snapshot()
+    const teams = (await api.db.query('SELECT to_jsonb(team) - \'name\' AS data FROM public.teams AS team ORDER BY id')).rows
+
+    await renameLeagueDuelTeam(setup.seasonId, home!.id, '  Green Dragons  ')
+    await renameLeagueDuelTeam(setup.seasonId, away!.id, 'Blue Tigers')
+    expect(await snapshot()).toEqual(original)
+    expect((await api.db.query('SELECT to_jsonb(team) - \'name\' AS data FROM public.teams AS team ORDER BY id')).rows).toEqual(teams)
+    const names = new Map([[home!.id, 'Green Dragons'], [away!.id, 'Blue Tigers']])
+    const matches = await fetchMatches(setup.seasonId, setup.leagueId)
+    for (const match of matches) {
+      expect(match.home_team.name).toBe(names.get(match.home_team_id))
+      expect(match.away_team.name).toBe(names.get(match.away_team_id))
+      if (match.winner) expect(match.winner.name).toBe(names.get(match.winner_team_id!))
+    }
+    await expect(renameLeagueDuelTeam(setup.seasonId, home!.id, '   ')).rejects.toThrow(/1 and 120/)
+    await expect(renameLeagueDuelTeam(setup.seasonId, home!.id, 'x'.repeat(121))).rejects.toThrow(/1 and 120/)
+    await expect(renameLeagueDuelTeam(randomUUID(), home!.id, 'Wrong season')).rejects.toThrow()
+    const admin = state.client
+    state.client = createClient(api.url, 'local-anon-key', { auth: { persistSession: false, autoRefreshToken: false } })
+    try { await expect(renameLeagueDuelTeam(setup.seasonId, home!.id, 'Visitor edit')).rejects.toThrow() }
+    finally { state.client = admin }
+    expect((await fetchTeamsWithPlayers(setup.seasonId)).find((team) => team.id === home!.id)?.name).toBe('Green Dragons')
+    expect(await snapshot()).toEqual(original)
+  }, 30000)
+
   it('generates the Season 13 rating snapshot atomically with one winner in a generation race', async () => {
     const { leagueId, seasonId, players } = api.seeded!
     await setSeasonFormat(seasonId, 'team_duel')

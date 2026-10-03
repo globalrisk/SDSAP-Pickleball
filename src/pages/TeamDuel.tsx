@@ -1,3 +1,5 @@
+import { Select } from '../components/Select'
+import { useConfirm } from '../lib/confirmation'
 import { useCallback, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -209,18 +211,18 @@ function SquadEditor({
         </label>
         <label className="text-sm font-bold text-slate-800">
           {t('teamDuel.rosterSize')}
-          <select value={size} onChange={(event) => changeSize(Number(event.target.value))} className={`${inputClass} mt-1`}>
+          <Select value={size} onValueChange={(value) => changeSize(Number(value))} className={`${inputClass} mt-1`}>
             {[4, 5, 6].map((value) => <option key={value} value={value}>{value}</option>)}
-          </select>
+          </Select>
         </label>
       </div>
       <div className="mt-5 space-y-3">
         {playerIds.map((playerId, index) => (
           <label key={index} className="grid items-center gap-2 text-sm font-bold text-slate-800 sm:grid-cols-[8rem_1fr]">
             <span>{t('teamDuel.rankLabel', { rank: index + 1 })}</span>
-            <select
+            <Select
               value={playerId}
-              onChange={(event) => setPlayerIds((current) => current.map((value, playerIndex) => playerIndex === index ? event.target.value : value))}
+              onValueChange={(selectedValue) => setPlayerIds((current) => current.map((value, playerIndex) => playerIndex === index ? selectedValue : value))}
               className={inputClass}
             >
               <option value="">{t('teamDuel.choosePlayer')}</option>
@@ -229,7 +231,7 @@ function SquadEditor({
                   {player.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
         ))}
       </div>
@@ -254,6 +256,7 @@ function SquadManager({
   players: TeamDuelRegisteredPlayer[]
   events: TeamDuelEvent[]
 }) {
+  const confirm = useConfirm()
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [editing, setEditing] = useState<TeamDuelSquad | null | undefined>(undefined)
@@ -314,8 +317,8 @@ function SquadManager({
                 <button
                   type="button"
                   disabled={deleteMutation.isPending}
-                  onClick={() => {
-                    if (window.confirm(t('teamDuel.confirmDeleteSquad', { name: squad.name }))) {
+                  onClick={async () => {
+                    if (await confirm(t('teamDuel.confirmDeleteSquad', { name: squad.name }), { tone: 'danger' })) {
                       deleteMutation.mutate(squad)
                     }
                   }}
@@ -340,6 +343,7 @@ function SquadManager({
 }
 
 function DraftManager({ squads, events, liveEvent }: { squads: TeamDuelSquad[]; events: TeamDuelEvent[]; liveEvent?: TeamDuelEvent }) {
+  const confirm = useConfirm()
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const activeSquads = squads.filter((squad) => squad.status === 'active')
@@ -414,9 +418,9 @@ function DraftManager({ squads, events, liveEvent }: { squads: TeamDuelSquad[]; 
         <form className="mt-5 grid gap-4 rounded-2xl bg-indigo-50 p-4 sm:grid-cols-2" onSubmit={(event) => { event.preventDefault(); if (canSave) saveMutation.mutate() }}>
           <label className="text-sm font-bold text-slate-800">{t('teamDuel.eventDate')}<input type="date" required value={eventDate} onChange={(event) => setEventDate(event.target.value)} className={`${inputClass} mt-1`} /></label>
           <label className="text-sm font-bold text-slate-800">{t('teamDuel.optionalTitle')}<input value={title} maxLength={120} onChange={(event) => setTitle(event.target.value)} className={`${inputClass} mt-1`} /></label>
-          <label className="text-sm font-bold text-slate-800">{t('teamDuel.teamA')}<select required value={squadAId} onChange={(event) => { setSquadAId(event.target.value); setSquadBId(''); setCourtCount(1) }} className={`${inputClass} mt-1`}><option value="">{t('teamDuel.chooseSquad')}</option>{activeSquads.map((squad) => <option key={squad.id} value={squad.id}>{squad.name} ({squad.members.length})</option>)}</select></label>
-          <label className="text-sm font-bold text-slate-800">{t('teamDuel.teamB')}<select required value={squadBId} onChange={(event) => setSquadBId(event.target.value)} className={`${inputClass} mt-1`}><option value="">{t('teamDuel.chooseSquad')}</option>{compatibleB.map((squad) => <option key={squad.id} value={squad.id}>{squad.name} ({squad.members.length})</option>)}</select></label>
-          <label className="text-sm font-bold text-slate-800">{t('teamDuel.courts')}<select value={courtCount} onChange={(event) => setCourtCount(Number(event.target.value))} className={`${inputClass} mt-1`}>{Array.from({ length: maxCourts }, (_, index) => index + 1).map((count) => <option key={count} value={count}>{count}</option>)}</select></label>
+          <label className="text-sm font-bold text-slate-800">{t('teamDuel.teamA')}<Select required value={squadAId} onValueChange={(value) => { setSquadAId(value); setSquadBId(''); setCourtCount(1) }} className={`${inputClass} mt-1`}><option value="">{t('teamDuel.chooseSquad')}</option>{activeSquads.map((squad) => <option key={squad.id} value={squad.id}>{squad.name} ({squad.members.length})</option>)}</Select></label>
+          <label className="text-sm font-bold text-slate-800">{t('teamDuel.teamB')}<Select required value={squadBId} onValueChange={(value) => setSquadBId(value)} className={`${inputClass} mt-1`}><option value="">{t('teamDuel.chooseSquad')}</option>{compatibleB.map((squad) => <option key={squad.id} value={squad.id}>{squad.name} ({squad.members.length})</option>)}</Select></label>
+          <label className="text-sm font-bold text-slate-800">{t('teamDuel.courts')}<Select value={courtCount} onValueChange={(value) => setCourtCount(Number(value))} className={`${inputClass} mt-1`}>{Array.from({ length: maxCourts }, (_, index) => index + 1).map((count) => <option key={count} value={count}>{count}</option>)}</Select></label>
           <div className="flex items-end gap-2"><button type="submit" disabled={!canSave || saveMutation.isPending} className={primaryButton}>{t('teamDuel.saveDraft')}</button><button type="button" onClick={resetForm} className={secondaryButton}>{t('common.cancel')}</button></div>
         </form>
       ) : null}
@@ -428,9 +432,9 @@ function DraftManager({ squads, events, liveEvent }: { squads: TeamDuelSquad[]; 
             <article key={event.id} className="flex flex-col gap-3 rounded-2xl border border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between">
               <div><h3 className="font-black text-slate-900"><EventName event={event} squads={squads} /></h3><p className="text-sm text-slate-500">{event.event_date}</p></div>
               <div className="flex flex-wrap gap-2">
-                <button type="button" disabled={Boolean(liveEvent) || size < 4 || activateMutation.isPending} onClick={() => { if (window.confirm(t('teamDuel.confirmActivate'))) activateMutation.mutate({ event, size }) }} className={primaryButton}>{t('teamDuel.activate')}</button>
+                <button type="button" disabled={Boolean(liveEvent) || size < 4 || activateMutation.isPending} onClick={async () => { if (await confirm(t('teamDuel.confirmActivate'))) activateMutation.mutate({ event, size }) }} className={primaryButton}>{t('teamDuel.activate')}</button>
                 <button type="button" onClick={() => editDraft(event)} className={secondaryButton}>{t('common.edit')}</button>
-                <button type="button" disabled={deleteMutation.isPending} onClick={() => { if (window.confirm(t('teamDuel.confirmDeleteDraft'))) deleteMutation.mutate(event.id) }} className={secondaryButton}>{t('common.delete')}</button>
+                <button type="button" disabled={deleteMutation.isPending} onClick={async () => { if (await confirm(t('teamDuel.confirmDeleteDraft'), { tone: 'danger' })) deleteMutation.mutate(event.id) }} className={secondaryButton}>{t('common.delete')}</button>
               </div>
             </article>
           )
@@ -443,6 +447,7 @@ function DraftManager({ squads, events, liveEvent }: { squads: TeamDuelSquad[]; 
 }
 
 function TeamDuelHub() {
+  const confirm = useConfirm()
   const { t } = useTranslation()
   const { isAdmin } = useAuth()
   const queryClient = useQueryClient()
@@ -496,8 +501,8 @@ function TeamDuelHub() {
                   event={event}
                   squads={squads}
                   deleting={deleteHistoryMutation.isPending && deleteHistoryMutation.variables?.id === event.id}
-                  onDelete={isAdmin ? (selectedEvent) => {
-                    if (window.confirm(t('teamDuel.confirmDeleteHistory'))) {
+                  onDelete={isAdmin ? async (selectedEvent) => {
+                    if (await confirm(t('teamDuel.confirmDeleteHistory'), { tone: 'danger' })) {
                       deleteHistoryMutation.mutate(selectedEvent)
                     }
                   } : undefined}
@@ -532,18 +537,19 @@ function MatchLineup({ match, names }: { match: TeamDuelMatch; names: ReadonlyMa
 }
 
 function MatchScoreForm({ saving, onSave }: { match: TeamDuelMatch; saving: boolean; onSave: (a: number, b: number) => void }) {
+  const confirm = useConfirm()
   const { t } = useTranslation()
   const [teamA, setTeamA] = useState('')
   const [teamB, setTeamB] = useState('')
   const [error, setError] = useState<string | null>(null)
-  function submit(event: React.FormEvent) {
+  async function submit(event: React.FormEvent) {
     event.preventDefault()
     const a = Number(teamA)
     const b = Number(teamB)
     try {
       validateTeamDuelScore(a, b)
       setError(null)
-      if (window.confirm(t('teamDuel.confirmScore', { a, b }))) onSave(a, b)
+      if (await confirm(t('teamDuel.confirmScore', { a, b }))) onSave(a, b)
     } catch {
       setError(t('teamDuel.invalidScore'))
     }
@@ -568,7 +574,7 @@ function TiebreakForm({ snapshot, onCreate, saving }: { snapshot: TeamDuelSnapsh
   const [bRanks, setBRanks] = useState<[number, number]>([1, 2])
   const selectPair = (side: 'a' | 'b', pair: [number, number], setPair: (value: [number, number]) => void) => (
     <div className="grid grid-cols-2 gap-2">
-      {[0, 1].map((index) => <select key={index} value={pair[index]} onChange={(event) => { const next: [number, number] = [...pair] as [number, number]; next[index] = Number(event.target.value); setPair(next) }} className={inputClass}>{bySide(side).map((player) => <option key={player.rank_position} value={player.rank_position} disabled={pair[1 - index] === player.rank_position}>#{player.rank_position} {player.display_name}</option>)}</select>)}
+      {[0, 1].map((index) => <Select key={index} value={pair[index]} onValueChange={(value) => { const next: [number, number] = [...pair] as [number, number]; next[index] = Number(value); setPair(next) }} className={inputClass}>{bySide(side).map((player) => <option key={player.rank_position} value={player.rank_position} disabled={pair[1 - index] === player.rank_position}>#{player.rank_position} {player.display_name}</option>)}</Select>)}
     </div>
   )
   return (

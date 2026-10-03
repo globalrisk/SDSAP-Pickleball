@@ -32,6 +32,33 @@ body {
   }
 }
 
+.themed-popover[data-state='open'] {
+  animation: themed-popover-in 140ms ease-out;
+}
+
+.themed-overlay[data-state='open'] {
+  animation: themed-fade-in 160ms ease-out;
+}
+
+.themed-dialog[data-state='open'] {
+  animation: themed-dialog-in 160ms ease-out;
+}
+
+@keyframes themed-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes themed-popover-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes themed-dialog-in {
+  from { opacity: 0; scale: 0.96; }
+  to { opacity: 1; scale: 1; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

@@ -1,3 +1,5 @@
+import { Select } from '../components/Select'
+import { useConfirm } from '../lib/confirmation'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -11,6 +13,7 @@ import { useMatches } from '../hooks/useMatches'
 import { useTeams } from '../hooks/useTeams'
 import { useAuth } from '../context/AuthContext'
 import { useLeague } from '../context/LeagueContext'
+import { resolveMatchLineups } from '../lib/playerMatches'
 import type { MatchStatus } from '../types'
 
 type StatusFilter = 'all' | MatchStatus
@@ -23,7 +26,8 @@ const STATUS_FILTERS: { key: StatusFilter; labelKey: string }[] = [
 ]
 
 export function MatchesPage() {
-  const { t } = useTranslation()
+  const confirm = useConfirm()
+  const { t, i18n } = useTranslation()
   const queryClient = useQueryClient()
   const { isAdmin } = useAuth()
   const { league } = useLeague()
@@ -31,9 +35,25 @@ export function MatchesPage() {
   const isDuel = selectedSeason?.format === 'team_duel'
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [teamFilterId, setTeamFilterId] = useState<string>('all')
+  const [playerFilter, setPlayerFilter] = useState<{ seasonId?: string; playerId: string }>({ playerId: 'all' })
   const [message, setMessage] = useState<string | null>(null)
   const { data: matches, isError, error, isLoading } = useMatches()
   const { data: teams } = useTeams()
+
+  const players = useMemo(() => {
+    const byId = new Map<string, string>()
+    for (const match of matches ?? []) {
+      const { homeIds, awayIds } = resolveMatchLineups(match)
+      const participantIds = new Set([...homeIds, ...awayIds])
+      for (const player of [...(match.home_team.players ?? []), ...(match.away_team.players ?? [])]) {
+        if (participantIds.has(player.pool_player_id)) byId.set(player.pool_player_id, player.name)
+      }
+    }
+    return [...byId].map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name, i18n.language) || a.id.localeCompare(b.id))
+  }, [matches, i18n.language])
+  const playerFilterId = playerFilter.seasonId === selectedSeason?.id
+    && players.some((player) => player.id === playerFilter.playerId) ? playerFilter.playerId : 'all'
 
   const matchCount = matches?.length ?? 0
   const hasForfeits = matches?.some((match) => match.status === 'forfeit') ?? false
@@ -56,9 +76,9 @@ export function MatchesPage() {
     onError: (err: Error) => setMessage(t('matches.createFailed', { message: err.message })),
   })
 
-  function handleCreateMatches() {
+  async function handleCreateMatches() {
     if (!selectedSeason || !canCreateMatches) return
-    if (!confirm(t(isDuel ? 'leagueDuel.generateConfirm' : 'matches.createConfirm', { teams: teamCount }))) return
+    if (!await confirm(t(isDuel ? 'leagueDuel.generateConfirm' : 'matches.createConfirm', { teams: teamCount }))) return
     createMatchesMutation.mutate()
   }
 
@@ -66,13 +86,18 @@ export function MatchesPage() {
     return (matches ?? []).filter((m) => {
       if (activeStatusFilter !== 'all' && m.status !== activeStatusFilter) return false
 
-      if (teamFilterId !== 'all') {
+      if (isDuel && playerFilterId !== 'all') {
+        const { homeIds, awayIds } = resolveMatchLineups(m)
+        return homeIds.includes(playerFilterId) || awayIds.includes(playerFilterId)
+      }
+
+      if (!isDuel && teamFilterId !== 'all') {
         return m.home_team_id === teamFilterId || m.away_team_id === teamFilterId
       }
 
       return true
     })
-  }, [matches, activeStatusFilter, teamFilterId])
+  }, [matches, activeStatusFilter, isDuel, playerFilterId, teamFilterId])
 
   if (isError) return <ErrorState message={(error as Error).message} />
 
@@ -82,7 +107,7 @@ export function MatchesPage() {
       <ArchivedSeasonBanner />
       <PageHeader
         title={t('matches.title')}
-        subtitle={t('matches.subtitle', { count: matchCount })}
+        subtitle={t(isDuel ? 'matches.duelSubtitle' : 'matches.subtitle', { count: matchCount })}
       />
 
       <LeagueTeamDuelScoreboard />
@@ -116,7 +141,20 @@ export function MatchesPage() {
         </section>
       )}
 
-      <div className="mb-4">
+      {isDuel ? <div className="mb-4">
+        <label htmlFor="match-player-filter" className="mb-2 block text-xs font-semibold uppercase tracking-wide text-green-800">
+          {t('matches.filterByPlayer')}
+        </label>
+        <Select
+          id="match-player-filter"
+          value={playerFilterId}
+          onValueChange={(value) => setPlayerFilter({ seasonId: selectedSeason?.id, playerId: value })}
+          className="min-h-11 w-full rounded-lg border border-green-200 bg-white px-3 py-2 text-sm text-green-900 sm:max-w-sm"
+        >
+          <option value="all">{t('matches.allPlayers')}</option>
+          {players.map((player) => <option key={player.id} value={player.id}>{player.name}</option>)}
+        </Select>
+      </div> : <div className="mb-4">
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-green-800">
           {t('matches.filterByTeam')}
         </p>
@@ -153,7 +191,7 @@ export function MatchesPage() {
             </button>
           ))}
         </div>
-      </div>
+      </div>}
 
       <div className={`mb-6 grid gap-2 sm:flex sm:flex-wrap ${hasForfeits ? 'grid-cols-2' : 'grid-cols-3'}`}>
         {statusFilters.map(({ key, labelKey }) => (

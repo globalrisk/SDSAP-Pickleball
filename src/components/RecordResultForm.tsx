@@ -1,3 +1,4 @@
+import { useConfirm } from '../lib/confirmation'
 import { useId, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -59,6 +60,7 @@ export function RecordResultForm({
   compact = false,
   onSaved,
 }: RecordResultFormProps) {
+  const confirm = useConfirm()
   const { t, i18n } = useTranslation()
   const queryClient = useQueryClient()
   const { selectedSeason } = useSeason()
@@ -229,14 +231,14 @@ export function RecordResultForm({
     }
   }
 
-  function handleRevert() {
-    if (!confirm(t('record.confirmRevert'))) return
+  async function handleRevert() {
+    if (!await confirm(t('record.confirmRevert'), { tone: 'danger' })) return
     submitPayload({ type: 'revert' }, failedPayload !== null)
   }
 
-  function handleForfeit(forfeitTeamId: string) {
+  async function handleForfeit(forfeitTeamId: string) {
     const name = forfeitTeamId === match.home_team_id ? match.home_team.name : match.away_team.name
-    if (!confirm(t('leagueDuel.forfeitConfirm', { name }))) return
+    if (!await confirm(t('leagueDuel.forfeitConfirm', { name }), { tone: 'danger' })) return
     submitPayload({ type: 'forfeit', forfeitTeamId, winnerTeamId: forfeitTeamId === match.home_team_id ? match.away_team_id : match.home_team_id }, failedPayload !== null)
   }
 

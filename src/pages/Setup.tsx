@@ -1,3 +1,5 @@
+import { Select } from '../components/Select'
+import { useConfirm } from '../lib/confirmation'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -69,6 +71,7 @@ const selectClass =
   'min-h-11 w-full rounded-lg border border-green-200 bg-white px-3 py-2 text-base sm:text-sm'
 
 function LeagueBrandingForm() {
+  const confirm = useConfirm()
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const { league } = useLeague()
@@ -128,9 +131,9 @@ function LeagueBrandingForm() {
         <button
           type="button"
           disabled={statusMutation.isPending}
-          onClick={() => {
+          onClick={async () => {
             const key = league.status === 'active' ? 'archiveConfirm' : 'restoreConfirm'
-            if (confirm(t(`leagueSettings.${key}`, { name: league.name }))) statusMutation.mutate()
+            if (await confirm(t(`leagueSettings.${key}`, { name: league.name }))) statusMutation.mutate()
           }}
           className="mt-3 min-h-11 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-bold text-amber-900 disabled:opacity-50"
         >
@@ -288,6 +291,7 @@ function TeamEditForm({
   onDeleted: (message: string) => void
   onError: (message: string) => void
 }) {
+  const confirm = useConfirm()
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const teamPoolIds = useMemo(
@@ -377,10 +381,10 @@ function TeamEditForm({
       />
 
       <div className="space-y-2">
-        <select
+        <Select
           value={poolPlayerIds[0]}
-          onChange={(e) =>
-            setPoolPlayerIds(([_, second]) => [e.target.value, second])
+          onValueChange={(value) =>
+            setPoolPlayerIds(([_, second]) => [value, second])
           }
           className={selectClass}
           aria-label={t('setup.pickPlayer1')}
@@ -392,11 +396,11 @@ function TeamEditForm({
               {player.name}
             </option>
           ))}
-        </select>
-        <select
+        </Select>
+        <Select
           value={poolPlayerIds[1]}
-          onChange={(e) =>
-            setPoolPlayerIds(([first]) => [first, e.target.value])
+          onValueChange={(value) =>
+            setPoolPlayerIds(([first]) => [first, value])
           }
           className={selectClass}
           aria-label={t('setup.pickPlayer2')}
@@ -408,7 +412,7 @@ function TeamEditForm({
               {player.name}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
 
       <div className="mt-4 grid gap-2 sm:grid-cols-[1fr_auto]">
@@ -428,8 +432,8 @@ function TeamEditForm({
         <button
           type="button"
           disabled={saveMutation.isPending || deleteMutation.isPending}
-          onClick={() => {
-            if (confirm(t('setup.deleteTeamConfirm', { name: team.name }))) {
+          onClick={async () => {
+            if (await confirm(t('setup.deleteTeamConfirm', { name: team.name }), { tone: 'danger' })) {
               deleteMutation.mutate()
             }
           }}
@@ -445,6 +449,7 @@ function TeamEditForm({
 }
 
 export function SetupPage() {
+  const confirm = useConfirm()
   const { t } = useTranslation()
   const [searchParams, setSearchParams] = useSearchParams()
   const queryClient = useQueryClient()
@@ -750,19 +755,19 @@ export function SetupPage() {
     },
   })
 
-  function handleArchiveSeason() {
+  async function handleArchiveSeason() {
     if (!activeSeason) return
-    if (!confirm(t('setup.archiveConfirm', { name: activeSeason.name, count: recordedCount }))) {
+    if (!await confirm(t('setup.archiveConfirm', { name: activeSeason.name, count: recordedCount }))) {
       return
     }
     archiveMutation.mutate(activeSeason.id)
   }
 
-  function handleStartNewSeason(e: React.FormEvent) {
+  async function handleStartNewSeason(e: React.FormEvent) {
     e.preventDefault()
     const name = newSeasonName.trim()
     if (!name) return
-    if (!confirm(t('setup.newSeasonConfirm', { name }))) return
+    if (!await confirm(t('setup.newSeasonConfirm', { name }))) return
     createSeasonMutation.mutate(name)
   }
 
@@ -821,18 +826,18 @@ export function SetupPage() {
     balanceTeamsMutation.mutate(payloads)
   }
 
-  function handleDeleteAllTeams() {
+  async function handleDeleteAllTeams() {
     if (!selectedSeason) return
     if ((recordedCount ?? 0) > 0) {
       setFeedback({ text: t('setup.deleteTeamsBlocked'), tone: 'error' })
       return
     }
-    if (!confirm(t('setup.deleteTeamsConfirm'))) return
+    if (!await confirm(t('setup.deleteTeamsConfirm'), { tone: 'danger' })) return
     deleteTeamsMutation.mutate()
   }
 
-  function handleDeletePoolPlayer(id: string, name: string) {
-    if (!confirm(t('pool.deleteConfirm', { name }))) return
+  async function handleDeletePoolPlayer(id: string, name: string) {
+    if (!await confirm(t('pool.deleteConfirm', { name }), { tone: 'danger' })) return
     deletePoolMutation.mutate(id)
   }
 
@@ -946,9 +951,9 @@ export function SetupPage() {
                 <span className="text-xs font-medium text-blue-900">
                   {t('pool.existingPlayer')}
                 </span>
-                <select
+                <Select
                   value={existingPoolPlayerId}
-                  onChange={(event) => setExistingPoolPlayerId(event.target.value)}
+                  onValueChange={(value) => setExistingPoolPlayerId(value)}
                   className={selectClass}
                   required
                 >
@@ -961,7 +966,7 @@ export function SetupPage() {
                         : ''}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
               <label className="flex w-full flex-col gap-1 sm:w-36">
                 <span className="text-xs font-medium text-blue-900">{t('pool.ratingLabel')}</span>
@@ -1204,9 +1209,9 @@ export function SetupPage() {
           <h2 className="text-lg font-semibold text-green-900">{t('setup.newSeasonTitle')}</h2>
           <p className="mt-1 text-sm text-gray-600">{t('setup.newSeasonDescription')}</p>
           <form onSubmit={handleStartNewSeason} className="mt-4 flex flex-col gap-3 sm:flex-row">
-            <select aria-label={t('leagueDuel.chooseFormat')} value={newSeasonFormat} onChange={(e) => setNewSeasonFormat(e.target.value as SeasonFormat)} className={selectClass}>
+            <Select aria-label={t('leagueDuel.chooseFormat')} value={newSeasonFormat} onValueChange={(value) => setNewSeasonFormat(value as SeasonFormat)} className={selectClass}>
               <option value="round_robin">{t('leagueDuel.roundRobin')}</option><option value="team_duel">{t('leagueDuel.title')}</option>
-            </select>
+            </Select>
             <input
               value={newSeasonName}
               aria-label={t('setup.newSeasonPlaceholder')}
@@ -1304,10 +1309,10 @@ export function SetupPage() {
               className="min-h-11 w-full rounded-lg border border-green-200 px-3 py-2 text-base sm:text-sm"
               required
             />
-            <select
+            <Select
               value={newTeam.poolPlayerId1}
-              onChange={(e) =>
-                setNewTeam((prev) => ({ ...prev, poolPlayerId1: e.target.value }))
+              onValueChange={(value) =>
+                setNewTeam((prev) => ({ ...prev, poolPlayerId1: value }))
               }
               className={selectClass}
               aria-label={t('setup.pickPlayer1')}
@@ -1319,11 +1324,11 @@ export function SetupPage() {
                   {player.name}
                 </option>
               ))}
-            </select>
-            <select
+            </Select>
+            <Select
               value={newTeam.poolPlayerId2}
-              onChange={(e) =>
-                setNewTeam((prev) => ({ ...prev, poolPlayerId2: e.target.value }))
+              onValueChange={(value) =>
+                setNewTeam((prev) => ({ ...prev, poolPlayerId2: value }))
               }
               className={selectClass}
               aria-label={t('setup.pickPlayer2')}
@@ -1335,7 +1340,7 @@ export function SetupPage() {
                   {player.name}
                 </option>
               ))}
-            </select>
+            </Select>
             <button
               type="submit"
               disabled={
