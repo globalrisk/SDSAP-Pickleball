@@ -1228,7 +1228,7 @@ export function SetupPage() {
         </section>
       )}
 
-      {activeSection === 'teams' && isDuel && selectedSeason ? <LeagueTeamDuelSetup key={selectedSeason.id} season={selectedSeason} rosterIds={seasonRosterQuery.data ?? []} teams={teams ?? []} hasFixtures={!activeSeasonMatches || activeSeasonMatches.length > 0 || !isSelectedSeasonActive} editable={isSelectedSeasonActive} /> : null}
+      {activeSection === 'teams' && isDuel && selectedSeason ? <LeagueTeamDuelSetup key={selectedSeason.id} season={selectedSeason} rosterIds={seasonRosterQuery.data ?? []} teams={teams ?? []} fixtures={activeSeasonMatches} hasFixtures={!activeSeasonMatches || activeSeasonMatches.length > 0 || !isSelectedSeasonActive} editable={isSelectedSeasonActive} /> : null}
 
       {activeSection === 'teams' && !isDuel ? (
         <section className="mb-6">

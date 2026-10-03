@@ -1,78 +1,75 @@
-import { teamWinProbability, type SkillRating } from './ratings'
 import { partnershipKey } from './balanceTeams'
-import type { MatchWithTeams, PoolPlayer, TeamWithPlayers } from '../types'
+import type { MatchWithTeams, PoolPlayer } from '../types'
+import { assignLeagueDuelTiers, buildTierMatchedDuelSchedule, compareDuelPlayers, duelTierCounts, type LeagueDuelSchedule } from './leagueDuelSchedule'
 
-export const DUEL_BALANCE_TARGET = 0.65
-export const LEAGUE_DUEL_ROSTER_SIZES = [8, 10, 12, 14] as const
+export { DUEL_BALANCE_TARGET, LEAGUE_DUEL_ROSTER_SIZES } from './leagueDuelSchedule'
 
 export interface LeagueDuelDraft {
   id: string
   squads: [PoolPlayer[], PoolPlayer[]]
   worstFavorite: number
-  repeatedSquadmates: number
+  repeatedPartnerships: number
+  partnerHistoryOccurrences: number
+  recentPartnerRepeats: number[]
+  opponentRepeats: number
+  schedule: LeagueDuelSchedule
   meetsTarget: boolean
 }
 
 /** Enumerate each split once, with the strongest player anchoring side A. */
 export function generateLeagueDuelDrafts(
   pool: PoolPlayer[],
-  squadmateCounts: ReadonlyMap<string, number> = new Map(),
+  partnerHistory: readonly ReadonlySet<string>[] = [],
 ): LeagueDuelDraft[] {
-  if (!(LEAGUE_DUEL_ROSTER_SIZES as readonly number[]).includes(pool.length)) {
-    throw new Error('Select 8, 10, 12, or 14 players for Team Duel.')
-  }
-  if (new Set(pool.map((p) => p.id)).size !== pool.length
-    || pool.some((p) => p.status !== 'active' || !Number.isFinite(p.rating)
-      || !Number.isFinite(p.rating_deviation) || p.rating_deviation < 0)) {
-    throw new Error('Team Duel requires distinct active players with valid ratings.')
-  }
-  const sorted = [...pool].sort((a, b) => b.rating - a.rating || a.id.localeCompare(b.id))
+  const tiers = assignLeagueDuelTiers(pool)
+  const sorted = [...pool].sort(compareDuelPlayers)
   const size = sorted.length / 2
+  const required = duelTierCounts(size)
+  const history = partnerHistory.slice(0, 3)
   const drafts: LeagueDuelDraft[] = []
-  const toSkill = (p: PoolPlayer): SkillRating => ({ rating: p.rating, rd: p.rating_deviation, volatility: 0 })
   function visit(start: number, indices: number[]) {
     if (indices.length === size) {
+      const counts = ['top', 'middle', 'bottom'].map((tier) => indices.filter((i) => tiers.get(sorted[i]!.id) === tier).length)
+      if (counts.some((count, i) => count !== required[i])) return
       const chosen = new Set(indices)
       const squads: [PoolPlayer[], PoolPlayer[]] = [indices.map((i) => sorted[i]!), sorted.filter((_, i) => !chosen.has(i))]
-      let worstFavorite = 0.5
-      let repeatedSquadmates = 0
+      let repeatedPartnerships = 0, partnerHistoryOccurrences = 0
+      const recentPartnerRepeats = [0, 0, 0]
       for (let i = 0; i < size; i++) {
         for (let j = i + 1; j < size; j++) {
-          const probability = teamWinProbability(
-            [toSkill(squads[0][i]!), toSkill(squads[0][j]!)],
-            [toSkill(squads[1][i]!), toSkill(squads[1][j]!)],
-          )!
-          worstFavorite = Math.max(worstFavorite, probability, 1 - probability)
-          for (const squad of squads) repeatedSquadmates += squadmateCounts.get(partnershipKey(squad[i]!.id, squad[j]!.id)) ?? 0
+          for (const squad of squads) {
+            const key = partnershipKey(squad[i]!.id, squad[j]!.id)
+            let occurrences = 0
+            history.forEach((season, index) => {
+              if (season.has(key)) { occurrences++; recentPartnerRepeats[index]!++ }
+            })
+            if (occurrences) repeatedPartnerships++
+            partnerHistoryOccurrences += occurrences
+          }
         }
       }
+      const schedule = buildTierMatchedDuelSchedule(squads)
       drafts.push({
         id: squads.map((squad) => squad.map((p) => p.id).sort().join(':')).join('|'),
-        squads, worstFavorite, repeatedSquadmates, meetsTarget: worstFavorite <= DUEL_BALANCE_TARGET,
+        squads, repeatedPartnerships, partnerHistoryOccurrences, recentPartnerRepeats, schedule,
+        worstFavorite: schedule.worstFavorite, opponentRepeats: schedule.opponentRepeats, meetsTarget: schedule.meetsTarget,
       })
       return
     }
     for (let i = start; i <= sorted.length - (size - indices.length); i++) visit(i + 1, [...indices, i])
   }
   visit(1, [0])
-  const eligible = drafts.filter((draft) => draft.meetsTarget)
-  return (eligible.length ? eligible : drafts).sort((a, b) =>
-    (eligible.length ? a.repeatedSquadmates - b.repeatedSquadmates : 0)
+  return drafts.sort((a, b) =>
+    a.repeatedPartnerships - b.repeatedPartnerships
+    || a.partnerHistoryOccurrences - b.partnerHistoryOccurrences
+    || a.recentPartnerRepeats[0]! - b.recentPartnerRepeats[0]!
+    || a.recentPartnerRepeats[1]! - b.recentPartnerRepeats[1]!
+    || a.recentPartnerRepeats[2]! - b.recentPartnerRepeats[2]!
     || a.worstFavorite - b.worstFavorite
-    || a.repeatedSquadmates - b.repeatedSquadmates
+    || a.schedule.totalImbalance - b.schedule.totalImbalance
+    || a.opponentRepeats - b.opponentRepeats
     || a.id.localeCompare(b.id),
   ).slice(0, 3)
-}
-
-export function countRecentSquadmates(seasons: TeamWithPlayers[][]): Map<string, number> {
-  const counts = new Map<string, number>()
-  for (const squads of seasons.slice(0, 3)) for (const squad of squads) {
-    for (let i = 0; i < squad.players.length; i++) for (let j = i + 1; j < squad.players.length; j++) {
-      const key = partnershipKey(squad.players[i]!.pool_player_id, squad.players[j]!.pool_player_id)
-      counts.set(key, (counts.get(key) ?? 0) + 1)
-    }
-  }
-  return counts
 }
 
 export function getLeagueDuelProgress(matches: MatchWithTeams[]) {

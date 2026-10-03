@@ -3,7 +3,7 @@ import { readdir, readFile } from 'node:fs/promises'
 
 // Disposable PostgreSQL, never connected to the production Supabase project.
 // Only Supabase-owned auth/storage plumbing is stubbed; application SQL is real.
-export async function createTestDatabase() {
+export async function createTestDatabase({ beforeMigration } = {}) {
   const db = new PGlite()
   await db.exec(`
     CREATE ROLE anon; CREATE ROLE authenticated;
@@ -22,6 +22,7 @@ export async function createTestDatabase() {
     ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated;
   `)
   for (const file of (await readdir('supabase/migrations')).filter((f) => f.endsWith('.sql')).sort()) {
+    if (file === beforeMigration) break
     try { await db.exec(await readFile(`supabase/migrations/${file}`, 'utf8')) }
     catch (error) { await db.close(); throw new Error(`Migration ${file}: ${error.message}`, { cause: error }) }
   }

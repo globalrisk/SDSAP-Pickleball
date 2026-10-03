@@ -24,7 +24,7 @@ describe('rated league duel through the application API and PostgreSQL', () => {
   it('saves, retries, corrects, undoes and forfeits while matching canonical replay and individual history', async () => {
     const { leagueId, seasonId, players } = api.seeded!
     await setSeasonFormat(seasonId, 'team_duel')
-    const preview = await fetchLeagueDuelDraftPreview(leagueId, players.map((p) => p.id))
+    const preview = await fetchLeagueDuelDraftPreview(leagueId, seasonId, players.map((p) => p.id))
     expect(preview.drafts).toHaveLength(3)
     await saveLeagueDuelDraft(seasonId, preview.drafts[0]!, ['Green squad', 'Blue squad'], preview.revision, preview.fingerprint)
     expect(await createSeasonMatches(seasonId)).toBe(21)
@@ -97,8 +97,8 @@ describe('rated league duel through the application API and PostgreSQL', () => {
     const season = await createSeason('Joint champions', leagueId, 'team_duel')
     const rosterIds = players.slice(0, 8).map((player) => player.id)
     await saveSeasonRoster(season.id, rosterIds)
-    const preview = await fetchLeagueDuelDraftPreview(leagueId, rosterIds)
-    expect(preview.squadmateCounts.size).toBe(42)
+    const preview = await fetchLeagueDuelDraftPreview(leagueId, season.id, rosterIds)
+    expect(preview.partnerHistory[0]?.size).toBe(42)
     await saveLeagueDuelDraft(season.id, preview.drafts[0]!, ['Joint A', 'Joint B'], preview.revision, preview.fingerprint)
     expect(await createSeasonMatches(season.id)).toBe(6)
     const matches = await fetchMatches(season.id, leagueId)

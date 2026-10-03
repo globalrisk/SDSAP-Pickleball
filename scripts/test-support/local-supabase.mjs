@@ -47,8 +47,8 @@ function matchesFilter(row, field, filter) {
   return negate ? !result : result
 }
 
-export async function startLocalSupabase({ port = 0, seed = true } = {}) {
-  const db = await createTestDatabase()
+export async function startLocalSupabase({ port = 0, seed = true, beforeMigration } = {}) {
+  const db = await createTestDatabase({ beforeMigration })
   const tables = new Set((await db.query("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")).rows.map((r) => r.tablename))
   const claims = { sub: '90000000-0000-4000-8000-000000000001', app_metadata: { role: 'admin' }, role: 'authenticated', exp: Math.floor(Date.now() / 1000) + 86400 }
   const token = `${Buffer.from('{"alg":"HS256","typ":"JWT"}').toString('base64url')}.${Buffer.from(JSON.stringify(claims)).toString('base64url')}.test-only`

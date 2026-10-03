@@ -1,5 +1,19 @@
 -- Real PostgreSQL constraints and RPCs, rolled back after every assertion.
 BEGIN;
+CREATE FUNCTION pg_temp.generate_test_duel(p_season_id uuid) RETURNS integer LANGUAGE plpgsql SECURITY INVOKER SET search_path = '' AS $$
+DECLARE squads uuid[]; home_ids uuid[]; away_ids uuid[]; fixtures jsonb; snapshot jsonb;
+BEGIN
+  SELECT array_agg(team.id ORDER BY (SELECT pool_player_id::text FROM public.players WHERE team_id = team.id ORDER BY duel_rank LIMIT 1))
+    INTO squads FROM public.teams AS team WHERE team.season_id = p_season_id;
+  SELECT array_agg(pool_player_id ORDER BY duel_rank) INTO home_ids FROM public.players WHERE team_id = squads[1];
+  SELECT array_agg(pool_player_id ORDER BY duel_rank) INTO away_ids FROM public.players WHERE team_id = squads[2];
+  SELECT public.league_duel_rating_snapshot(league_id) INTO snapshot FROM public.seasons WHERE id = p_season_id;
+  SELECT jsonb_agg(jsonb_build_object('homeTeamId', squads[1], 'awayTeamId', squads[2], 'roundNumber', round_number,
+    'sequenceNumber', sequence_number, 'homePoolPlayerIds', ARRAY[home_ids[rank_1], home_ids[rank_2]],
+    'awayPoolPlayerIds', ARRAY[away_ids[rank_1], away_ids[rank_2]]) ORDER BY sequence_number) INTO fixtures
+    FROM public.league_duel_schedule(cardinality(home_ids));
+  RETURN public.generate_league_duel_matches_atomic(p_season_id, fixtures, (snapshot->>'revision')::bigint, snapshot->>'fingerprint');
+END $$;
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claims', '{"app_metadata":{"role":"admin"}}', true);
 DO $$
@@ -25,8 +39,8 @@ BEGIN
     IF EXISTS (SELECT 1 FROM public.teams WHERE season_id = season) OR
       (SELECT count(*) FROM public.season_roster WHERE season_id = season) <> size * 2 THEN RAISE EXCEPTION 'Format switch did not preserve roster'; END IF;
     squads := jsonb_build_array(
-      jsonb_build_object('name','Squad A','color','#15803d','poolPlayerIds',to_jsonb(ids[1:size])),
-      jsonb_build_object('name','Squad B','color','#1d4ed8','poolPlayerIds',to_jsonb(ids[size+1:size*2])));
+      jsonb_build_object('name','Squad A','color','#15803d','poolPlayerIds',to_jsonb(ARRAY(SELECT ids[position] FROM generate_series(1, size * 2) AS position WHERE position % 2 = 1 ORDER BY position))),
+      jsonb_build_object('name','Squad B','color','#1d4ed8','poolPlayerIds',to_jsonb(ARRAY(SELECT ids[position] FROM generate_series(1, size * 2) AS position WHERE position % 2 = 0 ORDER BY position))));
     snapshot := public.league_duel_rating_snapshot(league);
     -- A shared identity without membership cannot enter a league squad.
     foreign_player := gen_random_uuid();
@@ -62,10 +76,10 @@ BEGIN
     PERFORM public.save_league_duel_draft_atomic(season, squads, (snapshot->>'revision')::bigint, snapshot->>'fingerprint');
     BEGIN
       UPDATE public.rating_state SET revision = revision + 1 WHERE league_id = league;
-      PERFORM public.generate_league_duel_matches_atomic(season);
+      PERFORM pg_temp.generate_test_duel(season);
       RAISE EXCEPTION 'Stale generation was accepted';
     EXCEPTION WHEN serialization_failure THEN NULL; END;
-    total := public.generate_league_duel_matches_atomic(season);
+    total := pg_temp.generate_test_duel(season);
     IF total <> size * (size - 1) / 2 THEN RAISE EXCEPTION 'Incorrect game count for size %', size; END IF;
     PERFORM public.validate_league_duel_season(season);
     IF EXISTS (SELECT 1 FROM public.players AS player WHERE player.season_id = season AND
@@ -101,8 +115,9 @@ BEGIN
     EXCEPTION WHEN check_violation THEN NULL; END;
     BEGIN
       DELETE FROM public.matches WHERE id = first_game;
+      PERFORM public.validate_league_duel_season(season);
       RAISE EXCEPTION 'Fixture deletion was accepted';
-    EXCEPTION WHEN others THEN IF SQLERRM NOT LIKE 'Generated Team Duel fixtures%' THEN RAISE; END IF; END;
+    EXCEPTION WHEN check_violation THEN NULL; END;
     BEGIN
       PERFORM public.set_season_format_atomic(season, 'round_robin');
       RAISE EXCEPTION 'Generated format was changed';
@@ -174,13 +189,13 @@ DO $$ BEGIN
   BEGIN PERFORM public.set_season_format_atomic(gen_random_uuid(), 'team_duel');
     RAISE EXCEPTION 'Viewer changed format';
   EXCEPTION WHEN others THEN IF SQLERRM <> 'Administrator access is required' THEN RAISE; END IF; END;
-  BEGIN PERFORM public.generate_league_duel_matches_atomic(gen_random_uuid());
+  BEGIN PERFORM public.generate_league_duel_matches_atomic(gen_random_uuid(), '[]', 0, '');
     RAISE EXCEPTION 'Viewer generated games';
   EXCEPTION WHEN others THEN IF SQLERRM <> 'Administrator access is required' THEN RAISE; END IF; END;
 END $$;
 SET LOCAL ROLE anon;
 DO $$ BEGIN
-  BEGIN PERFORM public.generate_league_duel_matches_atomic(gen_random_uuid());
+  BEGIN PERFORM public.generate_league_duel_matches_atomic(gen_random_uuid(), '[]', 0, '');
     RAISE EXCEPTION 'Anonymous user generated games';
   EXCEPTION WHEN insufficient_privilege THEN NULL; END;
 END $$;

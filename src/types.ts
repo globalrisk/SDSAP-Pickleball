@@ -2,6 +2,7 @@ export type MatchStatus = 'scheduled' | 'completed' | 'forfeit'
 export type MatchLiveStatus = 'available' | 'playing' | 'up_next'
 export type SeasonStatus = 'active' | 'archived'
 export type SeasonFormat = 'round_robin' | 'team_duel'
+export type DuelTier = 'top' | 'middle' | 'bottom'
 export type LeagueStatus = 'active' | 'archived'
 export type PoolPlayerStatus = 'active' | 'inactive'
 
@@ -27,6 +28,8 @@ export interface Season {
   live_court_count: number
   format?: SeasonFormat
   duel_draft_rating_revision?: number | null
+  duel_draft_rating_fingerprint?: string | null
+  duel_schedule_mode?: 'tier_matched' | null
 }
 
 export interface Team {
@@ -213,6 +216,7 @@ export interface Player {
   created_at: string
   is_present: boolean
   duel_rank?: number | null
+  duel_tier?: DuelTier | null
 }
 
 export interface TeamWithPlayers extends Team {
