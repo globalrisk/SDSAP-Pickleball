@@ -109,6 +109,23 @@ copied into a group chat.
 The app and maintenance script use the same league-scoped TrueSkill replay. Seeded
 players start with 275 points of uncertainty; decisive matches use zero draw probability.
 
+Absence increases uncertainty through variance growth rather than a flat season
+penalty: `RD = sqrt(previous RD² + 25² × additional idle weeks)`, capped at 500.
+The first seven days after a rated game are a grace period for regular weekly
+play. Elapsed UTC dates come from the original result timestamp (preserved on
+correction); legacy results without one use the season start date. Result entry
+is a proxy for playing time, so imported or late-entered results may be less exact.
+Roster membership, season count, and forfeits do not count as rated activity.
+Players without a rated game keep their initial uncertainty. The 25-point setting
+is an initial choice, not a parameter validated by the earlier prediction audit.
+
+Every result save and maintenance rebuild recalculates the complete history,
+applying absence growth before returning players' results and through the rebuild
+date. Rebuilding twice on the same UTC date gives the same ratings. Stored ratings
+do not change merely because a page is opened; rebuild before drafting after a
+long league-wide break. Historical match probabilities include the pre-game
+uncertainty, without learning from later results.
+
 With Node.js 22.18+ (or 24+), preview a rebuild without changing the database:
 
 ```bash

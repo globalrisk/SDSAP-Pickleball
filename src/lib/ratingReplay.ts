@@ -1,10 +1,10 @@
 import {
   applyDoublesMatchToRatings,
-  applySkipSeasonRdBoost,
   createInitialRatingsMap,
   TRUESKILL_DEFAULTS,
   type DoublesMatchPlayers,
 } from './ratings.ts'
+import { RatingInactivityTracker, ratingActivityDate } from './ratingInactivity.ts'
 
 export interface ReplayPoolPlayer {
   id: string
@@ -69,17 +69,18 @@ export function toDoublesMatchPlayers(match: FinishedMatchForRatings): DoublesMa
 export function replayRatings({
   pool,
   finishedMatches,
-  seasonRosters,
   recordedAt,
+  asOf,
 }: {
   pool: ReplayPoolPlayer[]
   finishedMatches: FinishedMatchForRatings[]
-  seasonRosters: ReadonlyMap<string, string[]>
   recordedAt: string
+  /** Optional current date for a rebuild; historical audits omit it. */
+  asOf?: string
 }): RatingReplacement {
   const ratings = createInitialRatingsMap(pool)
   const historyRows: RatingReplacement['historyRows'] = []
-  const hasPlayed = new Set<string>()
+  const inactivity = new RatingInactivityTracker()
   let sequence = 0
 
   for (const player of pool) {
@@ -94,32 +95,29 @@ export function replayRatings({
     })
   }
 
-  let previousSeasonId: string | null = null
-  for (const match of finishedMatches) {
-    if (previousSeasonId && match.season_id !== previousSeasonId) {
-      const onRoster = new Set(seasonRosters.get(match.season_id) ?? [])
-      const boosted = applySkipSeasonRdBoost(
-        ratings,
-        [...hasPlayed].filter((id) => !onRoster.has(id)),
-      )
-      for (const playerId of boosted) {
-        const skill = ratings.get(playerId)!
-        historyRows.push({
-          pool_player_id: playerId,
-          match_id: null,
-          rating: skill.rating,
-          rating_deviation: skill.rd,
-          sequence: sequence++,
-          recorded_at: match.season_starts_at || recordedAt,
-        })
-      }
+  const recordInactivity = (timestamp: string | null) => {
+    for (const playerId of inactivity.apply(ratings, timestamp)) {
+      const skill = ratings.get(playerId)!
+      historyRows.push({
+        pool_player_id: playerId,
+        match_id: null,
+        rating: skill.rating,
+        rating_deviation: skill.rd,
+        sequence: sequence++,
+        recorded_at: timestamp!,
+      })
     }
+  }
 
+  for (const match of finishedMatches) {
     const doubles = toDoublesMatchPlayers(match)
     if (doubles) {
+      const activityDate = ratingActivityDate(match)
+      // The returning player gets elapsed uncertainty before the result is learned.
+      recordInactivity(activityDate)
       applyDoublesMatchToRatings(ratings, doubles)
+      inactivity.recordPlayed([...doubles.winnerPoolIds, ...doubles.loserPoolIds], activityDate)
       for (const playerId of [...doubles.winnerPoolIds, ...doubles.loserPoolIds]) {
-        hasPlayed.add(playerId)
         const skill = ratings.get(playerId)!
         historyRows.push({
           pool_player_id: playerId,
@@ -127,12 +125,12 @@ export function replayRatings({
           rating: skill.rating,
           rating_deviation: skill.rd,
           sequence: sequence++,
-          recorded_at: match.result_recorded_at ?? recordedAt,
+          recorded_at: activityDate ?? recordedAt,
         })
       }
     }
-    previousSeasonId = match.season_id
   }
+  if (asOf) recordInactivity(asOf)
 
   return {
     historyRows,

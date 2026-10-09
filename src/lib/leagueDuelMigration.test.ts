@@ -1,7 +1,7 @@
 /// <reference types="node" />
 import { describe, expect, it, vi } from 'vitest'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import { readFile } from 'node:fs/promises'
+import { readFile, readdir } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
 import { startLocalSupabase } from '../../scripts/test-support/local-supabase.mjs'
 
@@ -49,12 +49,14 @@ describe('tier migration over populated mirror history', () => {
       const storedData = async () => {
         const data: Record<string, unknown> = {}
         for (const table of ['seasons', 'season_roster', 'teams', 'players', 'matches', 'league_players', 'player_pool', 'rating_state', 'rating_history']) {
-          data[table] = (await api.db.query(`SELECT to_jsonb(t) - ARRAY['duel_tier','duel_schedule_mode'] AS data FROM public.${table} t ORDER BY (to_jsonb(t) - ARRAY['duel_tier','duel_schedule_mode'])::text`)).rows
+          data[table] = (await api.db.query(`SELECT to_jsonb(t) - ARRAY['duel_tier','duel_schedule_mode','duel_draft_priority'] AS data FROM public.${table} t ORDER BY (to_jsonb(t) - ARRAY['duel_tier','duel_schedule_mode','duel_draft_priority'])::text`)).rows
         }
         return data
       }
       const before = await storedData()
-      await api.db.exec(await readFile(`supabase/migrations/${migration}`, 'utf8'))
+      for (const file of (await readdir('supabase/migrations')).filter((file) => file >= migration && file.endsWith('.sql')).sort()) {
+        await api.db.exec(await readFile(`supabase/migrations/${file}`, 'utf8'))
+      }
       expect(await storedData()).toEqual(before)
       expect((await state.client!.rpc('validate_league_duel_season', { p_season_id: seasonId })).error).toBeNull()
       const lineups = (games: typeof fixtures) => games.map((game) => [game.id, game.home_pool_player_ids, game.away_pool_player_ids]).sort((a, b) => String(a[0]).localeCompare(String(b[0])))
@@ -67,7 +69,7 @@ describe('tier migration over populated mirror history', () => {
       await saveLeagueDuelDraft(emptySeason, preview.drafts[0]!, ['Fresh A', 'Fresh B'], preview.revision, preview.fingerprint)
       expect(await generateLeagueDuelSeasonMatches(emptySeason)).toBe(21)
       expect((await api.db.query('SELECT * FROM public.season_roster WHERE season_id = $1 ORDER BY pool_player_id', [emptySeason])).rows).toEqual(originalRoster)
-      expect((await api.db.query('SELECT to_jsonb(s) - ARRAY[\'duel_schedule_mode\', \'duel_draft_rating_revision\', \'duel_draft_rating_fingerprint\'] AS data FROM public.seasons s WHERE id = $1', [emptySeason])).rows).toEqual(originalSeason)
+      expect((await api.db.query('SELECT to_jsonb(s) - ARRAY[\'duel_schedule_mode\', \'duel_draft_priority\', \'duel_draft_rating_revision\', \'duel_draft_rating_fingerprint\'] AS data FROM public.seasons s WHERE id = $1', [emptySeason])).rows).toEqual(originalSeason)
       expect(await fetchMatches(seasonId, leagueId)).toEqual(frozenHistory)
     } finally { await api.close() }
   }, 30000)

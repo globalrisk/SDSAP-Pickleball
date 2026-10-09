@@ -29,7 +29,7 @@
     "rosterSize": "Bạn đã chọn {{count}} người. Hãy chọn 8, 10, 12 hoặc 14 người đang hoạt động để chia đội.",
     "draftTitle": "3. Chọn phương án chia đội",
     "refresh": "Làm mới phương án",
-    "balanceHelp": "Ưu tiên ít lặp lại các cặp đã thi đấu trong ba mùa giải trước của cùng giải đấu, gồm vòng tròn và Team Duel. Mỗi cặp được tính một lần mỗi mùa. Lịch đấu ưu tiên đa dạng đối thủ; cân bằng trận đấu chỉ dùng khi mức độ đa dạng bằng nhau. Xác suất thắng cao nhất được tính từ các trận ghép nhóm trình độ, không có mục tiêu hay giới hạn. Người chơi tạm xếp hạng dùng điểm và độ bất định hiện tại.",
+    "balanceHelp": "Chọn ưu tiên: cân bằng trận đấu hoặc đa dạng đối thủ. Cả hai đều không lặp bạn đánh và ghép đúng nhóm trình độ. Các cặp đã thi đấu trong ba mùa trước được dùng khi các lựa chọn bằng nhau.",
     "option": "Phương án {{number}}",
     "balance": "Xác suất thắng cao nhất: {{percent}}% · Cặp từng thi đấu: {{repeats}}",
     "selectDraft": "Hãy chọn phương án chia đội trước.",
@@ -60,7 +60,34 @@
       "middle": "Nhóm giữa",
       "bottom": "Nhóm dưới"
     },
-    "rebuildDraft": "Làm mới phương án và lưu đội theo nhóm trình độ trước khi tạo lịch. Việc chia lại đội giữ nguyên danh sách người chơi đã chọn."
+    "rebuildDraft": "Làm mới phương án và lưu đội theo nhóm trình độ trước khi tạo lịch. Việc chia lại đội giữ nguyên danh sách người chơi đã chọn.",
+    "priority": {
+      "balance": "Cân bằng trận đấu",
+      "opponent_variety": "Đa dạng đối thủ"
+    },
+    "priorityHelp": {
+      "balance": "Giữ từng trận trong ngưỡng chất lượng cân bằng, rồi ưu tiên xác suất thắng cả mùa ngang nhau. Luôn tuân thủ giới hạn gặp đối thủ theo nhóm.",
+      "opponent_variety": "Ưu tiên phân bổ đều các lần gặp đối thủ, rồi xác suất thắng cả mùa ngang nhau. Một số trận có thể ít cân bằng hơn."
+    },
+    "draftMetrics": "Xác suất thắng cao nhất: {{percent}}% · Số lần gặp một đối thủ tối đa: {{meetings}} · Cặp bạn đánh lặp lại: {{repeats}}",
+    "opponentLimits": "Giới hạn gặp cùng một đối thủ cho mỗi người: nhóm trên {{top}}, nhóm giữa {{middle}}, nhóm dưới {{bottom}}. Mỗi cặp đối thủ phải tuân thủ giới hạn của cả hai người.",
+    "refreshHelp": "Làm mới để xem các đội khác trong giới hạn gặp đối thủ theo nhóm: phương án cân bằng nằm trong 5 điểm phần trăm so với xác suất thắng cao nhất tốt nhất; phương án đa dạng giữ cách phân bổ đối thủ tốt nhất và cho phép thêm tối đa 6 cặp bạn đánh cũ.",
+    "sameSquads": "Hai ưu tiên hiện chọn cùng đội hình; cách ghép trận có thể khác nhau.",
+    "savedPriority": "Ưu tiên đã lưu: {{priority}}",
+    "saveBeforeGenerate": "Lưu đội hình và ưu tiên đang chọn trước khi tạo lịch đấu.",
+    "noAlternative": "Không có đội hình khác đáp ứng giới hạn chất lượng của ưu tiên này.",
+    "restarted": "Đã xem hết các đội hình phù hợp. Bắt đầu một lượt mới.",
+    "noEligible": "Không có phương án đạt 55/45 cùng giới hạn chất lượng trận và số lần gặp đối thủ của ưu tiên này. Kiểm tra danh sách hoặc điểm đánh giá rồi làm mới. Các giới hạn vẫn được giữ nguyên.",
+    "seasonBalanceLimit": "Cả hai phương án và mỗi lần làm mới đều giữ xác suất thắng mùa từ 45% đến 55%. Khi có thể đồng vô địch, so sánh A và B không tính kết quả đó.",
+    "seasonBalanceRequired": "Phương án này vượt giới hạn thắng mùa 55/45. Làm mới và lưu phương án đạt giới hạn trước khi tạo trận.",
+    "seasonForecastTitle": "Xác suất thắng cả mùa",
+    "seasonChances": "{{home}} {{homePercent}}% · {{away}} {{awayPercent}}%",
+    "tieChance": "Đồng vô địch: {{percent}}%",
+    "decisiveChances": "Không tính đồng vô địch: {{home}} {{homePercent}}% · {{away}} {{awayPercent}}%",
+    "expectedWins": "Số trận thắng dự kiến: {{home}} {{homeWins}} · {{away}} {{awayWins}}",
+    "forecastCoverage": "Toàn bộ {{total}} trận · còn {{remaining}} trận; kết quả đã ghi được giữ cố định.",
+    "forecastHelp": "Ước tính từ đội hình từng trận và điểm hiện tại, giả định các trận độc lập.",
+    "forecastUnavailable": "Chưa thể dự báo mùa giải khi đội hình các trận còn lại chưa có đủ điểm xếp hạng."
   },
   "app": {
     "title": "Giải SDSAP"
@@ -387,7 +414,7 @@
   "rankings": {
     "title": "Xếp hạng người chơi",
     "subtitle": "Người chơi Active đã có ít nhất 5 trận tính điểm",
-    "methodNote": "Người chơi được xếp hạng theo điểm kỹ năng. Hoàn thành 5 trận tính điểm để có thứ hạng. Cách biệt điểm không ảnh hưởng và trận bỏ cuộc không được tính.",
+    "methodNote": "Người chơi được xếp hạng theo điểm kỹ năng. Hoàn thành 5 trận tính điểm để có thứ hạng. Cách biệt điểm không ảnh hưởng và trận bỏ cuộc không được tính. Khoảng ± thể hiện độ bất định, tăng nhẹ sau hơn một tuần không chơi trận tính điểm.",
     "rank": "Hạng",
     "player": "Người chơi",
     "rating": "Điểm",

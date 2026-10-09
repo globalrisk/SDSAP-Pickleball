@@ -25,7 +25,7 @@ describe('rated league duel through the application API and PostgreSQL', () => {
     const { leagueId, seasonId, players } = api.seeded!
     await setSeasonFormat(seasonId, 'team_duel')
     const preview = await fetchLeagueDuelDraftPreview(leagueId, seasonId, players.map((p) => p.id))
-    expect(preview.drafts).toHaveLength(3)
+    expect(preview.drafts).toHaveLength(2)
     await saveLeagueDuelDraft(seasonId, preview.drafts[0]!, ['Green squad', 'Blue squad'], preview.revision, preview.fingerprint)
     expect(await createSeasonMatches(seasonId)).toBe(21)
     const matches = await fetchMatches(seasonId, leagueId)
@@ -44,7 +44,8 @@ describe('rated league duel through the application API and PostgreSQL', () => {
         (SELECT jsonb_agg(jsonb_build_object('pool_player_id', player.pool_player_id)) FROM public.players AS player WHERE player.team_id = match.away_team_id) AS away_players
         FROM public.matches AS match JOIN public.seasons AS season ON season.id = match.season_id
         WHERE season.league_id = $1 AND match.status = 'completed' ORDER BY season.starts_at, match.result_recorded_at, match.id`, [leagueId])).rows
-      const expected = replayRatings({ pool, finishedMatches: finished, seasonRosters: new Map([[seasonId, players.map((p) => p.id)]]), recordedAt: '2026-10-01' })
+      const now = new Date().toISOString()
+      const expected = replayRatings({ pool, finishedMatches: finished, recordedAt: now, asOf: now })
       const actual = (await api.db.query<{ id: string; rating: number; rating_deviation: number; volatility: number }>('SELECT pool_player_id AS id, rating, rating_deviation, volatility FROM public.league_players WHERE league_id = $1 ORDER BY pool_player_id', [leagueId])).rows
       expect(actual).toEqual(expected.playerRatings)
       const history = (await api.db.query<{ pool_player_id: string; match_id: string | null; rating: number; rating_deviation: number; sequence: number }>('SELECT pool_player_id, match_id, rating, rating_deviation, sequence FROM public.rating_history WHERE league_id = $1 ORDER BY sequence', [leagueId])).rows

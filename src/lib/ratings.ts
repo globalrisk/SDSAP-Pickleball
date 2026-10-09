@@ -31,11 +31,14 @@ const ratingEnvironment = new TrueSkill(
   0,
 )
 
-/** Flat RD added per season a known player is absent from the roster. */
-export const SKIP_SEASON_RD_BOOST = 75
+/** Display-point drift per idle week; a starting setting, not a fitted parameter. */
+export const INACTIVITY_WEEKLY_DRIFT = 25
 
-/** Cap after skip-season RD boosts (full TrueSkill prior ≈ 500). */
-export const SKIP_SEASON_RD_CAP = TRUESKILL_SIGMA * TRUESKILL_SCALE
+/** Weekly players have one week between games before absence growth begins. */
+export const INACTIVITY_GRACE_DAYS = 7
+
+/** Full TrueSkill prior ≈ 500 display points. */
+export const INACTIVITY_RD_CAP = Math.round(TRUESKILL_SIGMA * TRUESKILL_SCALE)
 
 /** Active players need this many rated matches before joining the ladder. */
 export const PROVISIONAL_MATCH_COUNT = 5
@@ -155,24 +158,10 @@ export function applyInactivityToPlayers(
   }
 }
 
-/**
- * Boost RD for players who skip a season (not on that season's roster).
- * Flat +SKIP_SEASON_RD_BOOST per season, capped at SKIP_SEASON_RD_CAP.
- */
-export function applySkipSeasonRdBoost(
-  ratings: Map<string, SkillRating>,
-  playerIds: Iterable<string>,
-): string[] {
-  const boosted: string[] = []
-  for (const playerId of playerIds) {
-    const current = ratings.get(playerId)
-    if (!current) continue
-    const nextRd = Math.min(SKIP_SEASON_RD_CAP, current.rd + SKIP_SEASON_RD_BOOST)
-    if (nextRd === current.rd) continue
-    ratings.set(playerId, { ...current, rd: nextRd })
-    boosted.push(playerId)
-  }
-  return boosted
+/** Grow variance for additional idle weeks, without changing estimated skill. */
+export function inactivityRatingDeviation(rd: number, additionalIdleWeeks: number): number {
+  if (!Number.isFinite(additionalIdleWeeks) || additionalIdleWeeks <= 0) return rd
+  return Math.min(INACTIVITY_RD_CAP, Math.hypot(rd, INACTIVITY_WEEKLY_DRIFT * Math.sqrt(additionalIdleWeeks)))
 }
 
 /**

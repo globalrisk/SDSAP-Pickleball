@@ -25,7 +25,7 @@ async function prepare() {
   const { leagueId, seasonId, players } = api.seeded!
   await setSeasonFormat(seasonId, 'team_duel')
   const preview = await fetchLeagueDuelDraftPreview(leagueId, seasonId, players.map((p) => p.id))
-  const draft = preview.drafts[0]!
+  const draft = preview.drafts[1]!
   await saveLeagueDuelDraft(seasonId, draft, ['A', 'B'], preview.revision, preview.fingerprint)
   const teams = await fetchTeamsWithPlayers(seasonId)
   const home = teams.find((team) => team.players.some((player) => player.pool_player_id === draft.squads[0][0]!.id))!
@@ -34,6 +34,7 @@ async function prepare() {
   return { ...api.seeded!, preview, draft, teams, matches, args: {
     p_season_id: seasonId, p_matches: matches,
     p_expected_rating_revision: preview.revision, p_expected_rating_fingerprint: preview.fingerprint,
+    p_expected_draft_priority: draft.priority,
   } }
 }
 
@@ -85,7 +86,7 @@ describe('fresh tier generation through PostgreSQL and the application API', () 
       const snapshot = season13RatingSnapshot[index]!
       await api.db.query('UPDATE public.league_players SET rating = $1, rating_deviation = $2 WHERE league_id = $3 AND pool_player_id = $4', [snapshot.rating, snapshot.rd, leagueId, player.id])
     }
-    const initialSeason = (await api.db.query('SELECT to_jsonb(s) - ARRAY[\'duel_schedule_mode\', \'duel_draft_rating_revision\', \'duel_draft_rating_fingerprint\'] AS data FROM public.seasons s WHERE id = $1', [seasonId])).rows
+    const initialSeason = (await api.db.query('SELECT to_jsonb(s) - ARRAY[\'duel_schedule_mode\', \'duel_draft_priority\', \'duel_draft_rating_revision\', \'duel_draft_rating_fingerprint\'] AS data FROM public.seasons s WHERE id = $1', [seasonId])).rows
     const roster = (await api.db.query('SELECT * FROM public.season_roster WHERE season_id = $1 ORDER BY pool_player_id', [seasonId])).rows
     const ratings = (await api.db.query('SELECT * FROM public.league_players ORDER BY league_id, pool_player_id')).rows
     const history = (await api.db.query('SELECT * FROM public.rating_history ORDER BY id')).rows
@@ -106,6 +107,14 @@ describe('fresh tier generation through PostgreSQL and the application API', () 
       const partners = appearances.map((game) => (game.home_pool_player_ids!.includes(player.id) ? game.home_pool_player_ids! : game.away_pool_player_ids!).find((id) => id !== player.id))
       expect(new Set(partners).size).toBe(6)
       expect(new Set(appearances.map((game) => game.round_number)).size).toBe(6)
+      if (tiers.get(player.id) === 'middle') {
+        const ownTeam = setup.teams.find((team) => team.players.some((p) => p.pool_player_id === player.id))!
+        const opponents = setup.teams.find((team) => team.id !== ownTeam.id)!.players.filter((p) => p.duel_tier === 'middle')
+        const counts = opponents.map((opponent) => appearances.filter((game) =>
+          (game.home_pool_player_ids!.includes(player.id) ? game.away_pool_player_ids! : game.home_pool_player_ids!)
+            .includes(opponent.pool_player_id)).length)
+        expect(counts.sort((a, b) => a - b)).toEqual([2, 3, 3])
+      }
     }
     for (const game of fixtures) expect(game.home_pool_player_ids!.map((id) => tiers.get(id)).sort()).toEqual(game.away_pool_player_ids!.map((id) => tiers.get(id)).sort())
     for (let round = 1; round <= 7; round++) {
@@ -113,7 +122,7 @@ describe('fresh tier generation through PostgreSQL and the application API', () 
       expect(games).toHaveLength(3)
       expect(new Set(games.flatMap((game) => [...game.home_pool_player_ids!, ...game.away_pool_player_ids!])).size).toBe(12)
     }
-    expect((await api.db.query('SELECT to_jsonb(s) - ARRAY[\'duel_schedule_mode\', \'duel_draft_rating_revision\', \'duel_draft_rating_fingerprint\'] AS data FROM public.seasons s WHERE id = $1', [seasonId])).rows).toEqual(initialSeason)
+    expect((await api.db.query('SELECT to_jsonb(s) - ARRAY[\'duel_schedule_mode\', \'duel_draft_priority\', \'duel_draft_rating_revision\', \'duel_draft_rating_fingerprint\'] AS data FROM public.seasons s WHERE id = $1', [seasonId])).rows).toEqual(initialSeason)
     expect((await api.db.query('SELECT * FROM public.season_roster WHERE season_id = $1 ORDER BY pool_player_id', [seasonId])).rows).toEqual(roster)
     expect((await api.db.query('SELECT * FROM public.league_players ORDER BY league_id, pool_player_id')).rows).toEqual(ratings)
     expect((await api.db.query('SELECT * FROM public.rating_history ORDER BY id')).rows).toEqual(history)

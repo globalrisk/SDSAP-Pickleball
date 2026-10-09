@@ -29,7 +29,7 @@
     "rosterSize": "You selected {{count}} players. Select 8, 10, 12, or 14 active players before drafting squads.",
     "draftTitle": "3. Choose a squad draft",
     "refresh": "Refresh draft options",
-    "balanceHelp": "Drafts prioritize fewer played partnerships from the last three previous seasons in this league, including round robin and Team Duel. Each partnership counts once per season. Schedules prioritize varied opponents; match balance only breaks ties. Favorite = the highest predicted win chance across the proposed tier-matched games, with no target or limit. Provisional players use their current rating and uncertainty.",
+    "balanceHelp": "Choose what matters most: balanced games or varied opponents. Both keep unique partners and matching tiers. Previous partnerships from the last three seasons break ties.",
     "option": "Option {{number}}",
     "balance": "Maximum favorite: {{percent}}% · Repeated partnerships: {{repeats}}",
     "selectDraft": "Select a squad draft first.",
@@ -60,7 +60,34 @@
       "middle": "Middle",
       "bottom": "Bottom"
     },
-    "rebuildDraft": "Refresh the options and save a tier-matched draft before generating games. This rebuild preserves the selected season roster."
+    "rebuildDraft": "Refresh the options and save a tier-matched draft before generating games. This rebuild preserves the selected season roster.",
+    "priority": {
+      "balance": "Balanced matches",
+      "opponent_variety": "Opponent variety"
+    },
+    "priorityHelp": {
+      "balance": "Keeps individual games within the balance quality range, then favors equal season win chances. Tier meeting limits always apply.",
+      "opponent_variety": "Prioritizes spreading opponent meetings, then equal season win chances. Some games may be less evenly matched."
+    },
+    "draftMetrics": "Highest favorite: {{percent}}% · Maximum opponent meetings: {{meetings}} · Repeated partnerships: {{repeats}}",
+    "opponentLimits": "Opponent meeting limits per player: top {{top}}, middle {{middle}}, bottom {{bottom}}. Each opponent pair must respect both players’ limits.",
+    "refreshHelp": "Refresh offers different squads within the tier meeting limits: balance stays within 5 percentage points of the best highest-favorite probability; variety keeps the best opponent spread with up to 6 extra previous partnerships.",
+    "sameSquads": "Both priorities currently favor the same squads; their match lineups may differ.",
+    "savedPriority": "Saved priority: {{priority}}",
+    "saveBeforeGenerate": "Save the currently selected squads and priority before generating games.",
+    "noAlternative": "No other squads meet this priority’s quality limits.",
+    "noEligible": "No draft meets 55/45 and this priority’s game-quality and opponent limits. Review the roster or ratings, then refresh. The limits stay in place.",
+    "seasonBalanceLimit": "Both options and every refresh keep season win chances between 45% and 55%. When joint champions are possible, this compares A and B excluding that outcome.",
+    "seasonBalanceRequired": "This draft exceeds the 55/45 season limit. Refresh and save an eligible option before generating games.",
+    "restarted": "All eligible alternatives have been shown. Starting another cycle.",
+    "seasonForecastTitle": "Season win chances",
+    "seasonChances": "{{home}} {{homePercent}}% · {{away}} {{awayPercent}}%",
+    "tieChance": "Joint champions: {{percent}}%",
+    "decisiveChances": "Excluding joint champions: {{home}} {{homePercent}}% · {{away}} {{awayPercent}}%",
+    "expectedWins": "Expected game wins: {{home}} {{homeWins}} · {{away}} {{awayWins}}",
+    "forecastCoverage": "All {{total}} games · {{remaining}} remaining; recorded results are fixed.",
+    "forecastHelp": "Estimated from each doubles lineup and current ratings, assuming independent games.",
+    "forecastUnavailable": "Season forecast unavailable until every remaining lineup has ratings."
   },
   "app": {
     "title": "SDSAP League"
@@ -389,7 +416,7 @@
   "rankings": {
     "title": "Player Rankings",
     "subtitle": "Active players with at least 5 rated matches",
-    "methodNote": "Players are ranked by skill rating. Complete 5 rated matches to receive a rank. Point margin does not affect ratings, and forfeits are excluded.",
+    "methodNote": "Players are ranked by skill rating. Complete 5 rated matches to receive a rank. Point margin does not affect ratings, and forfeits are excluded. The ± band measures uncertainty, which grows gently after more than a week without a rated game.",
     "rank": "Rank",
     "player": "Player",
     "rating": "Rating",

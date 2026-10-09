@@ -103,20 +103,6 @@ async function fetchCompletedMatchesForRatings(
   return rows
 }
 
-async function fetchSeasonPoolPlayerIds(db: SupabaseClient, seasonId: string): Promise<string[]> {
-  const { data, error } = await fetchAllPages((from, to) => db
-    .from('players')
-    .select('pool_player_id, teams!inner(season_id)')
-    .eq('teams.season_id', seasonId)
-    .order('id')
-    .range(from, to),
-  )
-
-  if (error) throw error
-
-  return [...new Set((data ?? []).map((row) => row.pool_player_id))]
-}
-
 export async function buildRatingsReplacement(
   db: SupabaseClient,
   leagueId: string,
@@ -133,20 +119,13 @@ export async function buildRatingsReplacement(
     fetchCompletedMatchesForRatings(db, leagueId, pending),
   ])
   if (poolError) throw poolError
-  const seasonIds = [...new Set(finishedMatches.map((match) => match.season_id))]
-  const seasonRosters = new Map<string, string[]>()
-  await Promise.all(
-    seasonIds.map(async (seasonId) => {
-      seasonRosters.set(seasonId, await fetchSeasonPoolPlayerIds(db, seasonId))
-    }),
-  )
   const now = new Date().toISOString()
   return {
     ...replayRatings({
       pool: (pool ?? []).map((row) => ({ id: row.pool_player_id, initial_rating: row.initial_rating })),
       finishedMatches,
-      seasonRosters,
       recordedAt: now,
+      asOf: now,
     }),
     expectedRevision: revisionResult,
   }

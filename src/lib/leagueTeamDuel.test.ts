@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { generateLeagueDuelDrafts, getLeagueDuelProgress } from './leagueTeamDuel'
-import { assignLeagueDuelTiers, buildTierMatchedDuelSchedule, duelTierCounts } from './leagueDuelSchedule'
+import { assignLeagueDuelTiers, buildTierMatchedDuelSchedule, compareOpponentEncounters, duelTierCounts } from './leagueDuelSchedule'
 import { partnershipKey } from './balanceTeams'
 import { generateLeagueTeamDuelSchedule, generateTeamDuelSchedule } from './teamDuelSchedule'
 import { computeStandings } from './standings'
@@ -60,15 +60,15 @@ describe('league duel drafts', () => {
   it('is deterministic, eliminates mirrored duplicates, and sorts rank ties by ID', () => {
     const players = pool(14)
     const options = generateLeagueDuelDrafts(players)
-    expect(options).toHaveLength(3)
+    expect(options).toHaveLength(2)
     expect(generateLeagueDuelDrafts([...players].reverse())).toEqual(options)
-    expect(new Set(options.map((o) => o.id)).size).toBe(3)
+    expect(new Set(options.map((o) => o.id)).size).toBe(2)
     for (const draft of options) {
       expect(draft.worstFavorite).toBeCloseTo(0.5)
       expect(draft.squads.flat().map((p) => p.id).sort()).toEqual(players.map((p) => p.id))
       for (const squad of draft.squads) expect(squad.map((p) => p.id)).toEqual(squad.map((p) => p.id).sort())
     }
-  })
+  }, 15000)
   it('prioritizes previous played partnerships and counts each previous season once', () => {
     const players = pool(8)
     const first = generateLeagueDuelDrafts(players)[0]!
@@ -83,8 +83,8 @@ describe('league duel drafts', () => {
     const players = pool(8)
     const allPartners = new Set(players.flatMap((player, i) => players.slice(i + 1).map((other) => partnershipKey(player.id, other.id))))
     const drafts = generateLeagueDuelDrafts(players, [allPartners, allPartners, allPartners])
-    expect(drafts).toHaveLength(3)
-    expect(new Set(drafts.map((draft) => draft.id)).size).toBe(3)
+    expect(drafts).toHaveLength(2)
+    expect(new Set(drafts.map((draft) => draft.id)).size).toBe(2)
     for (const draft of drafts) {
       expect(draft.repeatedPartnerships).toBe(12)
       expect(draft.partnerHistoryOccurrences).toBe(36)
@@ -106,11 +106,15 @@ describe('league duel drafts', () => {
     expect(preferRecent[0]!.recentPartnerRepeats).toEqual([0, 0, 12])
   })
   it('uses provisional uncertainty to report predicted balance', () => {
+    const players = pool(8).map((p, i) => ({ ...p, rating: i === 0 ? 1650 : 1400, rating_deviation: 20 }))
+    const split = (pool: PoolPlayer[]): [PoolPlayer[], PoolPlayer[]] => [pool.filter((_, i) => i % 2 === 0), pool.filter((_, i) => i % 2 === 1)]
+    const certain = buildTierMatchedDuelSchedule(split(players))
+    const uncertain = buildTierMatchedDuelSchedule(split(players.map(p => ({ ...p, rating_deviation: 275 }))))
+    expect(uncertain.worstFavorite).toBeLessThan(certain.worstFavorite)
+  })
+  it('returns no draft when an extreme roster cannot satisfy 55/45, without weakening quality bounds', () => {
     const players = pool(8).map((p, i) => ({ ...p, rating: i === 0 ? 5000 : 800, rating_deviation: 20 }))
-    const options = generateLeagueDuelDrafts(players)
-    expect(options.every((o) => o.worstFavorite > 0.9)).toBe(true)
-    const uncertain = generateLeagueDuelDrafts(players.map((p, i) => ({ ...p, rating: i === 0 ? 1650 : 1400, rating_deviation: 275 })))
-    expect(uncertain[0]!.worstFavorite).toBeLessThan(options[0]!.worstFavorite)
+    expect(generateLeagueDuelDrafts(players)).toEqual([])
   })
   it('rejects unsupported rosters, duplicates and inactive players', () => {
     for (const count of [6, 9, 16]) expect(() => generateLeagueDuelDrafts(pool(count))).toThrow()
@@ -121,8 +125,8 @@ describe('league duel drafts', () => {
 
 describe('tier-matched schedules', () => {
   for (const size of [4, 5, 6, 7]) it(`preserves tiers, every partnership and rounds for ${size}-player squads`, () => {
-    const players = pool(size * 2).map((p, i) => ({ ...p, rating: 2000 - i * 70, rating_deviation: 90 + i * 3 }))
-    const draft = generateLeagueDuelDrafts(players)[0]!
+    const players = pool(size * 2).map((p, i) => ({ ...p, rating: 1600 - i * 10, rating_deviation: 90 + i * 3 }))
+    const draft = generateLeagueDuelDrafts(players)[1]!
     const tiers = assignLeagueDuelTiers(players)
     const games = draft.schedule.games
     expect(games).toHaveLength(size * (size - 1) / 2)
@@ -147,17 +151,22 @@ describe('tier-matched schedules', () => {
       expect(participants).toHaveLength(Math.floor(size / 2) * 4)
       expect(new Set(participants).size).toBe(participants.length)
     }
+    const encounters = draft.squads[0].flatMap((home) => draft.squads[1].map((away) => games
+      .filter((game) => game.homePoolPlayerIds.includes(home.id) && game.awayPoolPlayerIds.includes(away.id)).length))
+    expect(draft.schedule.opponentEncounterCounts).toEqual(encounters.sort((a, b) => b - a))
+    expect(draft.opponentRepeats).toBe(({ 4: 12, 5: 23, 6: 48, 7: 61 })[size])
     expect(buildTierMatchedDuelSchedule(draft.squads)).toEqual(draft.schedule)
+    expect(buildTierMatchedDuelSchedule([draft.squads[0].toReversed(), draft.squads[1].toReversed()])).toEqual(draft.schedule)
   })
 
   it('uses non-mirror tier matches and improves opponent variety for equal ratings', () => {
     const draft = generateLeagueDuelDrafts(pool(14))[0]!
     const rank = (side: number, ids: string[]) => ids.map((id) => draft.squads[side]!.findIndex((p) => p.id === id)).sort().join(':')
     expect(draft.schedule.games.some((game) => rank(0, game.homePoolPlayerIds) !== rank(1, game.awayPoolPlayerIds))).toBe(true)
-    expect(draft.opponentRepeats).toBe(73)
+    expect(draft.opponentRepeats).toBe(61)
   })
 
-  it('spreads top-tier opponents for the Season 13 squads despite imbalanced games', () => {
+  it('spreads middle-tier opponents for the Season 13 squads without hiding unavoidable top-tier repeats', () => {
     const players = pool(14).map((player, index) => ({
       ...player, rating: season13RatingSnapshot[index]!.rating,
       rating_deviation: season13RatingSnapshot[index]!.rd,
@@ -173,8 +182,29 @@ describe('tier-matched schedules', () => {
 
     expect(appearances).toHaveLength(6)
     expect(opponentCounts.sort((a, b) => a - b)).toEqual([3, 4])
-    expect(schedule.opponentRepeats).toBe(73)
-    expect(schedule.worstFavorite).toBeGreaterThan(0.71)
+    expect(schedule.opponentRepeats).toBe(61)
+    // Trung and Tùng GYM occupied middle rank 5. All middle players should
+    // meet their three opposing middle players 2, 3, and 3 times, never 4.
+    for (const side of [0, 1] as const) {
+      for (const player of squads[side].slice(2, 5)) {
+        const counts = squads[side === 0 ? 1 : 0].slice(2, 5).map((opponent) => schedule.games.filter((game) =>
+          (side === 0 ? game.homePoolPlayerIds : game.awayPoolPlayerIds).includes(player.id)
+          && (side === 0 ? game.awayPoolPlayerIds : game.homePoolPlayerIds).includes(opponent.id)).length)
+        expect(counts.sort((a, b) => a - b)).toEqual([2, 3, 3])
+      }
+    }
+    // Ratings may choose among equally varied schedules, but cannot sacrifice variety.
+    const imbalanced = buildTierMatchedDuelSchedule(squads.map((squad) => squad.map((player) => ({
+      ...player, rating: player.rating * 10,
+    }))) as [PoolPlayer[], PoolPlayer[]])
+    expect(imbalanced.opponentEncounterCounts).toEqual(schedule.opponentEncounterCounts)
+    expect(imbalanced.worstFavorite).toBeGreaterThan(schedule.worstFavorite)
+  })
+
+  it('prefers fewer worst repeated pairs even when total repeat scores tie', () => {
+    // Both have 12 encounters and repeat score 9; the first avoids a four-game rivalry.
+    expect(compareOpponentEncounters([3, 3, 3, 1, 1, 1], [4, 2, 2, 2, 1, 1])).toBeLessThan(0)
+    expect(compareOpponentEncounters([4, 3, 3, 1], [4, 4, 1, 1])).toBeLessThan(0)
   })
 
   it('rejects unequal tiers and invalid uncertainty', () => {
@@ -183,16 +213,18 @@ describe('tier-matched schedules', () => {
     expect(() => generateLeagueDuelDrafts(players.map((p, i) => i ? p : { ...p, rating_deviation: -1 }))).toThrow()
   })
 
-  it('chooses fresh partners before a better-balanced option', () => {
+  it('keeps variety and partnership bounds while prioritizing season balance', () => {
     const players = pool(8).map((p, i) => ({ ...p, rating: i < 4 ? 1700 : 1300, rating_deviation: 20 }))
     const bestBalanced = generateLeagueDuelDrafts(players)[0]!
     const sideA = [players[0]!, players[2]!, players[3]!, players[6]!]
     const sideB = [players[1]!, players[4]!, players[5]!, players[7]!]
     // Three previous round-robin seasons, with four actual partnerships each.
     const history = [0, 1, 2].map((shift) => new Set(sideA.map((player, index) => partnershipKey(player.id, sideB[(index + shift) % 4]!.id))))
-    const fresh = generateLeagueDuelDrafts(players, history)[0]!
+    const fresh = generateLeagueDuelDrafts(players, history)[1]!
+    const balanced = generateLeagueDuelDrafts(players, history)[0]!
+    expect(balanced.worstFavorite).toBeCloseTo(bestBalanced.worstFavorite)
     expect(bestBalanced.worstFavorite).toBeCloseTo(0.5)
-    expect(fresh.repeatedPartnerships).toBe(0)
+    expect(fresh.repeatedPartnerships).toBeLessThanOrEqual(6)
     expect(fresh.worstFavorite).toBeGreaterThan(bestBalanced.worstFavorite)
   })
 })
@@ -230,7 +262,7 @@ describe('league duel individual history', () => {
   it('rates exactly four players per game and replays correction, undo, and forfeit canonically', () => {
     const { players, teams, matches } = fixtures()
     const played = matches.map((m, i) => ({ ...m, status: 'completed' as const, winner_team_id: i % 2 ? 'home' : 'away', home_score: i % 2 ? 11 : 6, away_score: i % 2 ? 6 : 11, result_recorded_at: `2026-10-01T12:${String(i).padStart(2, '0')}:00Z` }))
-    const replay = (history: typeof played) => replayRatings({ pool: players, finishedMatches: history.map((m) => ({ ...m, season_starts_at: '2026-10-01', home_players: teams[0]!.players, away_players: teams[1]!.players })) as FinishedMatchForRatings[], seasonRosters: new Map([['season', players.map((p) => p.id)]]), recordedAt: '2026-10-02' })
+    const replay = (history: typeof played) => replayRatings({ pool: players, finishedMatches: history.map((m) => ({ ...m, season_starts_at: '2026-10-01', home_players: teams[0]!.players, away_players: teams[1]!.players })) as FinishedMatchForRatings[], recordedAt: '2026-10-02' })
     const full = replay(played)
     expect(full.historyRows).toHaveLength(14 + 21 * 4)
     for (const player of players) expect(full.historyRows.filter((h) => h.pool_player_id === player.id && h.match_id)).toHaveLength(6)

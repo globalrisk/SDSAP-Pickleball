@@ -33,7 +33,7 @@ async function preservedRows() {
   for (const table of ['season_roster', 'teams', 'players', 'player_pool', 'league_players', 'rating_history', 'rating_state']) {
     rows[table] = (await api.db.query(`SELECT to_jsonb(t) AS data FROM public.${table} t ORDER BY to_jsonb(t)::text`)).rows
   }
-  rows.seasons = (await api.db.query("SELECT to_jsonb(t) - ARRAY['duel_draft_rating_revision','duel_draft_rating_fingerprint'] AS data FROM public.seasons t ORDER BY t.id")).rows
+  rows.seasons = (await api.db.query("SELECT to_jsonb(t) - ARRAY['duel_draft_priority','duel_draft_rating_revision','duel_draft_rating_fingerprint'] AS data FROM public.seasons t ORDER BY t.id")).rows
   return rows
 }
 

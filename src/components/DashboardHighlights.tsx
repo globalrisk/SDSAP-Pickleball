@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import type { LeagueHighlights } from '../lib/engagement'
 import { formatMatchDate } from '../lib/formatDate'
 import { useLeague } from '../context/LeagueContext'
+import { useSeason } from '../context/SeasonContext'
 
 interface DashboardHighlightsProps {
   highlights: LeagueHighlights
@@ -12,9 +13,12 @@ interface DashboardHighlightsProps {
 export function DashboardHighlights({ highlights }: DashboardHighlightsProps) {
   const { t, i18n } = useTranslation()
   const { leaguePath } = useLeague()
+  const { selectedSeason } = useSeason()
   const { hotStreak, closestMatch, recentUpset } = highlights
+  // Team Duel's scoreboard uses all games for the season forecast.
+  const showClosestMatch = !!closestMatch && selectedSeason?.format !== 'team_duel'
 
-  if (!hotStreak && !closestMatch && !recentUpset) {
+  if (!hotStreak && !showClosestMatch && !recentUpset) {
     return null
   }
 
@@ -38,7 +42,7 @@ export function DashboardHighlights({ highlights }: DashboardHighlightsProps) {
             detail={t('dashboard.hotStreakDetail', { count: hotStreak.count })}
           />
         )}
-        {closestMatch && (
+        {showClosestMatch && closestMatch ? (
           <HighlightCard
             eyebrow={t('dashboard.mustWatchLabel')}
             title={`${closestMatch.match.home_team.name} vs ${closestMatch.match.away_team.name}`}
@@ -48,7 +52,7 @@ export function DashboardHighlights({ highlights }: DashboardHighlightsProps) {
             })}
             to={leaguePath('/matches')}
           />
-        )}
+        ) : null}
         {recentUpset && (
           <HighlightCard
             eyebrow={t('dashboard.upsetLabel')}
