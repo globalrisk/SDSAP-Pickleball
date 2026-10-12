@@ -25,6 +25,10 @@ import { roundRating } from '../lib/ratings'
 import { ArchivedSeasonBanner } from '../components/ArchivedSeasonBanner'
 import { BalancedTeamsBuilder } from '../components/BalancedTeamsBuilder'
 import { LeagueTeamDuelSetup } from '../components/LeagueTeamDuelSetup'
+import { PicklePrizeSettings, PickleDistribution } from '../components/PicklePrizeSettings'
+import { fetchPicklePreview } from '../lib/picklePointsApi'
+import { formatPicklePoints } from '../lib/picklePoints'
+import { usePicklePreview } from '../hooks/usePicklePoints'
 import { SeasonFormatSelector } from '../components/SeasonFormatSelector'
 import { ErrorState, PageHeader, SetupBanner } from '../components/Layout'
 import { useSeason } from '../context/SeasonContext'
@@ -496,6 +500,8 @@ export function SetupPage() {
   const [newSeasonName, setNewSeasonName] = useState('')
   const [newSeasonFormat, setNewSeasonFormat] = useState<SeasonFormat>('round_robin')
   const isDuel = selectedSeason?.format === 'team_duel'
+  const archivePreview = usePicklePreview(activeSeason?.format === 'team_duel' ? activeSeason.id : undefined)
+  const [preparingArchive, setPreparingArchive] = useState(false)
   const duelRosterLocked = isDuel && (!activeSeasonMatches || activeSeasonMatches.length > 0)
   const requestedSection = searchParams.get('section')
   const activeSection: SetupSection = isSetupSection(requestedSection)
@@ -665,9 +671,11 @@ export function SetupPage() {
   })
 
   const archiveMutation = useMutation({
-    mutationFn: (seasonId: string) => archiveSeason(seasonId),
+    mutationFn: ({ seasonId, fingerprint }: { seasonId: string; fingerprint?: string }) => archiveSeason(seasonId, fingerprint),
     onSuccess: (season) => {
       invalidateSeasonData()
+      void queryClient.invalidateQueries({ queryKey: ['pickle-points'] })
+      void queryClient.invalidateQueries({ queryKey: ['pickle-preview'] })
       setSelectedSeasonId(season.id)
       setFeedback({ text: t('setup.archiveSuccess', { name: season.name }), tone: 'ok' })
     },
@@ -756,11 +764,27 @@ export function SetupPage() {
   })
 
   async function handleArchiveSeason() {
-    if (!activeSeason) return
-    if (!await confirm(t('setup.archiveConfirm', { name: activeSeason.name, count: recordedCount }))) {
-      return
+    if (!activeSeason || preparingArchive || archiveMutation.isPending) return
+    setPreparingArchive(true)
+    try {
+      let fingerprint: string | undefined
+      let message = t('setup.archiveConfirm', { name: activeSeason.name, count: recordedCount })
+      if (activeSeason.format === 'team_duel') {
+        const preview = await fetchPicklePreview(activeSeason.id)
+        queryClient.setQueryData(['pickle-preview', activeSeason.id], preview)
+        if (!preview.configured || !preview.complete || preview.squads.length !== 2) {
+          setFeedback({ text: t('pickle.notReady'), tone: 'error' })
+          return
+        }
+        fingerprint = preview.fingerprint
+        message = [message, ...preview.squads.map((squad) => `${squad.name}: ${formatPicklePoints(squad.total)} · ${t('pickle.each')}: ${squad.share === null ? '—' : formatPicklePoints(squad.share)}`), t('pickle.archiveWarning')].join('\n\n')
+      }
+      if (await confirm(message)) archiveMutation.mutate({ seasonId: activeSeason.id, fingerprint })
+    } catch (err) {
+      setFeedback({ text: t('setup.archiveFailed', { message: (err as Error).message }), tone: 'error' })
+    } finally {
+      setPreparingArchive(false)
     }
-    archiveMutation.mutate(activeSeason.id)
   }
 
   async function handleStartNewSeason(e: React.FormEvent) {
@@ -856,6 +880,7 @@ export function SetupPage() {
       <div>
         <PageHeader title={t('setup.title')} subtitle={t('setup.subtitle')} />
         <LeagueBrandingForm />
+        <PicklePrizeSettings />
         <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
           {t('leagueSettings.archivedReadOnly')}
         </p>
@@ -911,6 +936,7 @@ export function SetupPage() {
       {activeSection === 'league' ? (
         <div>
           <LeagueBrandingForm />
+          <PicklePrizeSettings />
           <Link to={leaguePath('/admin/leagues/new')} className="inline-flex min-h-11 items-center rounded-lg border border-green-200 bg-white px-4 py-2 text-sm font-semibold text-green-800 hover:bg-green-50">
             {t('league.create')}
           </Link>
@@ -1196,11 +1222,15 @@ export function SetupPage() {
           <button
             type="button"
             onClick={handleArchiveSeason}
-            disabled={archiveMutation.isPending || (isDuel && activeSeasonMatches?.some((m) => m.status === 'scheduled'))}
+            disabled={preparingArchive || archiveMutation.isPending || (isDuel && (!archivePreview.data?.configured || !archivePreview.data.complete || activeSeasonMatches?.some((m) => m.status === 'scheduled')))}
             className="mt-4 min-h-11 w-full rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900 hover:bg-amber-100 active:bg-amber-200 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:py-2"
           >
             {archiveMutation.isPending ? t('setup.archiving') : t('setup.archiveButton')}
           </button>
+          {isDuel ? <>
+            <Link to={leaguePath('/setup?section=league')} className="ml-3 inline-flex min-h-11 items-center text-sm font-semibold text-green-800 underline">{t('pickle.settingsTitle')}</Link>
+            {archivePreview.isLoading ? <p>{t('common.loading')}</p> : archivePreview.error ? <ErrorState message={archivePreview.error.message} /> : archivePreview.data ? <PickleDistribution preview={archivePreview.data} /> : null}
+          </> : null}
         </section>
       )}
 

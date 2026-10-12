@@ -10,6 +10,7 @@
     "test": "vitest run",
     "test:database": "node scripts/test-database.mjs",
     "ratings:recompute": "node --env-file-if-exists=.env.local scripts/recompute-ratings.ts",
+    "pickle:season13": "node --env-file-if-exists=.env.local scripts/bootstrap-season13-pickle.mjs",
     "preview": "vite preview --host"
   },
   "dependencies": {

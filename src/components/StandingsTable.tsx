@@ -52,13 +52,13 @@ function StandingCard({
     <div
       className={`flex items-center justify-between rounded-xl border border-green-200 bg-white px-4 py-3 shadow-sm ${podium.row}`}
     >
-      <div className="flex min-w-0 items-center gap-3">
+      <div className="flex min-w-0 flex-1 items-start gap-3">
         <span
           className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${podium.rankBadge}`}
         >
           {row.rank}
         </span>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <TeamNameWithPlayers
             name={row.team.name}
             color={row.team.color}

@@ -47,11 +47,11 @@ export function TeamNameWithPlayers({
           className="inline-block h-3 w-3 shrink-0 rounded-full"
           style={{ backgroundColor: color }}
         />
-        <span className="truncate font-medium text-gray-900">{name}</span>
+        <span className="min-w-0 font-medium text-gray-900 [overflow-wrap:anywhere]">{name}</span>
       </div>
       {linkedPlayers.length > 0 && (
         <p
-          className={`mt-0.5 truncate text-xs text-gray-500 ${alignEnd ? 'sm:text-right' : 'pl-5'}`}
+          className={`mt-0.5 whitespace-normal text-xs text-gray-500 [overflow-wrap:anywhere] ${alignEnd ? 'sm:text-right' : 'pl-5'}`}
         >
           {linkedPlayers.map((player, index) => (
             <span key={`${player.name}-${index}`}>

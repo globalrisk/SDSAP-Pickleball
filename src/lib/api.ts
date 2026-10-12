@@ -110,16 +110,12 @@ export async function createSeason(name: string, leagueId: string, format: Seaso
   return data
 }
 
-export async function archiveSeason(seasonId: string): Promise<Season> {
-  const { data, error } = await supabase
-    .from('seasons')
-    .update({ status: 'archived', ends_at: new Date().toISOString() })
-    .eq('id', seasonId)
-    .select()
-    .single()
-
+export async function archiveSeason(seasonId: string, fingerprint?: string): Promise<Season> {
+  const { data, error } = await supabase.rpc('archive_season_with_pickle_points', {
+    p_season_id: seasonId, p_expected_preview: fingerprint ?? null,
+  })
   if (error) throw error
-  return data
+  return data.season as Season
 }
 
 export async function fetchPlayerRankings(leagueId: string): Promise<PlayerRankingRow[]> {

@@ -139,6 +139,51 @@ can be used instead. Never prefix these secrets with `VITE_` or commit them.
 Concurrent rating changes trigger a fresh read and retry rather than overwriting
 results from an older snapshot.
 
+## Pickle point prizes
+
+Administrators configure **League setup → League settings → 🥒 Pickle point prizes**.
+League defaults are copied into new seasons. Save each Team Duel season’s amounts
+explicitly, including zero prizes, then review its distribution before **Archive season**.
+Archiving awards points and locks the season’s results, roster and prize settings.
+
+Each squad earns `match wins × match prize + champion bonus`, including wins by
+forfeit. Joint champions split one bonus. The combined squad prize is shared equally
+among its frozen roster, stored to six decimal places and displayed to two with
+Vietnamese number separators. **Rankings → 🥒 Pickle points** shows members of the
+selected league, ranked by points earned in that league, with expandable season
+contributions from that league only. Each league has independent balances. Players start at
+zero; Pickle points are separate from skill ratings and competition points.
+
+Deploy `20261012125633_pickle_points.sql` and then
+`20261012134209_pickle_points_per_league.sql` before using the new frontend. Existing
+awards keep their source league and amounts; no redistribution is required. It adds no
+automatic historical awards. The only historical exception is the one-time SDSAP
+Season 13 script, which requires Node.js 22.18+ or 24+, explicit amounts, and
+`SUPABASE_ADMIN_EMAIL` / `SUPABASE_ADMIN_PASSWORD` in the environment:
+
+```bash
+# Example amounts only; choose the real prizes before applying.
+npm run pickle:season13 -- --match-prize 10000 --champion-prize 100000
+npm run pickle:season13 -- --match-prize 10000 --champion-prize 100000 --apply
+```
+
+The first command only previews. Applying uses the reviewed fingerprint and is
+idempotent for the same amounts. Different amounts cannot overwrite a final award.
+Never prefix administrator credentials with `VITE_` or commit them.
+
+The archive and Season 13 RPCs intentionally use `SECURITY DEFINER` to write
+immutable award tables whose write privileges are revoked from API clients.
+Both require a signed-in user with the protected `app_metadata.role = admin`
+claim; grants to `authenticated` alone do not authorize an award. The private
+award writer is not executable by API clients. Security-advisor notices about
+these two privileged RPCs are expected; administrator checks are covered by
+database and API integration tests.
+
+For disposable browser verification, run
+`node scripts/test-support/pickle-browser-server.mjs` and open its printed localhost
+URL. Its synthetic login, games and awards exist only in temporary PostgreSQL;
+closing the process discards them.
+
 ## Verification
 
 ```bash

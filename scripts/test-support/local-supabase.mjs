@@ -21,7 +21,7 @@ const splitSelect = (value) => {
   return result.filter(Boolean)
 }
 const relations = {
-  seasons: { teams: ['teams', 'id', 'season_id', true], matches: ['matches', 'id', 'season_id', true] },
+  seasons: { teams: ['teams', 'id', 'season_id', true], matches: ['matches', 'id', 'season_id', true], leagues: ['leagues', 'league_id', 'id'] },
   teams: { players: ['players', 'id', 'team_id', true], seasons: ['seasons', 'season_id', 'id'] },
   players: { teams: ['teams', 'team_id', 'id'] },
   matches: { seasons: ['seasons', 'season_id', 'id'], home_team: ['teams', 'home_team_id', 'id'], away_team: ['teams', 'away_team_id', 'id'], winner: ['teams', 'winner_team_id', 'id'] },
@@ -53,6 +53,7 @@ export async function startLocalSupabase({ port = 0, seed = true, beforeMigratio
   const claims = { sub: '90000000-0000-4000-8000-000000000001', app_metadata: { role: 'admin' }, role: 'authenticated', exp: Math.floor(Date.now() / 1000) + 86400 }
   const token = `${Buffer.from('{"alg":"HS256","typ":"JWT"}').toString('base64url')}.${Buffer.from(JSON.stringify(claims)).toString('base64url')}.test-only`
   const user = { id: claims.sub, email: 'admin@example.test', app_metadata: claims.app_metadata, user_metadata: {}, aud: 'authenticated', created_at: new Date().toISOString() }
+  await db.query('INSERT INTO auth.users(id, raw_app_meta_data) VALUES($1,$2)', [claims.sub, claims.app_metadata])
   let seeded = null
   if (seed) {
     const leagueId = randomUUID(), seasonId = randomUUID()
@@ -91,7 +92,17 @@ export async function startLocalSupabase({ port = 0, seed = true, beforeMigratio
           calls.push({ name, args: structuredClone(body) })
           if (name === 'save_match_and_ratings_atomic' && conflictOnce) { conflictOnce = false; throw Object.assign(new Error('Rating revision conflict'), { code: '40001' }) }
           const entries = Object.entries(body ?? {})
-          result = (await db.query(`SELECT public.${identifier(name)}(${entries.map(([key], i) => `${identifier(key)} => $${i + 1}`).join(',')}) AS value`, entries.map(([, value]) => value))).rows[0]?.value ?? null
+          const args = entries.map(([key], i) => `${identifier(key)} => $${i + 1}`).join(',')
+          const returnsSet = (await db.query("SELECT bool_or(proretset) AS is_set FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname=$1", [name])).rows[0]?.is_set
+          if (returnsSet) {
+            const order = (url.searchParams.get('order') ?? '').split(',').filter(Boolean).map((item) => {
+              const [key, direction] = item.split('.')
+              return `${identifier(key)} ${direction === 'desc' ? 'DESC' : 'ASC'}`
+            }).join(',')
+            const offset = Number(url.searchParams.get('offset') ?? 0), limit = Number(url.searchParams.get('limit') ?? 10000)
+            if (!Number.isSafeInteger(offset) || !Number.isSafeInteger(limit) || offset < 0 || limit < 0) throw new Error('Invalid RPC range')
+            result = (await db.query(`SELECT * FROM public.${identifier(name)}(${args})${order ? ` ORDER BY ${order}` : ''} LIMIT ${limit} OFFSET ${offset}`, entries.map(([, value]) => value))).rows
+          } else result = (await db.query(`SELECT public.${identifier(name)}(${args}) AS value`, entries.map(([, value]) => value))).rows[0]?.value ?? null
         } else {
           const table = url.pathname.split('/').at(-1)
           if (!tables.has(table)) throw new Error('Unknown test table')
@@ -117,7 +128,7 @@ export async function startLocalSupabase({ port = 0, seed = true, beforeMigratio
             return projected
           }
           const selection = url.searchParams.get('select') ?? '*'
-          const filters = [...url.searchParams].filter(([key]) => !['select', 'order', 'offset', 'limit'].includes(key))
+          const filters = [...url.searchParams].filter(([key]) => !['select', 'order', 'offset', 'limit', 'on_conflict'].includes(key))
           const original = await getRows(table)
           const enriched = await Promise.all(original.map(async (row) => ({ row, view: { ...row, ...await project(table, row, selection) } })))
           const selected = enriched.filter(({ view }) => filters.every(([key, filter]) => matchesFilter(view, key, filter))).map(({ row }) => row)
@@ -126,7 +137,10 @@ export async function startLocalSupabase({ port = 0, seed = true, beforeMigratio
             rows = []
             for (const item of Array.isArray(body) ? body : [body]) {
               const keys = Object.keys(item)
-              rows.push(...(await db.query(`INSERT INTO public.${identifier(table)}(${keys.map(identifier)}) VALUES (${keys.map((_, i) => `$${i + 1}`)}) RETURNING *`, keys.map((key) => item[key]))).rows)
+              const conflictKey = url.searchParams.get('on_conflict')
+              const conflict = req.headers.prefer?.includes('resolution=merge-duplicates') && conflictKey
+                ? ` ON CONFLICT (${identifier(conflictKey)}) DO UPDATE SET ${keys.filter((key) => key !== conflictKey).map((key) => `${identifier(key)}=EXCLUDED.${identifier(key)}`).join(',')}` : ''
+              rows.push(...(await db.query(`INSERT INTO public.${identifier(table)}(${keys.map(identifier)}) VALUES (${keys.map((_, i) => `$${i + 1}`)})${conflict} RETURNING *`, keys.map((key) => item[key]))).rows)
             }
           } else if (req.method === 'PATCH' || req.method === 'DELETE') {
             const ids = selected.map((row) => row.id)

@@ -11,6 +11,7 @@ import { archiveSeason, createSeason, createSeasonMatches, fetchMatches, fetchPl
 import { fetchLeagueDuelDraftPreview, saveLeagueDuelDraft, setSeasonFormat } from './leagueTeamDuelApi'
 import { replayRatings, type FinishedMatchForRatings } from './ratingReplay'
 import { saveSeasonRoster } from './seasonRosterApi'
+import { fetchPicklePreview, savePickleSettings } from './picklePointsApi'
 import { computeStandings } from './standings'
 
 let api: Awaited<ReturnType<typeof startLocalSupabase>>
@@ -94,7 +95,8 @@ describe('rated league duel through the application API and PostgreSQL', () => {
 
   it('finishes equal game wins as joint champions despite unequal point differential', async () => {
     const { leagueId, seasonId, players } = api.seeded!
-    await archiveSeason(seasonId)
+    await savePickleSettings('season', seasonId, { matchPrize: '0', championPrize: '0' })
+    await archiveSeason(seasonId, (await fetchPicklePreview(seasonId)).fingerprint)
     const season = await createSeason('Joint champions', leagueId, 'team_duel')
     const rosterIds = players.slice(0, 8).map((player) => player.id)
     await saveSeasonRoster(season.id, rosterIds)
@@ -111,7 +113,8 @@ describe('rated league duel through the application API and PostgreSQL', () => {
     const finished = await fetchMatches(season.id, leagueId)
     const teams = (await state.client!.from('teams').select('*, players(*)').eq('season_id', season.id)).data!
     expect(computeStandings(teams, finished, 'team_duel').map((row) => row.rank)).toEqual([1, 1])
-    await archiveSeason(season.id)
+    await savePickleSettings('season', season.id, { matchPrize: '0', championPrize: '0' })
+    await archiveSeason(season.id, (await fetchPicklePreview(season.id)).fingerprint)
     const recap = await fetchSeasonRecap(season.id, leagueId)
     expect(recap.champions.map((champion) => champion.teamName).sort()).toEqual(['Joint A', 'Joint B'])
     expect(recap).toMatchObject({ format: 'team_duel', isPartial: false, bestPartnership: null })

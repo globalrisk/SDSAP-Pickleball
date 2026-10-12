@@ -14,8 +14,9 @@ BEGIN
     FROM public.league_duel_schedule(cardinality(home_ids));
   RETURN public.generate_league_duel_matches_atomic(p_season_id, fixtures, (snapshot->>'revision')::bigint, snapshot->>'fingerprint');
 END $$;
+INSERT INTO auth.users(id) VALUES ('cccccccc-cccc-cccc-cccc-cccccccccccc');
 SET LOCAL ROLE authenticated;
-SELECT set_config('request.jwt.claims', '{"app_metadata":{"role":"admin"}}', true);
+SELECT set_config('request.jwt.claims', '{"sub":"cccccccc-cccc-cccc-cccc-cccccccccccc","app_metadata":{"role":"admin"}}', true);
 DO $$
 DECLARE league uuid; season uuid; ids uuid[]; payload jsonb; squads jsonb; snapshot jsonb;
   home uuid; away uuid; first_game uuid; second_game uuid; overlapping uuid;
@@ -165,9 +166,10 @@ BEGIN
     BEGIN
       UPDATE public.seasons SET status = 'archived' WHERE id = season;
       RAISE EXCEPTION 'An early clinch completed the season';
-    EXCEPTION WHEN others THEN IF SQLERRM NOT LIKE 'Resolve every Team Duel game%' THEN RAISE; END IF; END;
+    EXCEPTION WHEN others THEN IF SQLERRM NOT LIKE 'Resolve every Team Duel game%' AND SQLERRM NOT LIKE 'PICKLE_ARCHIVE_RPC:%' THEN RAISE; END IF; END;
     UPDATE public.matches SET status = 'forfeit', winner_team_id = away WHERE season_id = season AND status = 'scheduled';
-    UPDATE public.seasons SET status = 'archived' WHERE id = season;
+    UPDATE public.pickle_season_settings SET configured=true WHERE season_id=season;
+    PERFORM public.archive_season_with_pickle_points(season, public.pickle_season_preview(season)->>'fingerprint');
   END LOOP;
 END;
 $$;

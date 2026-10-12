@@ -24,9 +24,7 @@ export function PersonalTournamentCard({ seasonId: seasonIdOverride }: { seasonI
   const player = pool.data?.find((item) => item.id === preference.playerId)
   const profile = usePlayerProfile(player?.id)
   const selectId = useId()
-  const [expandedMatchupScope, setExpandedMatchupScope] = useState<string | null>(null)
   const matchupScope = `${season?.id ?? ''}:${player?.id ?? ''}`
-  const matchupsExpanded = expandedMatchupScope === matchupScope
   const [copyResult, setCopyResult] = useState<{ text: string; status: 'copied' | 'failed' } | null>(null)
   const summary = player && season && matches.data
     ? buildPersonalTournament(player.id, season.id, matches.data, profile.data?.history ?? []) : null
@@ -45,6 +43,8 @@ export function PersonalTournamentCard({ seasonId: seasonIdOverride }: { seasonI
     return {
       partner: (onHome ? homeIds : awayIds).filter((id) => id !== player!.id).map(lookup).join(', '),
       opponents: (onHome ? awayIds : homeIds).map(lookup).join(' & '),
+      partners: (onHome ? homeIds : awayIds).filter((id) => id !== player!.id).map((id) => ({ id, name: lookup(id) })),
+      opponentPlayers: (onHome ? awayIds : homeIds).map((id) => ({ id, name: lookup(id) })),
       opponentIds: onHome ? awayIds : homeIds,
       score: match.home_score != null && match.away_score != null
         ? `${onHome ? match.home_score : match.away_score}–${onHome ? match.away_score : match.home_score}` : null,
@@ -56,9 +56,9 @@ export function PersonalTournamentCard({ seasonId: seasonIdOverride }: { seasonI
       const priority = (match: MatchWithTeams) => match.id === summary?.playingMatch?.id ? 0
         : match.id === summary?.upNextMatch?.id ? 1 : 2
       return priority(a.match) - priority(b.match)
+        || a.names.partner.localeCompare(b.names.partner)
         || a.names.opponents.localeCompare(b.names.opponents) || a.match.id.localeCompare(b.match.id)
     })
-  const visibleMatchups = matchupsExpanded ? remainingMatchups : remainingMatchups.slice(0, 2)
   const isRecap = Boolean(summary?.hasFixtures && summary.remaining === 0)
   const recapText = player && season && summary ? [
     `${player.name} · ${season.name}`,
@@ -81,7 +81,6 @@ export function PersonalTournamentCard({ seasonId: seasonIdOverride }: { seasonI
 
   function changePlayer(id: string | null) {
     preference.selectPlayer(id)
-    setExpandedMatchupScope(null)
     setCopyResult(null)
   }
 
@@ -134,34 +133,40 @@ export function PersonalTournamentCard({ seasonId: seasonIdOverride }: { seasonI
               {remainingMatchups.length > 0 ? (
                 <div className="mt-4">
                   <h3 className="text-sm font-bold text-green-950">{t('personal.remainingMatchups', { count: remainingMatchups.length })}</h3>
-                  <p className="mt-1 text-xs text-gray-600">{t('personal.flexibleOrder')}</p>
+                  {remainingMatchups.some(({ match }) => match.id !== summary.playingMatch?.id && match.id !== summary.upNextMatch?.id)
+                    ? <p className="mt-2 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600">{t('personal.flexibleOrder')}</p> : null}
                   <ul id={`${selectId}-matchups`} className="mt-3 grid gap-3 sm:grid-cols-2">
-                    {visibleMatchups.map(({ match, names: matchupNames }) => {
+                    {remainingMatchups.map(({ match, names: matchupNames }) => {
                       const queueStatus = match.id === summary.playingMatch?.id ? 'playing'
                         : match.id === summary.upNextMatch?.id ? 'upNext' : null
-                      return <li key={match.id} className={`rounded-xl border p-3 ${queueStatus ? 'border-green-300 bg-green-50' : 'border-gray-200'}`}>
-                        {queueStatus ? <p className="mb-1 text-xs font-bold uppercase tracking-wide text-green-700">{t(`personal.${queueStatus}`)}{queueStatus === 'playing' && match.live_court_number ? ` · ${t('live.court', { number: match.live_court_number })}` : ''}</p> : null}
-                        <p className="font-bold text-green-950">{t('personal.against', { names: matchupNames.opponents })}</p>
-                        {matchupNames.partner ? <p className="mt-1 text-sm text-green-800">{t('personal.partner', { name: matchupNames.partner })}</p> : null}
-                        <p className="mt-1 text-xs text-gray-500">{t('personal.round', { number: match.round_number })}</p>
-                        {season.status === 'active' && profile.data ? matchupNames.opponentIds.map((opponentId) => {
-                          const rivalry = profile.data.rivalries.byOpponent.find((item) => item.opponentId === opponentId)
-                          return rivalry ? <p key={opponentId} className="mt-2 text-xs text-green-900">{t('personal.rivalry', { name: rivalry.opponentName, wins: rivalry.wins, losses: rivalry.losses })}</p> : null
-                        }) : null}
+                      return <li key={`${matchupScope}:${match.id}`} className={`min-w-0 rounded-xl border p-3 ${queueStatus ? 'border-green-300 bg-green-50 sm:col-span-2' : 'border-gray-200'}`}>
+                        {queueStatus ? <p className="mb-3 text-xs font-bold uppercase tracking-wide text-green-700">{t(`personal.${queueStatus}`)}{queueStatus === 'playing' && match.live_court_number ? ` · ${t('live.court', { number: match.live_court_number })}` : ''}</p> : null}
+                        <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 sm:gap-3">
+                          <div className="min-w-0 self-start rounded-lg bg-green-100/60 p-2.5">
+                            <p className="mb-2 text-xs font-semibold text-green-800">{t('personal.yourPair')}</p>
+                            <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm font-bold text-green-950">
+                              <span className="min-w-0 break-words">{player.name}</span>
+                              <span className="rounded bg-green-700 px-1.5 py-0.5 text-[10px] font-bold text-white">{t('personal.you')}</span>
+                            </p>
+                            {matchupNames.partners.map((partner) => <p key={partner.id} className="mt-1 break-words text-sm font-semibold text-green-950"><span aria-hidden="true" className="mr-1 text-green-700">+</span>{partner.name}</p>)}
+                          </div>
+                          <span className="text-xs font-black text-gray-400" aria-label={t('personal.versus')}>VS</span>
+                          <div className="min-w-0 self-start p-2.5">
+                            <p className="mb-2 text-xs font-semibold text-gray-500">{t('personal.opponents')}</p>
+                            {matchupNames.opponentPlayers.map((opponent, index) => <p key={opponent.id} className={`${index ? 'mt-1' : ''} break-words text-sm font-bold text-gray-800`}>{index ? <span aria-hidden="true" className="mr-1 text-gray-400">+</span> : null}{opponent.name}</p>)}
+                          </div>
+                        </div>
+                        <details className="mt-3 border-t border-gray-200/70">
+                          <summary className="min-h-11 cursor-pointer rounded pt-3 pb-2 text-xs font-semibold text-gray-600 hover:text-green-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600">{t('personal.matchDetails')}</summary>
+                          <p className="text-xs text-gray-500">{t('personal.round', { number: match.round_number })}</p>
+                          {season.status === 'active' && profile.data ? matchupNames.opponentIds.map((opponentId) => {
+                            const rivalry = profile.data.rivalries.byOpponent.find((item) => item.opponentId === opponentId)
+                            return rivalry ? <p key={opponentId} className="mt-2 text-xs text-green-900">{t('personal.rivalry', { name: rivalry.opponentName, wins: rivalry.wins, losses: rivalry.losses })}</p> : null
+                          }) : null}
+                        </details>
                       </li>
                     })}
                   </ul>
-                  {remainingMatchups.length > 2 ? (
-                    <button
-                      type="button"
-                      aria-expanded={matchupsExpanded}
-                      aria-controls={`${selectId}-matchups`}
-                      onClick={() => setExpandedMatchupScope(matchupsExpanded ? null : matchupScope)}
-                      className="mt-3 min-h-11 w-full rounded-xl border border-green-200 px-4 py-2 text-sm font-semibold text-green-800 hover:bg-green-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600"
-                    >
-                      {t(matchupsExpanded ? 'personal.showFewerMatchups' : 'personal.viewAllMatchups', { count: remainingMatchups.length })}
-                    </button>
-                  ) : null}
                 </div>
               ) : <p className="mt-4 text-sm font-semibold text-green-800">{t('personal.allDone')}</p>}
 
