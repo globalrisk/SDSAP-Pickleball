@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { RecordResultForm } from './RecordResultForm'
 import { TeamNameWithPlayers } from './TeamNameWithPlayers'
@@ -12,6 +12,7 @@ import type { MatchWithTeams } from '../types'
 interface MatchCardProps {
   match: MatchWithTeams
   showForm?: boolean
+  betting?: ReactNode
 }
 
 function StatusBadge({ status }: { status: MatchWithTeams['status'] }) {
@@ -28,7 +29,7 @@ function StatusBadge({ status }: { status: MatchWithTeams['status'] }) {
   )
 }
 
-export function MatchCard({ match, showForm = true }: MatchCardProps) {
+export function MatchCard({ match, showForm = true, betting }: MatchCardProps) {
   const { t, i18n } = useTranslation()
   const { isAdmin } = useAuth()
   const { league } = useLeague()
@@ -85,6 +86,7 @@ export function MatchCard({ match, showForm = true }: MatchCardProps) {
         />
       )}
 
+      {betting}
       {canEdit && match.status === 'scheduled' && <RecordResultForm match={match} />}
 
       {canEdit && isFinished && !editing && (

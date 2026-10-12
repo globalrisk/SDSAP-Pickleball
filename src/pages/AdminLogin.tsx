@@ -8,22 +8,22 @@ export function AdminLoginPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const { leaguePath } = useLeague()
-  const { isAdmin } = useAuth()
+  const { user, isAdmin } = useAuth()
 
-  if (isAdmin) {
+  if (user) {
     return (
       <section className="mx-auto max-w-md rounded-2xl border border-green-200 bg-white p-6 text-center shadow-sm">
         <h1 className="text-xl font-bold text-green-950">{t('auth.signedInTitle')}</h1>
         <button
           type="button"
-          onClick={() => navigate(leaguePath('/setup'))}
+          onClick={() => navigate(leaguePath(isAdmin ? '/setup' : '/bets'))}
           className="mt-5 min-h-11 rounded-xl bg-green-600 px-5 py-2 font-bold text-white hover:bg-green-700"
         >
-          {t('auth.openAdmin')}
+          {t(isAdmin ? 'auth.openAdmin' : 'bets.title')}
         </button>
       </section>
     )
   }
 
-  return <AdminLoginForm onSuccess={() => navigate(leaguePath('/setup'), { replace: true })} />
+  return <AdminLoginForm onSuccess={(signedIn) => navigate(leaguePath(signedIn.app_metadata?.role === 'admin' ? '/setup' : '/bets'), { replace: true })} />
 }

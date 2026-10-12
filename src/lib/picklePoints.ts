@@ -1,17 +1,23 @@
 /** Format decimal strings without passing earned balances through Number. */
 export function formatPicklePoints(value: string): string {
-  if (!/^\d+(\.\d+)?$/.test(value)) throw new Error('Invalid Pickle point amount')
+  if (!/^-?\d+(\.\d+)?$/.test(value)) throw new Error('Invalid Pickle point amount')
+  const negative = value.startsWith('-')
+  if (negative) value = value.slice(1)
   const [whole, fraction = ''] = value.split('.')
   const digits = fraction.padEnd(3, '0')
   let cents = BigInt(whole!) * 100n + BigInt(digits.slice(0, 2))
   if (Number(digits[2]) >= 5) cents += 1n
   const integer = (cents / 100n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.')
   const decimals = (cents % 100n).toString().padStart(2, '0').replace(/0+$/, '')
-  return `${integer}${decimals ? `,${decimals}` : ''} 🥒`
+  return `${negative && cents !== 0n ? '-' : ''}${integer}${decimals ? `,${decimals}` : ''} 🥒`
 }
 
 export function isPicklePrize(value: string): boolean {
   return /^\d+$/.test(value) && BigInt(value) <= 1_000_000_000_000n && BigInt(value) % 1000n === 0n
+}
+
+export function formatSignedPicklePoints(value: string): string {
+  return `${!value.startsWith('-') && /[1-9]/.test(value) ? '+' : ''}${formatPicklePoints(value)}`
 }
 
 export interface PicklePrizeAmounts { matchPrize: string; championPrize: string }

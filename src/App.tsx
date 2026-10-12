@@ -14,6 +14,7 @@ const navItems = [
   { to: '/standings', labelKey: 'nav.standings', desktopKey: 'nav.standings' },
   { to: '/matches', labelKey: 'nav.matches', desktopKey: 'nav.matches' },
   { to: '/rankings', labelKey: 'nav.rankings', desktopKey: 'nav.rankings' },
+  { to: '/bets', labelKey: 'bets.title', desktopKey: 'bets.title' },
   { to: '/match-planner', labelKey: 'nav.matchPlanner', desktopKey: 'nav.matchPlanner' },
   { to: '/team-duel', labelKey: 'nav.teamDuel', desktopKey: 'nav.teamDuel', global: true },
 ] as const
@@ -39,7 +40,7 @@ export function AppLayout() {
   const { t } = useTranslation()
   const location = useLocation()
   const { league, leaguePath } = useLeague()
-  const { isAdmin, signOut } = useAuth()
+  const { user, isAdmin, signOut } = useAuth()
   const [moreOpen, setMoreOpen] = useState(false)
   const [manageOpen, setManageOpen] = useState(false)
   const [mobileManageOpen, setMobileManageOpen] = useState(false)
@@ -85,13 +86,13 @@ export function AppLayout() {
             </div>
             <div className="order-2 flex shrink-0 items-center gap-1.5 lg:order-3 lg:gap-2">
               <LanguageSwitcher />
-              {isAdmin ? (
+              {user ? (
                 <button type="button" onClick={() => void signOut()} className="hidden min-h-9 rounded-lg border border-green-200 px-2 text-xs font-bold text-green-800 sm:inline-flex sm:items-center">
                   {t('auth.signOut')}
                 </button>
               ) : (
                 <NavLink to={leaguePath('/login')} className="hidden min-h-9 items-center rounded-lg border border-green-200 px-2 text-xs font-bold text-green-800 sm:inline-flex">
-                  {t('auth.admin')}
+                  {t('auth.signIn')}
                 </NavLink>
               )}
             </div>
@@ -219,9 +220,8 @@ export function AppLayout() {
                 </button>
               </>
             ) : (
-              <NavLink to={leaguePath('/login')} className="flex min-h-12 items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold text-green-900 hover:bg-green-50">
-                <span aria-hidden="true">↳</span>{t('auth.admin')}
-              </NavLink>
+              user ? <button type="button" onClick={() => void signOut()} className="flex min-h-12 w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold text-red-700"><span aria-hidden="true">↪</span>{t('auth.signOut')}</button>
+              : <NavLink to={leaguePath('/login')} className="flex min-h-12 items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold text-green-900 hover:bg-green-50"><span aria-hidden="true">↳</span>{t('auth.signIn')}</NavLink>
             )}
           </div>
         </>
@@ -298,6 +298,8 @@ function NavIcon({ to }: { to: string }) {
           <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
         </svg>
       )
+    case '/bets':
+      return <span aria-hidden="true" className={`${className} inline-flex items-center justify-center`}>🥒</span>
     case '/account':
       return (
         <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

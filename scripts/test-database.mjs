@@ -8,7 +8,7 @@ export async function createTestDatabase({ beforeMigration } = {}) {
   await db.exec(`
     CREATE ROLE anon; CREATE ROLE authenticated;
     CREATE SCHEMA auth; CREATE SCHEMA storage;
-    CREATE TABLE auth.users (id uuid PRIMARY KEY, raw_app_meta_data jsonb);
+    CREATE TABLE auth.users (id uuid PRIMARY KEY, email text, raw_app_meta_data jsonb);
     CREATE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql STABLE AS
       $$ SELECT COALESCE(NULLIF(current_setting('request.jwt.claims', true), ''), '{}')::jsonb $$;
     CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS

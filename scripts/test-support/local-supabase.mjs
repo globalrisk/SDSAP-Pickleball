@@ -53,7 +53,16 @@ export async function startLocalSupabase({ port = 0, seed = true, beforeMigratio
   const claims = { sub: '90000000-0000-4000-8000-000000000001', app_metadata: { role: 'admin' }, role: 'authenticated', exp: Math.floor(Date.now() / 1000) + 86400 }
   const token = `${Buffer.from('{"alg":"HS256","typ":"JWT"}').toString('base64url')}.${Buffer.from(JSON.stringify(claims)).toString('base64url')}.test-only`
   const user = { id: claims.sub, email: 'admin@example.test', app_metadata: claims.app_metadata, user_metadata: {}, aud: 'authenticated', created_at: new Date().toISOString() }
-  await db.query('INSERT INTO auth.users(id, raw_app_meta_data) VALUES($1,$2)', [claims.sub, claims.app_metadata])
+  await db.query('INSERT INTO auth.users(id, email, raw_app_meta_data) VALUES($1,$2,$3)', [claims.sub, user.email, claims.app_metadata])
+  const accounts = new Map([[token, { token, claims, user, password: 'local-test-password' }]])
+  const addAccount = async ({ email, password = 'local-test-password', id = randomUUID(), role = 'player' }) => {
+    const memberClaims = { ...claims, sub: id, app_metadata: { role } }
+    const memberToken = `${Buffer.from('{"alg":"HS256","typ":"JWT"}').toString('base64url')}.${Buffer.from(JSON.stringify(memberClaims)).toString('base64url')}.test-only`
+    const memberUser = { ...user, id, email, app_metadata: memberClaims.app_metadata }
+    await db.query('INSERT INTO auth.users(id,email,raw_app_meta_data) VALUES($1,$2,$3)', [id,email,memberClaims.app_metadata])
+    accounts.set(memberToken, { token: memberToken, claims: memberClaims, user: memberUser, password })
+    return { id, token: memberToken, email, password }
+  }
   let seeded = null
   if (seed) {
     const leagueId = randomUUID(), seasonId = randomUUID()
@@ -77,15 +86,17 @@ export async function startLocalSupabase({ port = 0, seed = true, beforeMigratio
       const url = new URL(req.url, 'http://localhost')
       const chunks = []; for await (const chunk of req) chunks.push(chunk)
       const body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString()) : null
-      const admin = req.headers.authorization === `Bearer ${token}`
+      const account = accounts.get(req.headers.authorization?.replace(/^Bearer /, ''))
       if (url.pathname.startsWith('/auth/v1/')) {
-        const data = url.pathname.endsWith('/user') ? user : { access_token: token, refresh_token: 'local-test-refresh', token_type: 'bearer', expires_in: 86400, expires_at: claims.exp, user }
+        const signedIn = account ?? [...accounts.values()].find(a => a.user.email === body?.email && a.password === body?.password)
+        if (!signedIn) { res.writeHead(401); res.end(JSON.stringify({ message: 'Invalid login credentials', error_code: 'invalid_credentials' })); return }
+        const data = url.pathname.endsWith('/user') ? signedIn.user : { access_token: signedIn.token, refresh_token: 'local-test-refresh', token_type: 'bearer', expires_in: 86400, expires_at: signedIn.claims.exp, user: signedIn.user }
         res.end(JSON.stringify(data)); return
       }
       await db.exec('BEGIN')
       try {
-        await db.exec(`SET LOCAL ROLE ${admin ? 'authenticated' : 'anon'}`)
-        await db.query("SELECT set_config('request.jwt.claims', $1, true)", [JSON.stringify(admin ? claims : {})])
+        await db.exec(`SET LOCAL ROLE ${account ? 'authenticated' : 'anon'}`)
+        await db.query("SELECT set_config('request.jwt.claims', $1, true)", [JSON.stringify(account?.claims ?? {})])
         let result
         if (url.pathname.startsWith('/rest/v1/rpc/')) {
           const name = url.pathname.split('/').at(-1)
@@ -106,6 +117,10 @@ export async function startLocalSupabase({ port = 0, seed = true, beforeMigratio
         } else {
           const table = url.pathname.split('/').at(-1)
           if (!tables.has(table)) throw new Error('Unknown test table')
+          if (['POST','PATCH','DELETE'].includes(req.method)) {
+            const permission = { POST:'INSERT', PATCH:'UPDATE', DELETE:'DELETE' }[req.method]
+            if (!(await db.query('SELECT has_table_privilege(current_user,$1,$2) AS allowed', [`public.${table}`,permission])).rows[0].allowed) throw Object.assign(new Error(`permission denied for table ${table}`), { code:'42501' })
+          }
           const cache = new Map()
           const getRows = async (target) => {
             if (!cache.has(target)) cache.set(target, (await db.query(`SELECT * FROM public.${identifier(target)}`)).rows)
@@ -172,7 +187,7 @@ export async function startLocalSupabase({ port = 0, seed = true, beforeMigratio
     }).catch((error) => { res.writeHead(500); res.end(JSON.stringify({ message: error.message })) })
   })
   await new Promise((resolve) => server.listen(port, '127.0.0.1', resolve))
-  return { db, url: `http://127.0.0.1:${server.address().port}`, token, seeded, calls,
+  return { db, url: `http://127.0.0.1:${server.address().port}`, token, seeded, calls, addAccount,
     conflictOnNextSave() { conflictOnce = true },
     async close() { await new Promise((resolve) => server.close(resolve)); await db.close() } }
 }

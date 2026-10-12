@@ -25,8 +25,8 @@ function PrizeForm({ scope, id, amounts, title, locked }: {
     },
   })
   const valid = isPicklePrize(matchPrize) && isPicklePrize(championPrize)
-  return <form className="rounded-xl border border-green-200 p-4" onSubmit={(event) => { event.preventDefault(); if (valid && !locked) mutation.mutate() }}>
-    <h3 className="font-bold text-green-950">{title}</h3>
+  return <form onSubmit={(event) => { event.preventDefault(); if (valid && !locked) mutation.mutate() }}>
+    {title ? <h3 className="font-bold text-green-950">{title}</h3> : null}
     <div className="mt-3 grid gap-3 sm:grid-cols-2">
       <label className="text-sm font-semibold text-gray-800">{t('pickle.matchPrize')}
         <input type="number" min="0" max="1000000000000" step="1000" required disabled={locked || mutation.isPending} value={matchPrize} onChange={(e) => setMatchPrize(e.target.value)} className="mt-1 min-h-11 w-full rounded-lg border border-green-200 px-3" />
@@ -42,8 +42,20 @@ function PrizeForm({ scope, id, amounts, title, locked }: {
   </form>
 }
 
-export function PickleDistribution({ preview }: { preview: PicklePreview }) {
+export function PickleDistribution({ preview, compact = false }: { preview: PicklePreview; compact?: boolean }) {
   const { t } = useTranslation()
+  if (compact) return <div className="mt-6 border-t border-green-100 pt-5">
+    <h3 className="font-bold text-green-950">{t(preview.awarded ? 'pickle.awarded' : preview.complete ? 'pickle.finalPreview' : 'pickle.provisional')}</h3>
+    {!preview.configured ? <p className="mt-2 text-sm text-amber-800">{t('pickle.saveFirst')}</p> : null}
+    {!preview.valid ? <p role="alert" className="mt-2 text-sm text-red-700">{t('pickle.invalidResults')}</p> : null}
+    {!preview.complete ? <p className="mt-2 text-sm text-gray-600">{t('pickle.pendingBonus')}</p> : null}
+    <table className="mt-3 w-full table-fixed text-left text-sm">
+      <thead className="text-xs text-gray-600"><tr><th scope="col" className="w-2/5 py-2 font-medium">{t('workspace.squad')}</th><th scope="col" className="py-2 text-right font-medium">{t('workspace.wins')}</th><th scope="col" className="py-2 text-right font-medium">{t('pickle.each')}</th></tr></thead>
+      <tbody>{preview.squads.map(squad => <tr key={squad.id} className="border-t border-green-100"><th scope="row" className="break-words py-3 pr-2 font-semibold text-green-950">{squad.name}<span className="mt-1 block text-xs font-normal text-gray-600">{t('workspace.rosterCount', { count: squad.memberCount })}</span></th><td className="py-3 text-right">{squad.wins}</td><td className="break-words py-3 pl-2 text-right font-semibold">{squad.share === null ? '—' : formatPicklePoints(squad.share)}</td></tr>)}</tbody>
+    </table>
+    <p className="mt-3 text-xs text-gray-600">{t('pickle.splitHelp')}</p>
+    <details className="mt-4"><summary className="min-h-11 cursor-pointer text-sm font-semibold text-green-800">{t('workspace.fullDistribution')}</summary><PickleDistribution preview={preview} /></details>
+  </div>
   return <div className="mt-4 space-y-3">
     <h3 className="font-bold text-green-950">{t(preview.awarded ? 'pickle.awarded' : preview.complete ? 'pickle.finalPreview' : 'pickle.provisional')}</h3>
     {!preview.configured ? <p className="text-sm text-amber-800">{t('pickle.saveFirst')}</p> : null}
@@ -60,32 +72,33 @@ export function PickleDistribution({ preview }: { preview: PicklePreview }) {
           <div className="flex justify-between gap-3"><dt>{t('pickle.members')}</dt><dd>{squad.memberCount}</dd></div>
           <div className="flex justify-between gap-3 font-bold"><dt>{t('pickle.each')}</dt><dd>{squad.share === null ? '—' : formatPicklePoints(squad.share)}</dd></div>
         </dl>
-        <ul className="mt-3 border-t border-green-200 pt-2 text-xs text-green-900">{squad.members.map((member) => <li key={member.id} className="flex justify-between gap-2 py-1"><span>{member.name}</span><span>{squad.share === null ? '—' : formatPicklePoints(squad.share)}</span></li>)}</ul>
+        <ul className="mt-3 border-t border-green-200 pt-2 text-xs text-green-900">{squad.members.map((member) => <li key={member.id} className="flex justify-between gap-2 py-1"><span className="min-w-0 flex-1 break-words">{member.name}</span><span className="shrink-0">{squad.share === null ? '—' : formatPicklePoints(squad.share)}</span></li>)}</ul>
       </div>)}
     </div>
     <p className="text-xs text-gray-600">{t('pickle.splitHelp')}</p>
   </div>
 }
 
-export function PicklePrizeSettings() {
+export function PicklePrizeSettings({ scope = 'both' }: { scope?: 'league' | 'season' | 'both' }) {
   const { t } = useTranslation()
   const { league } = useLeague()
   const { selectedSeason } = useSeason()
-  const season = selectedSeason?.format === 'team_duel' ? selectedSeason : undefined
-  const settings = useQuery({ queryKey: ['pickle-settings', league.id, season?.id], queryFn: () => fetchPickleSettings(league.id, season?.id) })
+  const season = scope !== 'league' && selectedSeason?.format === 'team_duel' ? selectedSeason : undefined
+  const settings = useQuery({ queryKey: ['pickle-settings', league.id, season?.id], queryFn: () => fetchPickleSettings(league.id, season?.id), enabled: scope !== 'season' || !!season })
   const preview = usePicklePreview(season?.id)
+  if (scope === 'season' && !season) return <p className="rounded-xl border border-green-200 bg-white p-5 text-sm text-gray-600">{t('pickle.selectDuel')}</p>
   if (settings.isLoading) return <p>{t('common.loading')}</p>
   if (settings.error) return <ErrorState message={settings.error.message} />
   if (!settings.data) return null
   const locked = league.status === 'archived'
   return <section className="mb-6 rounded-xl border border-green-200 bg-white p-5 shadow-sm">
-    <h2 className="text-lg font-semibold text-green-900">{t('pickle.settingsTitle')}</h2>
-    <p className="mt-1 text-sm text-gray-600">{t('pickle.settingsHelp')}</p>
+    <h2 className="text-lg font-semibold text-green-900">{t(scope === 'league' ? 'pickle.defaults' : 'pickle.settingsTitle')}</h2>
+    <p className="mt-1 text-sm text-gray-600">{t(scope === 'league' ? 'workspace.defaultPrizesHelp' : scope === 'season' ? 'workspace.seasonPrizesHelp' : 'pickle.settingsHelp', { name: season?.name })}</p>
     <div className="mt-4 space-y-4">
-      <PrizeForm key={`league:${league.id}`} scope="league" id={league.id} amounts={settings.data.defaults} title={t('pickle.defaults')} locked={locked} />
-      {season && settings.data.season ? <PrizeForm key={`season:${season.id}`} scope="season" id={season.id} amounts={settings.data.season} title={t('pickle.seasonSettings', { name: season.name })} locked={locked || season.status === 'archived'} /> : <p className="text-sm text-gray-600">{t('pickle.selectDuel')}</p>}
+      {scope !== 'season' ? <PrizeForm key={`league:${league.id}`} scope="league" id={league.id} amounts={settings.data.defaults} title={scope === 'league' ? '' : t('pickle.defaults')} locked={locked} /> : null}
+      {scope !== 'league' ? season && settings.data.season ? <PrizeForm key={`season:${season.id}`} scope="season" id={season.id} amounts={settings.data.season} title={t('pickle.seasonSettings', { name: season.name })} locked={locked || season.status === 'archived'} /> : <p className="text-sm text-gray-600">{t('pickle.selectDuel')}</p> : null}
       {season?.status === 'archived' ? <p className="text-sm text-amber-800">{t('pickle.locked')}</p> : null}
-      {preview.isLoading ? <p>{t('common.loading')}</p> : preview.error ? <ErrorState message={preview.error.message} /> : preview.data ? <PickleDistribution preview={preview.data} /> : null}
+      {scope !== 'league' ? preview.isLoading ? <p>{t('common.loading')}</p> : preview.error ? <ErrorState message={preview.error.message} /> : preview.data ? <PickleDistribution preview={preview.data} compact={scope === 'season'} /> : null : null}
     </div>
   </section>
 }

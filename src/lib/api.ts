@@ -22,6 +22,7 @@ import { computePlayerRivalries } from './rivalries'
 import { computeSeasonRecap, type RatingHistoryRow } from './seasonRecap'
 import { computeStandings } from './standings'
 import type { MatchResultSnapshot } from './matchSaveRecovery'
+import type { BetCorrection } from './betsApi'
 import type {
   MatchWithTeams,
   MatchLiveStatus,
@@ -739,6 +740,7 @@ async function saveMatchAndRatingsAtomic(
   leagueId: string,
   match: AtomicMatchSave,
   pending: PendingRatingMatch,
+  correction?: BetCorrection,
 ): Promise<void> {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const { historyRows, playerRatings, expectedRevision } =
@@ -757,7 +759,10 @@ async function saveMatchAndRatingsAtomic(
       p_player_ratings: playerRatings,
       p_expected_revision: expectedRevision,
     }
-    const { error } = await supabase.rpc('save_match_and_ratings_atomic', rpcArgs)
+    const { error } = await supabase.rpc(correction ? 'correct_pickle_match_result' : 'save_match_and_ratings_atomic', {
+      ...rpcArgs,
+      ...(correction ? { p_reason: correction.reason, p_result_fingerprint: correction.fingerprint, p_settlement_revision: correction.revision, p_request_id: correction.requestId } : {}),
+    })
     if (!error) return
     if (!isRatingRevisionConflict(error) || attempt === 2) throw error
   }
@@ -1200,6 +1205,7 @@ export async function recordResult(
     homeScore?: number
     awayScore?: number
   },
+  correction?: BetCorrection,
 ): Promise<void> {
   const { data: match, error: matchError } = await supabase
     .from('matches')
@@ -1253,6 +1259,7 @@ export async function recordResult(
       resultRecordedAt,
     },
     pending,
+    correction,
   )
 }
 
@@ -1261,6 +1268,7 @@ export async function recordForfeit(
   forfeitTeamId: string,
   homeTeamId: string,
   awayTeamId: string,
+  correction?: BetCorrection,
 ): Promise<void> {
   const { data: match, error: matchError } = await supabase
     .from('matches')
@@ -1302,6 +1310,7 @@ export async function recordForfeit(
       resultRecordedAt,
     },
     { matchId, mode: 'exclude' },
+    correction,
   )
 }
 

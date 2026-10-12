@@ -1,4 +1,6 @@
 import { useConfirm } from '../lib/confirmation'
+import { Link } from 'react-router-dom'
+import { useLeague } from '../context/LeagueContext'
 import { useId, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -61,6 +63,7 @@ export function RecordResultForm({
   onSaved,
 }: RecordResultFormProps) {
   const confirm = useConfirm()
+  const { leaguePath } = useLeague()
   const { t, i18n } = useTranslation()
   const queryClient = useQueryClient()
   const { selectedSeason } = useSeason()
@@ -144,6 +147,8 @@ export function RecordResultForm({
         queryClient.invalidateQueries({ queryKey: ['player-rankings'] }),
         queryClient.invalidateQueries({ queryKey: ['player-pool'] }),
         queryClient.invalidateQueries({ queryKey: ['player-profile'] }),
+        queryClient.invalidateQueries({ queryKey: ['bets'] }),
+        queryClient.invalidateQueries({ queryKey: ['pickle-points'] }),
       ])
       setError(null)
       setValidationCode(null)
@@ -273,6 +278,7 @@ export function RecordResultForm({
           role="alert"
         >
           <p>{validationCode ? t(`record.validation.${validationCode}`) : error}</p>
+          {error.includes('BET_CORRECTION') ? <Link className="mt-2 inline-flex min-h-11 items-center font-bold underline" to={leaguePath('/bets')}>{t('bets.useCorrection')}</Link> : null}
           {failedPayload ? (
             <button
               type="button"

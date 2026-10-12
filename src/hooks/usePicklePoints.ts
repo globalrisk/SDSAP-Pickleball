@@ -29,7 +29,9 @@ export function usePickleLeaderboard() {
     }, () => {
       void queryClient.invalidateQueries({ queryKey: ['pickle-points'] })
       void queryClient.invalidateQueries({ queryKey: ['pickle-preview'] })
-    }).subscribe()
+    }).on('postgres_changes', {
+      event: '*', schema: 'public', table: 'pickle_bets', filter: `league_id=eq.${league.id}`,
+    }, () => { void queryClient.invalidateQueries({ queryKey: ['pickle-points'] }) }).subscribe()
     return () => { void supabase.removeChannel(channel) }
   }, [queryClient, league.id])
   return useQuery({ queryKey: ['pickle-points', 'league-leaderboard', league.id], queryFn: () => fetchLeaguePickleLeaderboard(league.id), refetchOnWindowFocus: 'always' })

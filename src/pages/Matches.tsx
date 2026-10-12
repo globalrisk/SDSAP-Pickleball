@@ -1,5 +1,6 @@
 import { Select } from '../components/Select'
 import { useConfirm } from '../lib/confirmation'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -14,6 +15,13 @@ import { useTeams } from '../hooks/useTeams'
 import { useAuth } from '../context/AuthContext'
 import { useLeague } from '../context/LeagueContext'
 import { resolveMatchLineups } from '../lib/playerMatches'
+import { useBetData } from '../hooks/useBets'
+import { usePlayerPool } from '../hooks/usePlayerPool'
+import { matchBettingStatus } from '../lib/matchBetting'
+import { formatPicklePoints } from '../lib/picklePoints'
+import { betErrorMessage } from '../lib/betsApi'
+import { MatchBetPanel } from '../components/MatchBetPanel'
+import { useTournamentRealtime } from '../hooks/useTournamentRealtime'
 import type { MatchStatus } from '../types'
 
 type StatusFilter = 'all' | MatchStatus
@@ -29,9 +37,18 @@ export function MatchesPage() {
   const confirm = useConfirm()
   const { t, i18n } = useTranslation()
   const queryClient = useQueryClient()
-  const { isAdmin } = useAuth()
-  const { league } = useLeague()
+  const { isAdmin, user } = useAuth()
+  const { league, leaguePath } = useLeague()
+  const [params, setParams] = useSearchParams()
+  const bettingOnly = params.get('betting') === 'open'
+  const betMatchId = params.get('betMatch')
+  const betView = params.get('betView') === 'offers' ? 'offers' : 'offer'
+  const { account, wallet, bets } = useBetData({ includeHistory: false })
+  const pool = usePlayerPool()
+  const playerId = account.data?.playerId
+  const activeMember = pool.data?.some(player => player.id === playerId && player.status === 'active')
   const { selectedSeason, isSelectedSeasonActive } = useSeason()
+  useTournamentRealtime(selectedSeason?.id)
   const isDuel = selectedSeason?.format === 'team_duel'
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [teamFilterId, setTeamFilterId] = useState<string>('all')
@@ -39,6 +56,22 @@ export function MatchesPage() {
   const [message, setMessage] = useState<string | null>(null)
   const { data: matches, isError, error, isLoading } = useMatches()
   const { data: teams } = useTeams()
+  const canBet = !!user && !!playerId && !!activeMember && league.status === 'active' && isSelectedSeasonActive && !!wallet.data && !wallet.isError
+  function openBet(matchId: string, view: 'offer' | 'offers') {
+    setParams(previous => { const next = new URLSearchParams(previous); next.set('betMatch', matchId); next.set('betView', view); return next })
+  }
+  function closeBet() {
+    setParams(previous => { const next = new URLSearchParams(previous); next.delete('betMatch'); next.delete('betView'); return next })
+  }
+  const offersByMatch = useMemo(() => {
+    const grouped = new Map<string, NonNullable<typeof bets.data>>()
+    for (const bet of bets.data ?? []) {
+      if (bet.state !== 'open' || bet.seasonId !== selectedSeason?.id) continue
+      const list = grouped.get(bet.matchId) ?? []
+      list.push(bet); grouped.set(bet.matchId, list)
+    }
+    return grouped
+  }, [bets.data, selectedSeason?.id])
 
   const players = useMemo(() => {
     const byId = new Map<string, string>()
@@ -84,6 +117,7 @@ export function MatchesPage() {
 
   const filtered = useMemo(() => {
     return (matches ?? []).filter((m) => {
+      if (bettingOnly && (!canBet || matchBettingStatus(m, playerId) !== 'open')) return false
       if (activeStatusFilter !== 'all' && m.status !== activeStatusFilter) return false
 
       if (isDuel && playerFilterId !== 'all') {
@@ -97,7 +131,7 @@ export function MatchesPage() {
 
       return true
     })
-  }, [matches, activeStatusFilter, isDuel, playerFilterId, teamFilterId])
+  }, [matches, activeStatusFilter, isDuel, playerFilterId, teamFilterId, bettingOnly, canBet, playerId])
 
   if (isError) return <ErrorState message={(error as Error).message} />
 
@@ -109,6 +143,20 @@ export function MatchesPage() {
         title={t('matches.title')}
         subtitle={t(isDuel ? 'matches.duelSubtitle' : 'matches.subtitle', { count: matchCount })}
       />
+      <div className="mb-5 rounded-xl border border-green-200 bg-white p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div><h2 className="font-semibold text-green-950">{t('matchBets.heading')}</h2><p className="mt-1 text-sm text-gray-600">{t('matchBets.help')}</p></div>
+          <Link to={leaguePath('/bets?tab=mine')} className="inline-flex min-h-11 items-center rounded-lg border border-green-200 px-3 text-sm font-semibold text-green-800">{t('matchBets.manage')}</Link>
+        </div>
+        {user ? account.isLoading || pool.isLoading || (playerId && wallet.isLoading) ? <p className="mt-3 text-sm text-gray-600">{t('common.loading')}</p>
+          : account.error || pool.error || wallet.error ? <div className="mt-3"><ErrorState message={betErrorMessage(account.error ?? pool.error ?? wallet.error, t)} /></div>
+            : !playerId ? <p className="mt-3 text-sm text-amber-900">{t('bets.unlinked')}</p>
+              : !activeMember ? <p className="mt-3 text-sm text-amber-900">{t('bets.inactive')}</p>
+                : wallet.data ? <p className="mt-3 text-sm text-green-900">{t('bets.available')}: <strong>{formatPicklePoints(wallet.data.available)}</strong></p> : null
+          : <Link to={leaguePath('/login')} className="mt-2 inline-flex min-h-11 items-center text-sm font-semibold text-green-800 underline">{t('matchBets.signIn')}</Link>}
+        {canBet ? <label className="mt-3 flex min-h-11 items-center gap-2 text-sm font-semibold text-green-900"><input type="checkbox" checked={bettingOnly} onChange={event => { const enabled = event.target.checked; setParams(previous => { const next = new URLSearchParams(previous); if (enabled) next.set('betting', 'open'); else next.delete('betting'); return next }); if (enabled) { setStatusFilter('all'); setTeamFilterId('all'); setPlayerFilter({ playerId: 'all' }) } }} className="size-5 accent-green-700" />{t('matchBets.eligibleOnly')}</label> : null}
+        {bets.error ? <div className="mt-3"><ErrorState message={betErrorMessage(bets.error, t)} /><button type="button" onClick={() => void bets.refetch()} className="min-h-11 text-sm font-semibold text-green-800 underline">{t('workspace.retry')}</button></div> : null}
+      </div>
 
       <LeagueTeamDuelScoreboard />
 
@@ -217,12 +265,20 @@ export function MatchesPage() {
         </p>
       )}
 
-      {filtered.length === 0 ? (
+      {isLoading || (bettingOnly && (account.isLoading || pool.isLoading || (!!playerId && wallet.isLoading))) ? <p role="status" className="text-sm text-gray-600">{t('common.loading')}</p> : filtered.length === 0 ? (
         <p className="text-sm text-gray-500">{t('matches.empty')}</p>
       ) : (
         <div className="space-y-4">
           {filtered.map((match) => (
-            <MatchCard key={match.id} match={match} />
+            <MatchCard key={match.id} match={match} showForm={!bettingOnly && betMatchId !== match.id} betting={user && (playerId || isAdmin) && isSelectedSeasonActive && league.status === 'active' ? <>
+              <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-green-100 pt-3">
+                {canBet && matchBettingStatus(match, playerId) === 'open' ? <button type="button" onClick={() => openBet(match.id, 'offer')} className="min-h-11 rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white hover:bg-green-800">{t('matchBets.bet')}</button>
+                  : playerId && matchBettingStatus(match, playerId) === 'participant' ? <p className="text-xs text-gray-600">{t('matchBets.participant')}</p>
+                    : matchBettingStatus(match, playerId) === 'closed' ? <p className="text-xs text-gray-600">{t('matchBets.closed')}</p> : null}
+                {(offersByMatch.get(match.id)?.length ?? 0) > 0 ? <button type="button" onClick={() => openBet(match.id, 'offers')} className="min-h-11 rounded-lg border border-green-200 px-3 py-2 text-sm font-semibold text-green-800">{t('matchBets.offers', { count: offersByMatch.get(match.id)!.length })}</button> : null}
+              </div>
+              {betMatchId === match.id ? <MatchBetPanel key={`${match.id}:${playerId ?? user.id}`} match={match} playerId={playerId} wallet={wallet.data} pool={pool.data ?? []} offers={offersByMatch.get(match.id) ?? []} view={betView} eligible={canBet} onViewChange={view => openBet(match.id, view)} onClose={closeBet} /> : null}
+            </> : undefined} />
           ))}
         </div>
       )}

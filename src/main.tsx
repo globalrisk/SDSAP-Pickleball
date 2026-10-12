@@ -1,5 +1,5 @@
 import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
+import { createRoot, type Root } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter, Outlet, Route, Routes } from 'react-router-dom'
 import { AppLayout } from './App'
@@ -12,6 +12,7 @@ import { Dashboard } from './pages/Dashboard'
 import { StandingsPage } from './pages/Standings'
 import { MatchesPage } from './pages/Matches'
 import { RankingsPage } from './pages/Rankings'
+import { BetsPage } from './pages/Bets'
 import { PlayerProfilePage } from './pages/PlayerProfile'
 import { PlayersPage } from './pages/Players'
 import { SeasonRecapPage } from './pages/SeasonRecap'
@@ -19,6 +20,7 @@ import { SetupPage } from './pages/Setup'
 import { LiveTournamentPage } from './pages/LiveTournament'
 import { MatchPlannerPage } from './pages/MatchPlanner'
 import { AdminLoginPage } from './pages/AdminLogin'
+import { PlayerSignupPage } from './pages/PlayerSignup'
 import { AdminAccountPage } from './pages/AdminAccount'
 import { CreateLeaguePage } from './pages/CreateLeague'
 import { NotFoundPage } from './pages/NotFound'
@@ -48,7 +50,9 @@ function LeagueShell() {
   )
 }
 
-createRoot(document.getElementById('root')!).render(
+const root: Root = import.meta.hot?.data.root ?? createRoot(document.getElementById('root')!)
+if (import.meta.hot) import.meta.hot.data.root = root
+root.render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
@@ -67,10 +71,12 @@ createRoot(document.getElementById('root')!).render(
                 <Route path="standings" element={<StandingsPage />} />
                 <Route path="matches" element={<MatchesPage />} />
                 <Route path="rankings" element={<RankingsPage />} />
+                <Route path="bets" element={<BetsPage />} />
                 <Route path="players" element={<AdminRoute><PlayersPage /></AdminRoute>} />
                 <Route path="players/:playerId" element={<PlayerProfilePage />} />
                 <Route path="seasons/:seasonId/recap" element={<SeasonRecapPage />} />
                 <Route path="login" element={<AdminLoginPage />} />
+                <Route path="signup" element={<PlayerSignupPage />} />
                 <Route path="setup" element={<AdminRoute><SetupPage /></AdminRoute>} />
                 <Route path="account" element={<AdminRoute><AdminAccountPage /></AdminRoute>} />
                 <Route path="admin/leagues/new" element={<AdminRoute><CreateLeaguePage /></AdminRoute>} />

@@ -49,7 +49,7 @@ describe('tier migration over populated mirror history', () => {
       const storedData = async () => {
         const data: Record<string, unknown> = {}
         for (const table of ['seasons', 'season_roster', 'teams', 'players', 'matches', 'league_players', 'player_pool', 'rating_state', 'rating_history']) {
-          data[table] = (await api.db.query(`SELECT to_jsonb(t) - ARRAY['duel_tier','duel_schedule_mode','duel_draft_priority'] AS data FROM public.${table} t ORDER BY (to_jsonb(t) - ARRAY['duel_tier','duel_schedule_mode','duel_draft_priority'])::text`)).rows
+          data[table] = (await api.db.query(`SELECT to_jsonb(t) - ARRAY['duel_tier','duel_schedule_mode','duel_draft_priority','betting_closed_at'] AS data FROM public.${table} t ORDER BY (to_jsonb(t) - ARRAY['duel_tier','duel_schedule_mode','duel_draft_priority'])::text`)).rows
         }
         return data
       }

@@ -233,6 +233,7 @@ export interface Match {
   status: MatchStatus
   live_status: MatchLiveStatus
   live_court_number: number | null
+  betting_closed_at?: string | null
   home_score: number | null
   away_score: number | null
   winner_team_id: string | null

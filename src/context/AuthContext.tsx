@@ -9,12 +9,14 @@ import {
 } from 'react'
 import type { User } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
+import { signUpPlayer } from '../lib/playerAuth'
 
 interface AuthContextValue {
   user: User | null
   isAdmin: boolean
   isLoading: boolean
-  signIn: (identifier: string, password: string) => Promise<void>
+  signIn: (identifier: string, password: string) => Promise<User>
+  signUp: (email: string, password: string, emailRedirectTo: string) => Promise<User | null>
   signOut: () => Promise<void>
 }
 
@@ -69,10 +71,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (sessionError) throw sessionError
       signedInUser = session.user
     }
-    if (!hasAdminRole(signedInUser)) {
-      await supabase.auth.signOut()
-      throw new Error('This account does not have administrator access.')
-    }
+    if (!signedInUser) throw new Error('Invalid username or password.')
+    return signedInUser
   }, [])
 
   const signOut = useCallback(async () => {
@@ -81,7 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const value = useMemo<AuthContextValue>(
-    () => ({ user, isAdmin: hasAdminRole(user), isLoading, signIn, signOut }),
+    () => ({ user, isAdmin: hasAdminRole(user), isLoading, signIn, signUp: signUpPlayer, signOut }),
     [user, isLoading, signIn, signOut],
   )
 

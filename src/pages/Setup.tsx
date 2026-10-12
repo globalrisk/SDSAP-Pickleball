@@ -30,6 +30,13 @@ import { fetchPicklePreview } from '../lib/picklePointsApi'
 import { formatPicklePoints } from '../lib/picklePoints'
 import { usePicklePreview } from '../hooks/usePicklePoints'
 import { SeasonFormatSelector } from '../components/SeasonFormatSelector'
+import { PlayerAccountLinks } from '../components/PlayerAccountLinks'
+import { SetupWorkspace } from '../components/SetupWorkspace'
+import { SetupSeasonOverview } from '../components/SetupSeasonOverview'
+import { resolveSetupSection, type SetupSection } from '../lib/setupWorkspace'
+import { useMatches } from '../hooks/useMatches'
+import { useAuth } from '../context/AuthContext'
+import { betErrorMessage, fetchBets } from '../lib/betsApi'
 import { ErrorState, PageHeader, SetupBanner } from '../components/Layout'
 import { useSeason } from '../context/SeasonContext'
 import { useLeague } from '../context/LeagueContext'
@@ -44,12 +51,7 @@ import { useAssignedPoolPlayerIds, usePlayerPool } from '../hooks/usePlayerPool'
 import { useTeamsWithPlayers } from '../hooks/useTeams'
 import type { PoolPlayer, SeasonFormat, TeamWithPlayers } from '../types'
 
-type SetupSection = 'players' | 'season' | 'teams' | 'league'
 type PoolStatusFilter = 'active' | 'inactive' | 'all'
-
-function isSetupSection(value: string | null): value is SetupSection {
-  return value === 'players' || value === 'season' || value === 'teams' || value === 'league'
-}
 
 const TEAM_COLORS = [
   '#ef4444',
@@ -103,7 +105,7 @@ function LeagueBrandingForm() {
 
   return (
     <section className="mb-6 rounded-xl border border-green-200 bg-white p-5 shadow-sm">
-      <h2 className="text-lg font-semibold text-green-900">{t('leagueSettings.title')}</h2>
+      <h2 className="text-lg font-semibold text-green-900">{t('workspace.leagueIdentity')}</h2>
       <p className="mt-1 text-sm text-gray-600">{t('leagueSettings.description')}</p>
       <form
         className="mt-4 grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end"
@@ -128,7 +130,8 @@ function LeagueBrandingForm() {
       </form>
       {mutation.isSuccess ? <p className="mt-3 text-sm text-green-700" role="status">{t('leagueSettings.saved')}</p> : null}
       {mutation.error ? <p className="mt-3 text-sm text-red-700" role="alert">{(mutation.error as Error).message}</p> : null}
-      <div className="mt-5 border-t border-gray-100 pt-4">
+      <details className="mt-5 border-t border-gray-100 pt-4">
+        <summary className="min-h-11 cursor-pointer text-sm font-semibold text-green-900">{t('workspace.advancedLeague')}</summary>
         <p className="text-sm text-gray-600">
           {league.status === 'active' ? t('leagueSettings.archiveHint') : t('leagueSettings.restoreHint')}
         </p>
@@ -144,7 +147,7 @@ function LeagueBrandingForm() {
           {league.status === 'active' ? t('leagueSettings.archive') : t('leagueSettings.restore')}
         </button>
         {statusMutation.error ? <p className="mt-3 text-sm text-red-700" role="alert">{(statusMutation.error as Error).message}</p> : null}
-      </div>
+      </details>
     </section>
   )
 }
@@ -208,7 +211,7 @@ function PoolPlayerRow({
     >
       <details>
         <summary className="flex min-h-14 cursor-pointer flex-wrap items-center gap-2 px-3 py-3">
-          <span className="min-w-0 flex-1 truncate font-semibold text-gray-900">{player.name}</span>
+          <span className="w-full min-w-0 break-words font-semibold text-gray-900 sm:w-auto sm:flex-1">{player.name}</span>
           <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-200 text-gray-700'}`}>
             {isActive ? t('pool.statusActive') : t('pool.statusInactive')}
           </span>
@@ -458,10 +461,13 @@ export function SetupPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const queryClient = useQueryClient()
   const { league, leaguePath } = useLeague()
-  const { selectedSeason, activeSeason, isSelectedSeasonActive, setSelectedSeasonId } =
+  const { user } = useAuth()
+  const { selectedSeason, activeSeason, isSelectedSeasonActive, setSelectedSeasonId, isLoading: seasonsLoading, isError: seasonsError, error: seasonsQueryError } =
     useSeason()
-  const { data: teams, isError, error } = useTeamsWithPlayers()
-  const { data: pool = [], isError: poolError, error: poolQueryError } = usePlayerPool()
+  const { data: teams, isError, error, refetch: refetchTeams } = useTeamsWithPlayers()
+  const selectedMatchesQuery = useMatches()
+  const selectedMatches = selectedMatchesQuery.data
+  const { data: pool = [], isError: poolError, error: poolQueryError, refetch: refetchPool } = usePlayerPool()
   const { data: assignedPoolIds = [] } = useAssignedPoolPlayerIds()
   const seasonRosterQuery = useQuery({
     queryKey: seasonRosterQueryKey(selectedSeason?.id),
@@ -502,11 +508,28 @@ export function SetupPage() {
   const isDuel = selectedSeason?.format === 'team_duel'
   const archivePreview = usePicklePreview(activeSeason?.format === 'team_duel' ? activeSeason.id : undefined)
   const [preparingArchive, setPreparingArchive] = useState(false)
-  const duelRosterLocked = isDuel && (!activeSeasonMatches || activeSeasonMatches.length > 0)
-  const requestedSection = searchParams.get('section')
-  const activeSection: SetupSection = isSetupSection(requestedSection)
-    ? requestedSection
-    : 'players'
+  const duelRosterLocked = isDuel && (!selectedMatches || selectedMatches.length > 0)
+  const rosterReadOnly = !isSelectedSeasonActive || duelRosterLocked
+  const activeSection = resolveSetupSection(searchParams.get('section'))
+  const selectedPreview = usePicklePreview(isDuel ? selectedSeason?.id : undefined)
+  const seasonBets = useQuery({
+    queryKey: ['bets', 'setup-review', league.id, user?.id],
+    queryFn: () => fetchBets(league.id),
+    enabled: activeSection === 'finish' && !!user && isSelectedSeasonActive,
+    refetchOnWindowFocus: 'always',
+  })
+  const unsettledBetCount = seasonBets.data?.filter(bet => bet.seasonId === selectedSeason?.id && (bet.state === 'accepted' || bet.state === 'review')).length
+  const [showAddPlayer, setShowAddPlayer] = useState(false)
+  const [showNewSeason, setShowNewSeason] = useState(false)
+  function navigateSection(section: SetupSection) {
+    setFeedback(null)
+    setSearchParams(previous => {
+      const next = new URLSearchParams(previous)
+      next.set('section', section)
+      return next
+    })
+    window.scrollTo({ top: 0, behavior: 'instant' })
+  }
   const [newPoolName, setNewPoolName] = useState('')
   const [newPoolRating, setNewPoolRating] = useState('1500')
   const [existingPoolPlayerId, setExistingPoolPlayerId] = useState('')
@@ -582,6 +605,7 @@ export function SetupPage() {
       queryClient.invalidateQueries({ queryKey: ['player-pool'] })
       setNewPoolName('')
       setNewPoolRating('1500')
+      setShowAddPlayer(false)
       setFeedback({ text: t('pool.added'), tone: 'ok' })
     },
     onError: (err: Error) =>
@@ -602,6 +626,7 @@ export function SetupPage() {
       queryClient.invalidateQueries({ queryKey: ['shared-player-identities'] })
       setExistingPoolPlayerId('')
       setExistingPoolRating('1500')
+      setShowAddPlayer(false)
       setFeedback({
         text: t('pool.addedExisting', { name: playerName ?? t('pool.existingPlayer') }),
         tone: 'ok',
@@ -689,6 +714,8 @@ export function SetupPage() {
       invalidateSeasonData()
       setSelectedSeasonId(season.id)
       setNewSeasonName('')
+      setShowNewSeason(false)
+      navigateSection('roster')
       setFeedback({ text: t('setup.newSeasonSuccess', { name: season.name }), tone: 'ok' })
     },
     onError: (err: Error) =>
@@ -872,30 +899,36 @@ export function SetupPage() {
     (player) => player.id !== newTeam.poolPlayerId1,
   )
 
-  if (isError) return <ErrorState message={(error as Error).message} />
-  if (poolError) return <ErrorState message={(poolQueryError as Error).message} />
+  const sectionError = ['overview', 'roster', 'teams', 'prizes', 'finish'].includes(activeSection) && seasonsError ? seasonsQueryError
+    : ['overview', 'teams'].includes(activeSection) && isError ? error
+    : ['overview', 'roster', 'teams', 'members'].includes(activeSection) && poolError ? poolQueryError : null
 
   if (league.status === 'archived') {
+    const archivedSection = activeSection === 'prizes' && isDuel ? 'prizes' : 'settings'
     return (
-      <div>
-        <PageHeader title={t('setup.title')} subtitle={t('setup.subtitle')} />
-        <LeagueBrandingForm />
-        <PicklePrizeSettings />
+      <SetupWorkspace section={archivedSection} onSectionChange={navigateSection} season={selectedSeason} leagueName={league.name} archivedLeague>
+        <PageHeader title={t(`workspace.titles.${archivedSection}`)} subtitle={t(`workspace.descriptions.${archivedSection}`)} />
         <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
           {t('leagueSettings.archivedReadOnly')}
         </p>
-      </div>
+        <div className="mt-5">{archivedSection === 'settings' ? <><LeagueBrandingForm /><PicklePrizeSettings scope="league" /></> : <PicklePrizeSettings scope="season" />}</div>
+      </SetupWorkspace>
     )
   }
 
   return (
     <div>
       <SetupBanner />
+      <SetupWorkspace section={activeSection} onSectionChange={navigateSection} season={selectedSeason} leagueName={league.name}>
       <ArchivedSeasonBanner />
       <PageHeader
-        title={t('setup.title')}
-        subtitle={t('setup.subtitle')}
+        title={t(`workspace.titles.${activeSection}`)}
+        subtitle={t(`workspace.descriptions.${activeSection}`)}
       />
+
+      {!seasonsLoading && !selectedSeason && !['overview', 'members', 'accounts', 'settings'].includes(activeSection) ? <div className="mb-5 rounded-lg border border-green-200 bg-white p-4 text-sm text-gray-600">
+        <p>{t('workspace.noSeason')}</p><button type="button" onClick={() => navigateSection('overview')} className="mt-2 min-h-11 font-semibold text-green-800 underline">{t('workspace.sections.overview')}</button>
+      </div> : null}
 
       {feedback && (
         <p
@@ -910,45 +943,50 @@ export function SetupPage() {
         </p>
       )}
 
-      <nav
-        className="sticky top-12 z-10 mb-6 grid grid-cols-2 gap-1 rounded-xl border border-green-200 bg-white/95 p-1.5 shadow-sm backdrop-blur sm:top-14 sm:grid-cols-4 md:top-28"
-        aria-label={t('setup.sectionsLabel')}
-      >
-        {(['players', 'season', 'teams', 'league'] as const).map((section) => (
-          <button
-            key={section}
-            type="button"
-            aria-pressed={activeSection === section}
-            onClick={() => {
-              setSearchParams({ section }, { replace: true })
-            }}
-            className={`min-h-11 rounded-lg px-2 py-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 ${
-              activeSection === section
-                ? 'bg-green-600 text-white'
-                : 'text-green-800 hover:bg-green-50'
-            }`}
-          >
-            {t(`setup.section.${section}`)}
-          </button>
-        ))}
-      </nav>
+      {sectionError ? <><ErrorState message={(sectionError as Error).message} /><button type="button" onClick={() => { void queryClient.invalidateQueries({ queryKey: ['seasons', league.id] }); void refetchTeams(); void refetchPool() }} className="mt-3 min-h-11 font-semibold text-green-800 underline">{t('workspace.retry')}</button></> : <>
+      {seasonsLoading && ['overview', 'roster', 'teams', 'prizes', 'finish'].includes(activeSection) ? <p role="status" className="mb-5 text-sm text-gray-600">{t('common.loading')}</p> : null}
+      {activeSection === 'overview' && selectedSeason ? (
+        seasonRosterQuery.error || selectedMatchesQuery.error ? <>
+          <ErrorState message={(seasonRosterQuery.error ?? selectedMatchesQuery.error)!.message} />
+          <button type="button" onClick={() => { void seasonRosterQuery.refetch(); void selectedMatchesQuery.refetch() }} className="mt-3 min-h-11 rounded-lg border border-green-200 px-4 text-sm font-semibold text-green-800">{t('workspace.retry')}</button>
+        </> : <SetupSeasonOverview
+          season={selectedSeason}
+          rosterCount={seasonRosterIds.size}
+          teams={teams ?? []}
+          fixtureCount={selectedMatches?.length ?? 0}
+          completedCount={selectedMatches?.filter(match => match.status === 'completed' || match.status === 'forfeit').length ?? 0}
+          preview={selectedPreview.data}
+          isLoading={seasonRosterQuery.isPending || selectedMatchesQuery.isPending || !teams || (isDuel && selectedPreview.isPending)}
+          onSectionChange={navigateSection}
+          leaguePath={leaguePath}
+          canCreateSeason={!seasonsLoading && !activeSeason}
+          onCreateSeason={() => setShowNewSeason(true)}
+        />
+      ) : null}
 
-      {activeSection === 'league' ? (
+      {activeSection === 'accounts' ? <PlayerAccountLinks key={league.id} /> : null}
+      {activeSection === 'prizes' ? <PicklePrizeSettings scope="season" /> : null}
+
+      {activeSection === 'settings' ? (
         <div>
           <LeagueBrandingForm />
-          <PicklePrizeSettings />
+          <PicklePrizeSettings scope="league" />
           <Link to={leaguePath('/admin/leagues/new')} className="inline-flex min-h-11 items-center rounded-lg border border-green-200 bg-white px-4 py-2 text-sm font-semibold text-green-800 hover:bg-green-50">
             {t('league.create')}
           </Link>
         </div>
       ) : null}
 
-      {activeSection === 'players' ? (
+      {activeSection === 'members' ? (
+      <>
       <section className="mb-8 rounded-xl border border-green-200 bg-white p-5 shadow-sm">
-        <h2 className="text-lg font-semibold text-green-900">{t('pool.title')}</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-lg font-semibold text-green-900">{t('workspace.membersCount', { count: pool.length })}</h2>
+        <button type="button" aria-expanded={showAddPlayer} aria-controls="add-league-player" onClick={() => setShowAddPlayer(value => !value)} className="min-h-11 rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white hover:bg-green-800">{t(showAddPlayer ? 'common.close' : 'workspace.addPlayer')}</button>
+        </div>
         <p className="mt-1 text-sm text-gray-600">{t('pool.description')}</p>
 
-        <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4">
+        {showAddPlayer ? <div id="add-league-player" className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4">
           <h3 className="text-sm font-bold text-blue-950">{t('pool.addToLeagueTitle')}</h3>
           <div className="mt-3 grid grid-cols-2 gap-2" role="group" aria-label={t('pool.addToLeagueTitle')}>
             <button type="button" aria-pressed={addPlayerMode === 'existing'} onClick={() => setAddPlayerMode('existing')} className={`min-h-11 rounded-lg px-3 py-2 text-sm font-semibold ${addPlayerMode === 'existing' ? 'bg-blue-700 text-white' : 'bg-white text-blue-800'}`}>
@@ -1054,7 +1092,7 @@ export function SetupPage() {
         </form>
           </div>
           )}
-        </div>
+        </div> : null}
 
         {pool.length > 0 ? (
           <div className="mt-5 rounded-xl border border-green-100 bg-green-50/40 p-2.5">
@@ -1131,16 +1169,17 @@ export function SetupPage() {
           </ul>
         )}
       </section>
+      </>
       ) : null}
 
-      {activeSection === 'season' && selectedSeason && isSelectedSeasonActive ? <SeasonFormatSelector season={selectedSeason} locked={!activeSeasonMatches || activeSeasonMatches.length > 0} /> : null}
+      {activeSection === 'roster' && selectedSeason && isSelectedSeasonActive && selectedMatches?.length === 0 ? <SeasonFormatSelector season={selectedSeason} locked={false} /> : null}
 
-      {activeSection === 'season' && selectedSeason && isSelectedSeasonActive ? (
+      {activeSection === 'roster' && selectedSeason ? (
         <section className="mb-6 rounded-xl border border-green-200 bg-white p-5 shadow-sm">
           <h2 className="text-lg font-semibold text-green-900">
             {t('setup.seasonRosterTitle', { name: selectedSeason.name })}
           </h2>
-          <p className="mt-1 text-sm text-gray-600">{t(isDuel ? 'leagueDuel.rosterHelp' : 'setup.seasonRosterHelp')}</p>
+          <p className="mt-1 text-sm text-gray-600">{t(!isSelectedSeasonActive ? 'setup.seasonRosterArchived' : selectedMatchesQuery.isPending ? 'common.loading' : duelRosterLocked ? 'leagueDuel.frozen' : isDuel ? 'leagueDuel.rosterHelp' : 'setup.seasonRosterHelp', { name: selectedSeason.name })}</p>
           {seasonRosterQuery.isLoading ? <p className="mt-4 text-sm text-gray-600">{t('common.loading')}</p> : null}
           {seasonRosterQuery.error ? <div className="mt-4"><ErrorState message={(seasonRosterQuery.error as Error).message} /></div> : null}
           {seasonRosterQuery.isSuccess ? (
@@ -1149,17 +1188,17 @@ export function SetupPage() {
                 <p className="text-sm font-semibold text-green-900">
                   {t('setup.seasonRosterCount', { count: seasonRosterDraft.length })}
                 </p>
-                <div className="flex flex-wrap gap-2">
-                  <button type="button" disabled={duelRosterLocked} onClick={() => setSeasonRosterDraft(pool.filter((player) => player.status === 'active').map((player) => player.id))} className="rounded-lg border border-green-200 px-3 py-2 text-sm font-semibold text-green-800 hover:bg-green-50 disabled:opacity-50">
+                {!rosterReadOnly ? <div className="flex flex-wrap gap-2">
+                  <button type="button" disabled={!isSelectedSeasonActive || duelRosterLocked} onClick={() => setSeasonRosterDraft(pool.filter((player) => player.status === 'active').map((player) => player.id))} className="min-h-11 rounded-lg border border-green-200 px-3 py-2 text-sm font-semibold text-green-800 hover:bg-green-50 disabled:opacity-50">
                     {t('setup.seasonRosterSelectAll')}
                   </button>
-                  <button type="button" disabled={duelRosterLocked} onClick={() => setSeasonRosterDraft([...assignedIds])} className="rounded-lg border border-green-200 px-3 py-2 text-sm font-semibold text-green-800 hover:bg-green-50 disabled:opacity-50">
+                  <button type="button" disabled={!isSelectedSeasonActive || duelRosterLocked} onClick={() => setSeasonRosterDraft([...assignedIds])} className="min-h-11 rounded-lg border border-green-200 px-3 py-2 text-sm font-semibold text-green-800 hover:bg-green-50 disabled:opacity-50">
                     {t('setup.seasonRosterClearUnassigned')}
                   </button>
-                </div>
+                </div> : null}
               </div>
               <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                {pool.map((player) => {
+                {(rosterReadOnly ? pool.filter(player => seasonRosterIds.has(player.id)) : pool).map((player) => {
                   const isAssigned = assignedIds.has(player.id)
                   const isInactive = player.status !== 'active'
                   return (
@@ -1167,7 +1206,7 @@ export function SetupPage() {
                       <input
                         type="checkbox"
                         checked={draftRosterIds.has(player.id)}
-                        disabled={duelRosterLocked || (!isDuel && isAssigned) || (isInactive && !draftRosterIds.has(player.id)) || seasonRosterMutation.isPending}
+                        disabled={!isSelectedSeasonActive || duelRosterLocked || (!isDuel && isAssigned) || (isInactive && !draftRosterIds.has(player.id)) || seasonRosterMutation.isPending}
                         onChange={(event) => setSeasonRosterDraft((current) =>
                           event.target.checked
                             ? [...current, player.id]
@@ -1175,7 +1214,7 @@ export function SetupPage() {
                         )}
                         className="size-5 shrink-0 accent-green-700"
                       />
-                      <span className="min-w-0 flex-1 truncate font-semibold">{player.name}</span>
+                      <span className="min-w-0 flex-1 break-words font-semibold">{player.name}</span>
                       {isAssigned ? <span className="text-xs text-green-800">{t('setup.seasonRosterOnTeam')}</span> : null}
                       {isInactive ? <span className="text-xs">{t('pool.statusInactive')}</span> : null}
                     </label>
@@ -1183,24 +1222,24 @@ export function SetupPage() {
                 })}
               </div>
               {pool.length === 0 ? <p className="mt-4 text-sm text-gray-600">{t('setup.seasonRosterEmpty')}</p> : null}
-              <div className="mt-4 flex flex-wrap items-center gap-3">
+              {!rosterReadOnly ? <div className="mt-4 flex flex-wrap items-center gap-3">
                 <button
                   type="button"
-                  disabled={duelRosterLocked || !seasonRosterDirty || seasonRosterMutation.isPending}
+                  disabled={!isSelectedSeasonActive || duelRosterLocked || !seasonRosterDirty || seasonRosterMutation.isPending}
                   onClick={() => seasonRosterMutation.mutate(seasonRosterDraft)}
                   className="min-h-11 rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {seasonRosterMutation.isPending ? t('common.loading') : t('setup.seasonRosterSave')}
                 </button>
                 <p className="text-sm text-gray-600">{t('setup.seasonRosterNext')}</p>
-              </div>
+              </div> : <button type="button" onClick={() => navigateSection('teams')} className="mt-4 min-h-11 font-semibold text-green-800 underline">{t('workspace.sections.teams')} ›</button>}
               {seasonRosterMutation.error ? <div className="mt-3"><ErrorState message={(seasonRosterMutation.error as Error).message} /></div> : null}
             </>
           ) : null}
         </section>
       ) : null}
 
-      {activeSection === 'season' && activeSeason && !isSelectedSeasonActive ? (
+      {activeSection === 'roster' && activeSeason && !isSelectedSeasonActive ? (
         <section className="mb-8 rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
           <p>{t('setup.seasonRosterArchived', { name: selectedSeason?.name })}</p>
           <button type="button" onClick={() => setSelectedSeasonId(activeSeason.id)} className="mt-3 font-semibold underline underline-offset-2">
@@ -1209,10 +1248,29 @@ export function SetupPage() {
         </section>
       ) : null}
 
-      {activeSection === 'season' && activeSeason && isSelectedSeasonActive && (
+      {activeSection === 'finish' && selectedSeason?.status === 'archived' ? <section className="mb-6 rounded-xl border border-green-200 bg-white p-5">
+        <h2 className="font-bold text-green-950">{t('workspace.seasonFinal')}</h2>
+        <p className="mt-2 text-sm text-gray-600">{t('workspace.archivedOverviewHelp')}</p>
+        <Link to={leaguePath('/bets?tab=history')} className="mt-3 inline-flex min-h-11 items-center text-sm font-semibold text-green-800 underline">{t('workspace.viewBetHistory')}</Link>
+        {isDuel ? selectedPreview.isLoading ? <p>{t('common.loading')}</p> : selectedPreview.error ? <ErrorState message={selectedPreview.error.message} /> : selectedPreview.data ? <PickleDistribution preview={selectedPreview.data} /> : null : null}
+      </section> : null}
+
+      {activeSection === 'finish' && activeSeason && isSelectedSeasonActive ? <section className="mb-6 rounded-xl border border-green-200 bg-white p-5">
+        <h2 className="font-bold text-green-950">{t('workspace.finishChecklist')}</h2>
+        <ul className="mt-2 divide-y divide-green-100">
+          <li className="flex flex-wrap items-center justify-between gap-3 py-4"><div><h3 className="font-semibold text-green-950">{t('workspace.matchResults')}</h3><p className="mt-1 text-sm text-gray-600">{selectedMatchesQuery.isLoading ? t('common.loading') : selectedMatchesQuery.error ? t('workspace.resultsUnavailable') : t('workspace.resultsProgress', { completed: recordedCount, total: activeSeasonMatches?.length ?? 0 })}</p></div><Link to={leaguePath('/matches')} className="min-h-11 content-center rounded-lg px-2 text-sm font-semibold text-green-800 hover:bg-green-50">{t('nav.matches')} ›</Link></li>
+          <li className="flex flex-wrap items-center justify-between gap-3 py-4"><div><h3 className="font-semibold text-green-950">{t('workspace.betSettlements')}</h3><p className="mt-1 text-sm text-gray-600">{seasonBets.isLoading ? t('common.loading') : seasonBets.error ? t('workspace.betsUnavailable') : unsettledBetCount === 0 ? t('workspace.betsReady') : t('workspace.betsPending', { count: unsettledBetCount })}</p></div><Link to={leaguePath('/bets?tab=history')} className="min-h-11 content-center rounded-lg px-2 text-sm font-semibold text-green-800 hover:bg-green-50">{t('workspace.reviewBets')} ›</Link></li>
+          {isDuel ? <li className="flex flex-wrap items-center justify-between gap-3 py-4"><div><h3 className="font-semibold text-green-950">{t('workspace.prizeDistribution')}</h3><p className="mt-1 text-sm text-gray-600">{t(archivePreview.data?.configured && archivePreview.data.complete && archivePreview.data.valid ? 'workspace.prizesReady' : 'workspace.prizesReview')}</p></div><button type="button" onClick={() => navigateSection('prizes')} className="min-h-11 rounded-lg px-2 text-sm font-semibold text-green-800 hover:bg-green-50">{t('workspace.sections.prizes')} ›</button></li> : null}
+        </ul>
+        {seasonBets.error ? <><ErrorState message={betErrorMessage(seasonBets.error, t)} /><button type="button" onClick={() => void seasonBets.refetch()} className="mt-2 min-h-11 font-semibold text-green-800 underline">{t('workspace.retry')}</button></> : null}
+        {selectedMatchesQuery.error ? <ErrorState message={selectedMatchesQuery.error.message} /> : null}
+      </section> : null}
+
+      {activeSection === 'finish' && activeSeason && isSelectedSeasonActive && (
         <section className="mb-8 rounded-xl border border-amber-200 bg-white p-5 shadow-sm">
           <h2 className="text-lg font-semibold text-amber-900">{t('setup.archiveTitle')}</h2>
           <p className="mt-1 text-sm text-gray-600">{t('setup.archiveDescription')}</p>
+          <p className="mt-2 text-sm text-gray-600">{t(isDuel ? 'pickle.archiveWarning' : 'workspace.archiveResultsWarning')}</p>
           <p className="mt-2 text-sm font-medium text-gray-700">
             {t('setup.activeSeason', { name: activeSeason.name })}
           </p>
@@ -1222,19 +1280,19 @@ export function SetupPage() {
           <button
             type="button"
             onClick={handleArchiveSeason}
-            disabled={preparingArchive || archiveMutation.isPending || (isDuel && (!archivePreview.data?.configured || !archivePreview.data.complete || activeSeasonMatches?.some((m) => m.status === 'scheduled')))}
+            disabled={preparingArchive || archiveMutation.isPending || seasonBets.isPending || seasonBets.isError || unsettledBetCount !== 0 || (isDuel && (!archivePreview.data?.configured || !archivePreview.data.complete || activeSeasonMatches?.some((m) => m.status === 'scheduled')))}
             className="mt-4 min-h-11 w-full rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900 hover:bg-amber-100 active:bg-amber-200 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:py-2"
           >
-            {archiveMutation.isPending ? t('setup.archiving') : t('setup.archiveButton')}
+            {preparingArchive || archiveMutation.isPending ? t('setup.archiving') : t('workspace.reviewArchive')}
           </button>
           {isDuel ? <>
-            <Link to={leaguePath('/setup?section=league')} className="ml-3 inline-flex min-h-11 items-center text-sm font-semibold text-green-800 underline">{t('pickle.settingsTitle')}</Link>
+            <button type="button" onClick={() => navigateSection('prizes')} className="ml-3 inline-flex min-h-11 items-center text-sm font-semibold text-green-800 underline">{t('workspace.sections.prizes')}</button>
             {archivePreview.isLoading ? <p>{t('common.loading')}</p> : archivePreview.error ? <ErrorState message={archivePreview.error.message} /> : archivePreview.data ? <PickleDistribution preview={archivePreview.data} /> : null}
           </> : null}
         </section>
       )}
 
-      {activeSection === 'season' && !activeSeason && (
+      {activeSection === 'overview' && !seasonsLoading && !activeSeason && (showNewSeason || !selectedSeason) && (
         <section className="mb-8 rounded-xl border border-green-200 bg-white p-5 shadow-sm">
           <h2 className="text-lg font-semibold text-green-900">{t('setup.newSeasonTitle')}</h2>
           <p className="mt-1 text-sm text-gray-600">{t('setup.newSeasonDescription')}</p>
@@ -1263,7 +1321,7 @@ export function SetupPage() {
         </section>
       )}
 
-      {activeSection === 'teams' && isDuel && selectedSeason ? <LeagueTeamDuelSetup key={selectedSeason.id} season={selectedSeason} rosterIds={seasonRosterQuery.data ?? []} teams={teams ?? []} fixtures={activeSeasonMatches} hasFixtures={!activeSeasonMatches || activeSeasonMatches.length > 0 || !isSelectedSeasonActive} editable={isSelectedSeasonActive} /> : null}
+      {activeSection === 'teams' && isDuel && selectedSeason ? <LeagueTeamDuelSetup key={selectedSeason.id} season={selectedSeason} rosterIds={seasonRosterQuery.data ?? []} teams={teams ?? []} fixtures={selectedMatches} hasFixtures={!selectedMatches || selectedMatches.length > 0 || !isSelectedSeasonActive} editable={isSelectedSeasonActive} /> : null}
 
       {activeSection === 'teams' && !isDuel ? (
         <section className="mb-6">
@@ -1272,9 +1330,9 @@ export function SetupPage() {
           <div className="space-y-3">
             {(teams ?? []).map((team) => isSelectedSeasonActive ? (
               <details key={team.id} className="rounded-xl border border-green-200 bg-white shadow-sm">
-                <summary className="flex min-h-14 cursor-pointer items-center justify-between gap-2 px-4 py-3 font-semibold text-green-950">
-                  <span>{team.name}</span>
-                  <span className="text-xs font-normal text-gray-600">{team.players.map((player) => player.name).join(' · ')}</span>
+                <summary className="flex min-h-14 cursor-pointer flex-wrap items-center justify-between gap-2 px-4 py-3 font-semibold text-green-950">
+                  <span className="min-w-0 break-words">{team.name}</span>
+                  <span className="min-w-0 break-words text-xs font-normal text-gray-600">{team.players.map((player) => player.name).join(' · ')}</span>
                 </summary>
                 <div className="border-t border-green-100 p-2">
                   <TeamEditForm
@@ -1305,7 +1363,7 @@ export function SetupPage() {
           <p className="mt-1 text-sm text-gray-600">{t('setup.createTeamDescription')}</p>
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-blue-200 bg-blue-50 p-3">
             <p className="text-sm font-semibold text-blue-900">{t('setup.seasonRosterTeamSummary', { count: seasonRosterIds.size, available: activeUnassigned.length })}</p>
-            <button type="button" onClick={() => setSearchParams({ section: 'season' }, { replace: true })} className="text-sm font-bold text-blue-800 underline underline-offset-2">
+            <button type="button" onClick={() => navigateSection('roster')} className="text-sm font-bold text-blue-800 underline underline-offset-2">
               {t('setup.seasonRosterManage')}
             </button>
           </div>
@@ -1405,6 +1463,8 @@ export function SetupPage() {
         </details>
       ) : null}
 
+      </>}
+      </SetupWorkspace>
     </div>
   )
 }

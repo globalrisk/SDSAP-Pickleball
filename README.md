@@ -10,7 +10,7 @@ A shared pickleball platform for multiple independent leagues. Players have one 
 - League-specific name, logo, seasons, teams, ratings, results, and match-day data
 - One shared player directory with league-specific membership and ratings
 - Administrators can add players from **Manage → Players** without assigning a league; these players are immediately available to Team Duel and can join a league later from that league's Setup page
-- Setup follows **League roster → Season players → Teams → League settings**. League membership persists across seasons; choose each season's participants separately before building teams.
+- **League setup** opens the selected season's overview. Its Season workspace groups **Players → Teams & fixtures → Prizes → Finish season**; **League members**, **Player accounts**, and **League settings** are separate administration sections. Desktop uses a sidebar and phones use a section selector. League membership persists across seasons; choose each season's participants separately before building teams.
 - Seasons support doubles round robin or **Team Duel**: two rated squads of 4–7, rotating partnerships, shared squad points, and individual rated games. See [setup and rollout notes](docs/league-team-duel.md).
 - Multiple leagues can each have an active season at the same time
 - Administrator-only setup and result entry; public pages are read-only
@@ -86,11 +86,11 @@ The authorization check uses `app_metadata`, not user-editable metadata. Databas
 
 ## League administration
 
-- Use **Manage → League setup** to change the current league's name or logo. Its slug and shareable link stay unchanged.
+- Use **Manage → League setup → League settings** to change the current league's name or logo. Its slug and shareable link stay unchanged. League archive/restore controls are under **Advanced league actions**.
 - Use **Manage → Create league** for the guided first-season flow.
 - Renaming a shared player updates that identity across every league and historical roster display.
 - Removing or deactivating a player from one league does not remove them from another.
-- Leave someone out of a season in **Setup → Season players**. Use **Inactive** only when their league membership is unavailable longer term. Round-robin players already on a team must be removed from that team first. Changing an unstarted Team Duel roster clears its draft squads; generated duel rosters are frozen.
+- Leave someone out of a season in **League setup → Season → Players**. Use **Inactive** under **League members** only when their league membership is unavailable longer term. Round-robin players already on a team must be removed from that team first. Changing an unstarted Team Duel roster clears its draft squads; generated duel rosters are frozen.
 - Archiving a season preserves its history. Permanent league deletion is intentionally not supported.
 
 ## Player tournament view
@@ -141,7 +141,7 @@ results from an older snapshot.
 
 ## Pickle point prizes
 
-Administrators configure **League setup → League settings → 🥒 Pickle point prizes**.
+Administrators configure the selected season's prizes under **League setup → Season → Prizes**. Defaults for future seasons are under **League setup → League settings**.
 League defaults are copied into new seasons. Save each Team Duel season’s amounts
 explicitly, including zero prizes, then review its distribution before **Archive season**.
 Archiving awards points and locks the season’s results, roster and prize settings.
@@ -183,6 +183,94 @@ For disposable browser verification, run
 `node scripts/test-support/pickle-browser-server.mjs` and open its printed localhost
 URL. Its synthetic login, games and awards exist only in temporary PostgreSQL;
 closing the process discards them.
+
+## Match bets with Pickle points
+
+Deploy `20261012160242_pickle_match_bets.sql` before the betting frontend. It credits
+existing prize allocations into league wallets once and preserves final award receipts.
+It also removes automatic administrator assignment for new Supabase Auth accounts;
+existing administrators retain their roles. Any future
+administrator must receive an explicit protected `app_metadata.role = admin` claim.
+
+Players can use **Sign in → Sign up** (or **Bets → Sign up**) to create an email/password
+account. In Supabase **Authentication → Sign In / Providers**, enable **Allow new users
+to sign up** and the Email provider. For immediate signup, disable **Confirm email**:
+the app uses the returned session and opens Bets automatically. Administrators should
+verify the player's identity before linking an account, since its email is unverified.
+Custom SMTP is needed for password-recovery emails, or if email confirmation is
+enabled later; Supabase's default sender is restricted to project-team addresses.
+For email flows, add the app's exact production and localhost login URLs to the Auth
+redirect allow list, such as
+`http://localhost:5173/leagues/sdsap/login` and
+`http://127.0.0.1:5173/leagues/sdsap/login`.
+
+After signup, administrators open **League setup → Player accounts** and link each exact email to its permanent player identity. Manual
+account creation in Supabase still works. Links
+are one-to-one and follow permanent player IDs. Email/password sign-in works for players; existing admin
+username sign-in and setup access still work.
+
+The expandable **Registered accounts** list under **League setup → Player accounts**
+shows registered emails, including unlinked accounts across all leagues. Search,
+refresh and pagination are available; **Use email** fills the linking form without
+creating a link. The directory is protected by a server-side administrator check
+and returns only email and linked player details. Anonymous and regular player
+accounts cannot read it.
+The directory's [privileged RPC advisor notice](https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable)
+is expected: signed-in callers can request it, but the function verifies the protected
+administrator role before reading any emails. Database tests cover that distinction.
+
+Administrators can use **Unlink account** after reviewing its confirmation. The
+operation removes ownership across all leagues and keeps the Auth account, player,
+balances, debts and history. It is blocked while that player has any open, accepted
+or awaiting-review bets in any league. Cancel open offers and settle accepted bets
+first. Each unlink has an immutable private audit receipt and retry identifier;
+direct link updates/deletes are forbidden. Administrators can link another account
+afterward. Bet mutations lock account ownership before league/result/wallet locks,
+preventing an unlink from racing a new reservation. Player screens refresh ownership
+on focus and every 30 seconds; the server revokes access immediately.
+The private unlink context and receipt tables deliberately use RLS with no API
+policies or grants, so access is denied by default. The
+[RLS-without-policy advisor](https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy)
+is informational for these private tables. The protected unlink RPC checks the
+administrator role; its privileged-RPC notice is expected as described above.
+
+**Matches** is the entry point for creating offers: compare the pairs and estimated
+win chances, then choose **🥒 Bet on this match**. The inline panel defaults to equal
+stakes, supports a different opposing stake, previews the pot and profits, and lets
+spectators accept existing offers for that match. **Only matches I can bet on** filters
+out the player's own matches and closed matches. **Bets** remains the wallet, offer,
+history, and administrator review dashboard in desktop navigation and mobile **More**.
+Its **Create an offer** button opens Matches with the eligibility filter enabled.
+Active league spectators can offer positive stakes in increments of 1,000. Creating an offer reserves
+the creator's stake; acceptance reserves the opponent's stake. Accepted contracts cannot
+be withdrawn. Match start or a recorded result closes unaccepted offers permanently;
+changed players or sides void pending contracts. Renaming players preserves contracts.
+
+Recorded results hold accepted stakes for administrator review in **Bets**. Confirming
+pays the winning bettor the combined pot without fees; forfeits refund both stakes.
+Corrections require a reason and reviewed revision, update results and ratings atomically,
+and append reversals plus new settlements. A correction can leave points owed if previous
+winnings were spent; future prizes and winnings repay the debt. New unfunded offers
+are rejected, and unfunded open offers are cancelled. Accepted contracts stay valid.
+
+Rankings show current league balances, including net settled bets. Reservations reduce
+available points without changing rank. Wallet and transaction details are private to
+their owner and administrators; open contracts are readable by league members. RPCs
+calculate all financial changes server-side and serialize them with the league rating
+lock. Direct wallet, contract, and ledger writes are revoked from API roles.
+
+Security-advisor notices for these protected `SECURITY DEFINER` RPCs are expected:
+authorization is checked inside each operation. The public leaderboard RPC returns
+aggregate balances only, without granting access to private wallet rows. The existing
+[leaked-password protection](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection)
+setting remains disabled; this migration does not change Auth password settings.
+
+Archive requires every accepted contract to be settled or refunded. Archived results,
+prizes, and bet settlements are final. V1 has no purchases, withdrawals, transfers,
+redemption, cash payouts, or manual point adjustments.
+
+For disposable browser verification, run `node scripts/test-support/bets-browser-server.mjs`.
+It prints synthetic accounts and a localhost URL, and discards all data when stopped.
 
 ## Verification
 

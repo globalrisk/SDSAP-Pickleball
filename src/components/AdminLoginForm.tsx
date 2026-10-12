@@ -1,10 +1,14 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../context/AuthContext'
+import type { User } from '@supabase/supabase-js'
+import { Link } from 'react-router-dom'
+import { useLeague } from '../context/LeagueContext'
 
-export function AdminLoginForm({ onSuccess }: { onSuccess: () => void }) {
+export function AdminLoginForm({ onSuccess }: { onSuccess: (user: User) => void }) {
   const { t } = useTranslation()
   const { signIn } = useAuth()
+  const { leaguePath } = useLeague()
   const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -15,8 +19,8 @@ export function AdminLoginForm({ onSuccess }: { onSuccess: () => void }) {
     setError(null)
     setIsSubmitting(true)
     try {
-      await signIn(identifier, password)
-      onSuccess()
+      const user = await signIn(identifier, password)
+      onSuccess(user)
     } catch (signInError) {
       const message = (signInError as Error).message
       setError(message === 'Invalid username or password.' ? t('auth.invalidCredentials') : message)
@@ -62,6 +66,10 @@ export function AdminLoginForm({ onSuccess }: { onSuccess: () => void }) {
           {isSubmitting ? t('auth.signingIn') : t('auth.signIn')}
         </button>
       </form>
+      <p className="mt-5 text-center text-sm text-gray-700">
+        {t('auth.noAccount')}{' '}
+        <Link to={leaguePath('/signup')} className="font-bold text-green-700 underline underline-offset-4">{t('auth.signUp')}</Link>
+      </p>
     </section>
   )
 }
