@@ -57,11 +57,17 @@ export function MatchesPage() {
   const { data: matches, isError, error, isLoading } = useMatches()
   const { data: teams } = useTeams()
   const canBet = !!user && !!playerId && !!activeMember && league.status === 'active' && isSelectedSeasonActive && !!wallet.data && !wallet.isError
-  function openBet(matchId: string, view: 'offer' | 'offers') {
-    setParams(previous => { const next = new URLSearchParams(previous); next.set('betMatch', matchId); next.set('betView', view); return next })
-  }
-  function closeBet() {
-    setParams(previous => { const next = new URLSearchParams(previous); next.delete('betMatch'); next.delete('betView'); return next })
+  function toggleBet(matchId: string, view: 'offer' | 'offers') {
+    setParams(previous => {
+      const next = new URLSearchParams(previous)
+      const currentView = previous.get('betView') === 'offers' ? 'offers' : 'offer'
+      if (previous.get('betMatch') === matchId && currentView === view) {
+        next.delete('betMatch'); next.delete('betView')
+      } else {
+        next.set('betMatch', matchId); next.set('betView', view)
+      }
+      return next
+    })
   }
   const offersByMatch = useMemo(() => {
     const grouped = new Map<string, NonNullable<typeof bets.data>>()
@@ -272,12 +278,12 @@ export function MatchesPage() {
           {filtered.map((match) => (
             <MatchCard key={match.id} match={match} showForm={!bettingOnly && betMatchId !== match.id} betting={user && (playerId || isAdmin) && isSelectedSeasonActive && league.status === 'active' ? <>
               <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-green-100 pt-3">
-                {canBet && matchBettingStatus(match, playerId) === 'open' ? <button type="button" onClick={() => openBet(match.id, 'offer')} className="min-h-11 rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white hover:bg-green-800">{t('matchBets.bet')}</button>
+                {canBet && matchBettingStatus(match, playerId) === 'open' ? <button type="button" aria-expanded={betMatchId === match.id && betView === 'offer'} aria-controls={betMatchId === match.id ? `match-bets-${match.id}` : undefined} onClick={() => toggleBet(match.id, 'offer')} className="min-h-11 rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white hover:bg-green-800">{t('matchBets.bet')} <span aria-hidden="true">{betMatchId === match.id && betView === 'offer' ? '▴' : '▾'}</span></button>
                   : playerId && matchBettingStatus(match, playerId) === 'participant' ? <p className="text-xs text-gray-600">{t('matchBets.participant')}</p>
                     : matchBettingStatus(match, playerId) === 'closed' ? <p className="text-xs text-gray-600">{t('matchBets.closed')}</p> : null}
-                {(offersByMatch.get(match.id)?.length ?? 0) > 0 ? <button type="button" onClick={() => openBet(match.id, 'offers')} className="min-h-11 rounded-lg border border-green-200 px-3 py-2 text-sm font-semibold text-green-800">{t('matchBets.offers', { count: offersByMatch.get(match.id)!.length })}</button> : null}
+                {(offersByMatch.get(match.id)?.length ?? 0) > 0 ? <button type="button" aria-expanded={betMatchId === match.id && betView === 'offers'} aria-controls={betMatchId === match.id ? `match-bets-${match.id}` : undefined} onClick={() => toggleBet(match.id, 'offers')} className={`min-h-11 rounded-lg border px-3 py-2 text-sm font-semibold text-green-800 ${betMatchId === match.id && betView === 'offers' ? 'border-amber-200 bg-amber-50' : 'border-green-200'}`}>{t('matchBets.offers', { count: offersByMatch.get(match.id)!.length })} <span aria-hidden="true">{betMatchId === match.id && betView === 'offers' ? '▴' : '▾'}</span></button> : null}
               </div>
-              {betMatchId === match.id ? <MatchBetPanel key={`${match.id}:${playerId ?? user.id}`} match={match} playerId={playerId} wallet={wallet.data} pool={pool.data ?? []} offers={offersByMatch.get(match.id) ?? []} view={betView} eligible={canBet} onViewChange={view => openBet(match.id, view)} onClose={closeBet} /> : null}
+              {betMatchId === match.id ? <MatchBetPanel key={`${match.id}:${playerId ?? user.id}`} match={match} playerId={playerId} wallet={wallet.data} pool={pool.data ?? []} offers={offersByMatch.get(match.id) ?? []} view={betView} eligible={canBet} onViewChange={view => toggleBet(match.id, view)} /> : null}
             </> : undefined} />
           ))}
         </div>

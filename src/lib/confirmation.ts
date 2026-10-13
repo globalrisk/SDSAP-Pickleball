@@ -1,9 +1,10 @@
-import { createContext, useContext } from 'react'
+import { createContext, useContext, type ReactNode } from 'react'
 
 export interface ConfirmationOptions {
   title?: string
   confirmLabel?: string
   tone?: 'default' | 'danger'
+  details?: ReactNode
 }
 
 export type ConfirmAction = (message: string, options?: ConfirmationOptions) => Promise<boolean>

@@ -50,12 +50,13 @@ export function ConfirmationProvider({ children }: { children: ReactNode }) {
         <AlertDialog.Content
           onEscapeKeyDown={(event) => { event.preventDefault(); finish(false) }}
           onCloseAutoFocus={(event) => { event.preventDefault(); if (returnFocus.current?.isConnected) returnFocus.current.focus() }}
-          className="themed-dialog fixed top-1/2 left-1/2 z-[100] max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-3xl border border-green-200 bg-white p-6 shadow-2xl shadow-green-950/20 focus:outline-none sm:p-7"
+          className={`themed-dialog fixed top-1/2 left-1/2 z-[100] max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-3xl border p-6 shadow-2xl shadow-green-950/20 focus:outline-none sm:p-7 ${request?.details ? 'border-amber-200 bg-amber-50' : 'border-green-200 bg-white'}`}
         >
-          <div className={`mb-4 flex size-12 items-center justify-center rounded-2xl ${request?.tone === 'danger' ? 'bg-red-50 text-red-700' : 'bg-green-100 text-green-700'}`}>
+          {!request?.details ? <div className={`mb-4 flex size-12 items-center justify-center rounded-2xl ${request?.tone === 'danger' ? 'bg-red-50 text-red-700' : 'bg-green-100 text-green-700'}`}>
             <svg aria-hidden="true" width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3 2.5 20h19L12 3Z" /><path d="M12 9v4m0 3h.01" /></svg>
-          </div>
+          </div> : null}
           <AlertDialog.Title className="text-xl font-bold tracking-tight text-green-950">{request?.title ?? t('common.confirmTitle')}</AlertDialog.Title>
+          {request?.details ? <div className="mt-4">{request.details}</div> : null}
           <AlertDialog.Description className="mt-3 whitespace-pre-line text-sm leading-6 text-gray-600">{request?.message}</AlertDialog.Description>
           <div className="mt-6 flex flex-col-reverse gap-3 border-t border-green-100 pt-5 sm:flex-row sm:justify-end">
             <AlertDialog.Cancel onClick={() => finish(false)} className="min-h-11 rounded-xl border border-green-200 bg-white px-5 py-2.5 text-sm font-bold text-green-800 transition-colors hover:bg-green-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2">{t('common.cancel')}</AlertDialog.Cancel>

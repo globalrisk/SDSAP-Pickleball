@@ -23,6 +23,27 @@ body {
   outline-offset: 2px;
 }
 
+.bet-offer-card {
+  container: bet-offer / inline-size;
+}
+
+.bet-pair-grid {
+  display: grid;
+  gap: 4px;
+}
+
+@container bet-offer (min-width: 340px) {
+  .bet-pair-grid {
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .bet-pair-versus {
+    align-self: center;
+    padding-inline: 0;
+  }
+}
+
 @keyframes loading-bar {
   0% {
     transform: translateX(-110%);
