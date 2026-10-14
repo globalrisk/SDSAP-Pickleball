@@ -5,6 +5,7 @@ import { PlayerTitleBadge } from '../components/PlayerTitleBadge'
 import { ProfileFunStats } from '../components/ProfileFunStats'
 import { ProfileRivalries } from '../components/ProfileRivalries'
 import { RatingHistoryChart } from '../components/RatingHistoryChart'
+import { ProfileStatCard as StatCard } from '../components/ProfileStatCard'
 import { usePlayerProfile } from '../hooks/usePlayerProfile'
 import { formatMatchDate } from '../lib/formatDate'
 import { roundRating } from '../lib/ratings'
@@ -101,7 +102,7 @@ export function PlayerProfilePage() {
         />
       </div>
 
-      <ProfileFunStats stats={profile.funStats} />
+      <ProfileFunStats stats={profile.funStats} playerName={profile.name} />
       <ProfileRivalries playerName={profile.name} rivalries={profile.rivalries} />
 
       <section className="mb-6 rounded-xl border border-green-200 bg-white p-4 shadow-sm sm:p-5">
@@ -200,32 +201,6 @@ export function PlayerProfilePage() {
           </ul>
         )}
       </section>
-    </div>
-  )
-}
-
-function StatCard({
-  label,
-  value,
-  accent = 'neutral',
-}: {
-  label: string
-  value: string
-  accent?: 'up' | 'down' | 'neutral'
-}) {
-  const valueClass =
-    accent === 'up'
-      ? 'text-green-700'
-      : accent === 'down'
-        ? 'text-red-600'
-        : 'text-green-900'
-
-  return (
-    <div className="rounded-xl border border-green-200 bg-white px-3 py-3 shadow-sm sm:px-4">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-        {label}
-      </p>
-      <p className={`mt-1 text-xl font-bold sm:text-2xl ${valueClass}`}>{value}</p>
     </div>
   )
 }

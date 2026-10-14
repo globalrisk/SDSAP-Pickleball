@@ -4,12 +4,15 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react'
 import type { User } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
-import { signUpPlayer } from '../lib/playerAuth'
+import { changePlayerPassword, signUpPlayer } from '../lib/playerAuth'
+import { useQueryClient } from '@tanstack/react-query'
+import { clearPrivateQueries } from '../lib/privateQueries'
 
 interface AuthContextValue {
   user: User | null
@@ -18,6 +21,7 @@ interface AuthContextValue {
   signIn: (identifier: string, password: string) => Promise<User>
   signUp: (email: string, password: string, emailRedirectTo: string) => Promise<User | null>
   signOut: () => Promise<void>
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -27,26 +31,35 @@ function hasAdminRole(user: User | null): boolean {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient()
+  const previousUserId = useRef<string | null>(null)
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
     let active = true
-    void supabase.auth.getSession().then(({ data }) => {
-      if (!active) return
-      setUser(data.session?.user ?? null)
+    let authEventReceived = false
+    const updateUser = (nextUser: User | null) => {
+      const previous = previousUserId.current
+      if (previous && previous !== nextUser?.id) void clearPrivateQueries(queryClient, previous)
+      previousUserId.current = nextUser?.id ?? null
+      setUser(nextUser)
       setIsLoading(false)
+    }
+    void supabase.auth.getSession().then(({ data }) => {
+      if (!active || authEventReceived) return
+      updateUser(data.session?.user ?? null)
     })
 
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null)
-      setIsLoading(false)
+      authEventReceived = true
+      updateUser(session?.user ?? null)
     })
     return () => {
       active = false
       subscription.subscription.unsubscribe()
     }
-  }, [])
+  }, [queryClient])
 
   const signIn = useCallback(async (identifier: string, password: string) => {
     const trimmed = identifier.trim()
@@ -81,7 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const value = useMemo<AuthContextValue>(
-    () => ({ user, isAdmin: hasAdminRole(user), isLoading, signIn, signUp: signUpPlayer, signOut }),
+    () => ({ user, isAdmin: hasAdminRole(user), isLoading, signIn, signUp: signUpPlayer, signOut, changePassword: changePlayerPassword }),
     [user, isLoading, signIn, signOut],
   )
 

@@ -3,42 +3,20 @@ import { formatSwingDelta } from '../lib/engagement'
 import { formatMatchDate } from '../lib/formatDate'
 import { roundRating } from '../lib/ratings'
 import type { PlayerFunStats } from '../types'
+import { ProfileMatchup } from './ProfileMatchup'
 
 interface ProfileFunStatsProps {
   stats: PlayerFunStats
+  playerName: string
+  personal?: boolean
 }
 
-export function ProfileFunStats({ stats }: ProfileFunStatsProps) {
+export function ProfileFunStats({ stats, playerName, personal = false }: ProfileFunStatsProps) {
   const { t, i18n } = useTranslation()
   const { currentStreak, bestPartner, biggestSwing } = stats
 
   if (!currentStreak && !bestPartner && !biggestSwing) {
     return null
-  }
-
-  const swingDetailParts: string[] = []
-  if (biggestSwing) {
-    if (biggestSwing.result) {
-      swingDetailParts.push(
-        biggestSwing.result === 'W'
-          ? t('profile.swingResultWin')
-          : t('profile.swingResultLoss'),
-      )
-    }
-    if (biggestSwing.scoreLabel) swingDetailParts.push(biggestSwing.scoreLabel)
-    if (biggestSwing.partnerName) {
-      swingDetailParts.push(
-        t('profile.withPartner', { name: biggestSwing.partnerName }),
-      )
-    }
-    if (biggestSwing.opponentNames.length > 0) {
-      swingDetailParts.push(
-        t('profile.vsOpponents', { names: biggestSwing.opponentNames.join(', ') }),
-      )
-    }
-    if (biggestSwing.seasonName) swingDetailParts.push(biggestSwing.seasonName)
-    const dateLabel = formatMatchDate(biggestSwing.resultRecordedAt, i18n.language)
-    if (dateLabel) swingDetailParts.push(dateLabel)
   }
 
   return (
@@ -70,22 +48,13 @@ export function ProfileFunStats({ stats }: ProfileFunStatsProps) {
           />
         )}
         {biggestSwing && (
-          <FunStat
-            label={t('profile.biggestSwingLabel')}
-            value={formatSwingDelta(biggestSwing.delta)}
-            detail={
-              swingDetailParts.length > 0
-                ? swingDetailParts.join(' · ')
-                : t('profile.biggestSwingDetail')
-            }
-            accent={
-              roundRating(biggestSwing.delta) > 0
-                ? 'up'
-                : roundRating(biggestSwing.delta) < 0
-                  ? 'down'
-                  : 'neutral'
-            }
-          />
+          <div className="min-w-0 rounded-xl border border-gray-200 p-3 sm:col-span-2 sm:p-4">
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-3"><div><p className="text-[10px] font-bold uppercase tracking-wide text-gray-500">{t('profile.biggestSwingLabel')}</p><p className={`mt-1 text-2xl font-black tabular-nums ${roundRating(biggestSwing.delta) > 0 ? 'text-green-700' : roundRating(biggestSwing.delta) < 0 ? 'text-red-600' : 'text-gray-900'}`}>{formatSwingDelta(biggestSwing.delta)}</p></div>
+              {biggestSwing.result ? <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${biggestSwing.result === 'W' ? 'bg-green-100 text-green-800' : 'bg-red-50 text-red-700'}`}>{t(biggestSwing.result === 'W' ? 'profile.swingResultWin' : 'profile.swingResultLoss')}{biggestSwing.scoreLabel ? ` · ${biggestSwing.scoreLabel}` : ''}</span> : null}
+            </div>
+            <ProfileMatchup pair={[{ name: playerName, isYou: personal }, ...(biggestSwing.partnerName ? [{ name: biggestSwing.partnerName }] : [])]} opponents={biggestSwing.opponentNames.map(name => ({ name }))} pairLabel={personal ? t('personal.yourPair') : t('me.pair')} />
+            <p className="mt-3 text-xs text-gray-500">{[biggestSwing.seasonName, formatMatchDate(biggestSwing.resultRecordedAt, i18n.language)].filter(Boolean).join(' · ')}</p>
+          </div>
         )}
       </div>
     </section>
@@ -115,7 +84,7 @@ function FunStat({
       <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
         {label}
       </p>
-      <p className={`mt-1 text-lg font-bold ${valueClass}`}>{value}</p>
+      <p className={`mt-1 text-lg font-bold [overflow-wrap:anywhere] ${valueClass}`}>{value}</p>
       {detail ? <p className="mt-0.5 text-xs text-gray-600">{detail}</p> : null}
     </div>
   )

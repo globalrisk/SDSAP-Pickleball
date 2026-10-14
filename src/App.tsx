@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { GlobalLoadingOverlay } from './components/GlobalLoadingOverlay'
 import { LanguageSwitcher } from './components/LanguageSwitcher'
 import { LeagueSelector } from './components/LeagueSelector'
 import { SeasonSelector } from './components/SeasonSelector'
+import { ProfileMenu } from './components/ProfileMenu'
 import { useAuth } from './context/AuthContext'
 import { useLeague } from './context/LeagueContext'
 
@@ -44,6 +45,7 @@ export function AppLayout() {
   const [moreOpen, setMoreOpen] = useState(false)
   const [manageOpen, setManageOpen] = useState(false)
   const [mobileManageOpen, setMobileManageOpen] = useState(false)
+  const moreTrigger = useRef<HTMLButtonElement>(null)
   const mobilePrimaryItems = navItems.slice(0, 4)
   const mobileMoreItems = navItems.slice(4)
   const itemPath = (item: (typeof navItems)[number]) =>
@@ -87,9 +89,7 @@ export function AppLayout() {
             <div className="order-2 flex shrink-0 items-center gap-1.5 lg:order-3 lg:gap-2">
               <LanguageSwitcher />
               {user ? (
-                <button type="button" onClick={() => void signOut()} className="hidden min-h-9 rounded-lg border border-green-200 px-2 text-xs font-bold text-green-800 sm:inline-flex sm:items-center">
-                  {t('auth.signOut')}
-                </button>
+                <ProfileMenu />
               ) : (
                 <NavLink to={leaguePath('/login')} className="hidden min-h-9 items-center rounded-lg border border-green-200 px-2 text-xs font-bold text-green-800 sm:inline-flex">
                   {t('auth.signIn')}
@@ -155,6 +155,7 @@ export function AppLayout() {
             </NavLink>
           ))}
           <button
+            ref={moreTrigger}
             type="button"
             className={navClassName(moreActive || moreOpen, true)}
             aria-expanded={moreOpen}
@@ -177,8 +178,10 @@ export function AppLayout() {
           />
           <div
             id="mobile-more-menu"
+            onKeyDown={event => { if (event.key === 'Escape') { setMoreOpen(false); moreTrigger.current?.focus() } }}
             className="fixed inset-x-3 bottom-20 z-30 mx-auto max-h-[calc(100dvh-6rem)] max-w-sm overflow-y-auto rounded-2xl border border-green-200 bg-white p-2 shadow-xl lg:hidden"
           >
+            {user ? <div className="mb-1 border-b border-green-100 pb-1"><NavLink to={leaguePath('/me?tab=overview')} onClick={() => setMoreOpen(false)} className="flex min-h-12 items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold text-green-900 hover:bg-green-50 focus-visible:ring-2 focus-visible:ring-green-600"><NavIcon to="/account" />{t('me.title')}</NavLink></div> : null}
             {mobileMoreItems.map((item) => (
               <NavLink
                 key={item.to}

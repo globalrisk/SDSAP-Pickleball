@@ -1,5 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { Navigate, useSearchParams } from 'react-router-dom'
+import { profileReturnTo } from '../lib/myProfile'
 import { AdminLoginForm } from '../components/AdminLoginForm'
 import { useAuth } from '../context/AuthContext'
 import { useLeague } from '../context/LeagueContext'
@@ -9,6 +11,10 @@ export function AdminLoginPage() {
   const navigate = useNavigate()
   const { leaguePath } = useLeague()
   const { user, isAdmin } = useAuth()
+  const [params] = useSearchParams()
+  const returnTo = profileReturnTo(params.get('returnTo'), leaguePath())
+
+  if (user && returnTo) return <Navigate to={returnTo} replace />
 
   if (user) {
     return (
@@ -25,5 +31,5 @@ export function AdminLoginPage() {
     )
   }
 
-  return <AdminLoginForm onSuccess={(signedIn) => navigate(leaguePath(signedIn.app_metadata?.role === 'admin' ? '/setup' : '/bets'), { replace: true })} />
+  return <AdminLoginForm onSuccess={(signedIn) => navigate(returnTo ?? leaguePath(signedIn.app_metadata?.role === 'admin' ? '/setup' : '/bets'), { replace: true })} />
 }

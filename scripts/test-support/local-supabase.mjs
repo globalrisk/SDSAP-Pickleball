@@ -78,7 +78,7 @@ export async function startLocalSupabase({ port = 0, seed = true, beforeMigratio
   const server = createServer((req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*')
     res.setHeader('Access-Control-Allow-Headers', '*')
-    res.setHeader('Access-Control-Allow-Methods', 'GET,HEAD,POST,PATCH,DELETE,OPTIONS')
+    res.setHeader('Access-Control-Allow-Methods', 'GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS')
     res.setHeader('Access-Control-Expose-Headers', 'Content-Range')
     res.setHeader('Content-Type', 'application/json')
     if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return }
@@ -88,8 +88,16 @@ export async function startLocalSupabase({ port = 0, seed = true, beforeMigratio
       const body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString()) : null
       const account = accounts.get(req.headers.authorization?.replace(/^Bearer /, ''))
       if (url.pathname.startsWith('/auth/v1/')) {
-        const signedIn = account ?? [...accounts.values()].find(a => a.user.email === body?.email && a.password === body?.password)
+        const passwordLogin = url.pathname.endsWith('/token') && url.searchParams.get('grant_type') === 'password'
+        const signedIn = passwordLogin ? [...accounts.values()].find(a => a.user.email === body?.email && a.password === body?.password) : account
         if (!signedIn) { res.writeHead(401); res.end(JSON.stringify({ message: 'Invalid login credentials', error_code: 'invalid_credentials' })); return }
+        // Synthetic Auth transport only; passwords belong exclusively to disposable test accounts.
+        if (url.pathname.endsWith('/user') && req.method === 'PUT' && body?.password) {
+          const code = body.current_password !== signedIn.password ? 'invalid_credentials'
+            : body.password.length < 8 ? 'weak_password' : body.password === signedIn.password ? 'same_password' : null
+          if (code) { res.writeHead(422); res.end(JSON.stringify({ message: code, code, error_code: code })); return }
+          signedIn.password = body.password
+        }
         const data = url.pathname.endsWith('/user') ? signedIn.user : { access_token: signedIn.token, refresh_token: 'local-test-refresh', token_type: 'bearer', expires_in: 86400, expires_at: signedIn.claims.exp, user: signedIn.user }
         res.end(JSON.stringify(data)); return
       }

@@ -274,6 +274,16 @@ It prints synthetic accounts and a localhost URL, and discards all data when sto
 
 ## Verification
 
+Signed-in players can open **My Profile** from the header or the phone's **More** menu.
+Overview, Stats, Matches and Points use the player linked by an administrator and the
+current league. Settings includes language preference and signed-in password changes.
+Stats can show all seasons or the selected season; wallet totals always cover the league.
+
+For disposable profile verification, run `node scripts/test-support/profile-browser-server.mjs`.
+It prints a localhost URL and synthetic linked, unlinked and administrator accounts.
+Its database is temporary and Auth is a test transport; hosted Auth and Realtime require
+separate verification against a test Supabase project.
+
 ```bash
 npm test
 npm run test:database

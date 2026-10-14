@@ -13,7 +13,6 @@ i18n
       en: { translation: en },
     },
     fallbackLng: 'vi',
-    lng: 'vi',
     supportedLngs: ['vi', 'en'],
     detection: {
       order: ['localStorage'],

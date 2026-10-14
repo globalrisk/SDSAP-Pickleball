@@ -14,6 +14,8 @@ import { MatchesPage } from './pages/Matches'
 import { RankingsPage } from './pages/Rankings'
 import { BetsPage } from './pages/Bets'
 import { PlayerProfilePage } from './pages/PlayerProfile'
+import { MyProfilePage } from './pages/MyProfile'
+import { SignedInRoute } from './components/SignedInRoute'
 import { PlayersPage } from './pages/Players'
 import { SeasonRecapPage } from './pages/SeasonRecap'
 import { SetupPage } from './pages/Setup'
@@ -74,6 +76,7 @@ root.render(
                 <Route path="bets" element={<BetsPage />} />
                 <Route path="players" element={<AdminRoute><PlayersPage /></AdminRoute>} />
                 <Route path="players/:playerId" element={<PlayerProfilePage />} />
+                <Route path="me" element={<SignedInRoute><MyProfilePage /></SignedInRoute>} />
                 <Route path="seasons/:seasonId/recap" element={<SeasonRecapPage />} />
                 <Route path="login" element={<AdminLoginPage />} />
                 <Route path="signup" element={<PlayerSignupPage />} />
