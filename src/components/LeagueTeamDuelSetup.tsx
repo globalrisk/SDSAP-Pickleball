@@ -1,10 +1,9 @@
-import { useConfirm } from '../lib/confirmation'
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useLeague } from '../context/LeagueContext'
-import { clearUnplayedLeagueDuelFixtures, fetchLeagueDuelDraftPreview, generateLeagueDuelSeasonMatches, saveLeagueDuelDraft } from '../lib/leagueTeamDuelApi'
+import { fetchLeagueDuelDraftPreview, generateLeagueDuelSeasonMatches, saveLeagueDuelDraft } from '../lib/leagueTeamDuelApi'
 import { LEAGUE_DUEL_ROSTER_SIZES } from '../lib/leagueTeamDuel'
 import { duelOpponentMeetingCaps, duelTierForRank } from '../lib/leagueDuelSchedule'
 import { DUEL_DRAFT_PRIORITIES, createDuelDraftOptions, refreshDuelDraftOptions, isSelectedDuelDraftSaved, type DuelDraftOptions } from '../lib/duelDraftOptions'
@@ -12,6 +11,7 @@ import { ErrorState } from './Layout'
 import { LeagueDuelTeamNameForm } from './LeagueDuelTeamNameForm'
 import { seasonRosterQueryKey } from '../lib/seasonRosterApi'
 import { SeasonForecastSummary } from './SeasonForecastSummary'
+import { SeasonMatchDeletion } from './SeasonMatchDeletion'
 import type { DuelDraftPriority, MatchWithTeams, Season, TeamWithPlayers } from '../types'
 
 const buttonClass = 'min-h-11 rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white hover:bg-green-800 disabled:opacity-50'
@@ -19,7 +19,6 @@ const buttonClass = 'min-h-11 rounded-lg bg-green-700 px-4 py-2 text-sm font-sem
 export function LeagueTeamDuelSetup({ season, rosterIds, teams, fixtures, hasFixtures, editable }: {
   season: Season; rosterIds: string[]; teams: TeamWithPlayers[]; fixtures: MatchWithTeams[] | undefined; hasFixtures: boolean; editable: boolean
 }) {
-  const confirm = useConfirm()
   const { t } = useTranslation()
   const { league, leaguePath } = useLeague()
   const client = useQueryClient()
@@ -34,9 +33,6 @@ export function LeagueTeamDuelSetup({ season, rosterIds, teams, fixtures, hasFix
   const meetingCaps = validSize ? duelOpponentMeetingCaps(rosterIds.length / 2) : undefined
   const needsTierDraft = teams.length > 0 && !hasFixtures && (season.duel_schedule_mode !== 'tier_matched'
     || season.duel_draft_rating_revision == null || !season.duel_draft_rating_fingerprint)
-  const canClear = editable && !!fixtures?.length && fixtures.every((match) => match.status === 'scheduled'
-    && match.home_score == null && match.away_score == null && match.winner_team_id == null
-    && match.result_recorded_at == null && match.live_status !== 'playing')
   const preview = useQuery({
     queryKey: ['league-duel-draft', season.id, [...rosterIds].sort().join(':')],
     queryFn: () => fetchLeagueDuelDraftPreview(league.id, season.id, rosterIds),
@@ -94,15 +90,7 @@ export function LeagueTeamDuelSetup({ season, rosterIds, teams, fixtures, hasFix
     onSuccess: invalidate,
     onError: (error: Error) => { if (error.message.includes('DUEL_STALE_DRAFT')) void preview.refetch() },
   })
-  const clear = useMutation({
-    mutationFn: (ids: string[]) => clearUnplayedLeagueDuelFixtures(season.id, ids),
-    onSuccess: async () => {
-      save.reset(); generate.reset(); setOptions(null)
-      await invalidate()
-    },
-    onError: () => { void invalidate() },
-  })
-  const actionError = clear.error ?? save.error ?? generate.error
+  const actionError = save.error ?? generate.error
 
   return <section className="mb-8 space-y-4 rounded-xl border border-green-200 bg-white p-5 shadow-sm">
     <h2 className="text-lg font-bold text-green-950">{t('leagueDuel.title')}</h2>
@@ -110,7 +98,7 @@ export function LeagueTeamDuelSetup({ season, rosterIds, teams, fixtures, hasFix
     {teams.length > 0 ? <div className="grid gap-4 sm:grid-cols-2">
       {teams.map((team) => <div key={team.id} className="rounded-lg border border-green-100 p-3">
         <h3 className="font-bold" style={{ color: team.color }}>{team.name}</h3>
-        {editable ? <LeagueDuelTeamNameForm team={team} disabled={save.isPending || generate.isPending || clear.isPending} /> : null}
+        {editable ? <LeagueDuelTeamNameForm team={team} disabled={save.isPending || generate.isPending} /> : null}
         <ol className="mt-2 space-y-1 text-sm">{[...team.players].sort((a, b) => (a.duel_rank ?? 0) - (b.duel_rank ?? 0)).map((player) =>
           <li key={player.id} className="break-words">#{player.duel_rank} {player.name}{player.duel_tier ? <span className="ml-2 rounded bg-green-50 px-2 py-0.5 text-xs font-semibold text-green-800">{t(`leagueDuel.tier.${player.duel_tier}`)}</span> : null}</li>)}</ol>
       </div>)}
@@ -118,24 +106,14 @@ export function LeagueTeamDuelSetup({ season, rosterIds, teams, fixtures, hasFix
     {editable && teams.length > 0 ? <p className="text-sm text-gray-600">{t('leagueDuel.renameHelp')}</p> : null}
     {teams.length > 0 ? <p className="text-sm font-semibold text-green-900">{t('leagueDuel.savedPriority', { priority: t(`leagueDuel.priority.${season.duel_draft_priority ?? 'opponent_variety'}`) })}</p> : null}
     {hasFixtures ? <p className="text-sm font-semibold text-green-800">{t('leagueDuel.frozen')}</p> : null}
-    {editable && hasFixtures && fixtures?.length ? <details className="rounded-lg border border-green-200 p-4">
-      <summary className="min-h-11 cursor-pointer text-sm font-semibold text-green-900">{t('workspace.advancedFixtures')}</summary>
-      <p className="mb-3 text-sm text-red-900">{t(canClear ? 'leagueDuel.clearHelp' : 'leagueDuel.clearBlocked')}</p>
-      <button type="button" disabled={!canClear || clear.isPending || save.isPending || generate.isPending}
-        onClick={async () => {
-          const ids = fixtures.map((match) => match.id)
-          if (await confirm(t('leagueDuel.clearConfirm', { name: season.name, count: ids.length }), { tone: 'danger' })) clear.mutate(ids)
-        }} className="min-h-11 rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-800 hover:bg-red-100 disabled:opacity-50">
-        {clear.isPending ? t('common.loading') : t('leagueDuel.clearFixtures')}
-      </button>
-    </details> : null}
-    {clear.isSuccess ? <p role="status" className="text-sm text-green-800">{t('leagueDuel.clearSuccess', { count: clear.data })}</p> : null}
+    {editable && hasFixtures && fixtures?.length ? <SeasonMatchDeletion season={season} fixtures={fixtures}
+      busy={save.isPending || generate.isPending} onCleared={() => { save.reset(); generate.reset(); setOptions(null) }} /> : null}
     {editable && !hasFixtures ? <>
       {needsTierDraft ? <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{t('leagueDuel.rebuildDraft')}</p> : null}
       {!validSize ? <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{t('leagueDuel.rosterSize', { count: rosterIds.length })}</p> : <>
         <div className="flex flex-wrap items-center gap-3">
           <h3 className="font-semibold text-green-950">{t('leagueDuel.draftTitle')}</h3>
-          <button type="button" disabled={preview.isFetching || save.isPending || generate.isPending || clear.isPending} onClick={() => void refreshOptions()} className="min-h-11 rounded-lg border border-green-200 px-3 py-2 text-sm font-semibold text-green-800">{t('leagueDuel.refresh')}</button>
+          <button type="button" disabled={preview.isFetching || save.isPending || generate.isPending} onClick={() => void refreshOptions()} className="min-h-11 rounded-lg border border-green-200 px-3 py-2 text-sm font-semibold text-green-800">{t('leagueDuel.refresh')}</button>
         </div>
         {preview.isFetching ? <p role="status">{t('common.loading')}</p> : null}
         {preview.error ? <ErrorState message={(preview.error as Error).message} /> : null}
@@ -160,9 +138,9 @@ export function LeagueTeamDuelSetup({ season, rosterIds, teams, fixtures, hasFix
           <div className="mt-3 grid gap-3 sm:grid-cols-2">{draft.squads.map((squad, side) => <div key={side}><p className="text-sm font-bold">{t(side === 0 ? 'leagueDuel.squadA' : 'leagueDuel.squadB')}</p><ol className="mt-1 space-y-1 text-sm">{squad.map((player, rank) => <li key={player.id}>#{rank + 1} {player.name} <span className="text-gray-500">({Math.round(player.rating)})</span> <span className="rounded bg-green-50 px-2 py-0.5 text-xs font-semibold text-green-800">{t(`leagueDuel.tier.${duelTierForRank(rank + 1, squad.length)}`)}</span></li>)}</ol></div>)}</div>
         </label>}) : null}</div>
         <div className="grid gap-3 sm:grid-cols-2">{names.map((name, side) => <label key={side} className="text-sm font-semibold">{t(side === 0 ? 'leagueDuel.nameA' : 'leagueDuel.nameB')}<input value={name} maxLength={120} disabled={save.isPending || generate.isPending} onChange={(e) => setNames((current) => side === 0 ? [e.target.value, current[1]] : [current[0], e.target.value])} className="mt-1 min-h-11 w-full rounded-lg border border-green-200 px-3 py-2" /></label>)}</div>
-        <button type="button" className={buttonClass} disabled={!selected || previewUnavailable || save.isPending || generate.isPending || clear.isPending || names.some((name) => !name.trim())} onClick={() => { clear.reset(); generate.reset(); save.mutate() }}>{save.isPending ? t('common.loading') : t('leagueDuel.saveDraft')}</button>
+        <button type="button" className={buttonClass} disabled={!selected || previewUnavailable || save.isPending || generate.isPending || names.some((name) => !name.trim())} onClick={() => { generate.reset(); save.mutate() }}>{save.isPending ? t('common.loading') : t('leagueDuel.saveDraft')}</button>
         {save.isSuccess ? <p role="status" className="text-sm text-green-800">{t('leagueDuel.draftSaved')}</p> : null}
-        {teams.length === 2 ? <div className="border-t border-green-100 pt-4"><p className="mb-3 text-sm text-gray-600">{t('leagueDuel.generateHelp', { games: rosterIds.length / 2 * (rosterIds.length / 2 - 1) / 2, appearances: rosterIds.length / 2 - 1 })}</p>{!selectionSaved ? <p className="mb-3 text-sm text-amber-800">{t('leagueDuel.saveBeforeGenerate')}</p> : null}<button type="button" className={buttonClass} disabled={needsTierDraft || !selectionSaved || previewUnavailable || generate.isPending || save.isPending || clear.isPending} onClick={() => generate.mutate()}>{generate.isPending ? t('common.loading') : t('leagueDuel.generate')}</button></div> : null}
+        {teams.length === 2 ? <div className="border-t border-green-100 pt-4"><p className="mb-3 text-sm text-gray-600">{t('leagueDuel.generateHelp', { games: rosterIds.length / 2 * (rosterIds.length / 2 - 1) / 2, appearances: rosterIds.length / 2 - 1 })}</p>{!selectionSaved ? <p className="mb-3 text-sm text-amber-800">{t('leagueDuel.saveBeforeGenerate')}</p> : null}<button type="button" className={buttonClass} disabled={needsTierDraft || !selectionSaved || previewUnavailable || generate.isPending || save.isPending} onClick={() => generate.mutate()}>{generate.isPending ? t('common.loading') : t('leagueDuel.generate')}</button></div> : null}
       </>}
       <Link to={leaguePath('/setup?section=season')} className="inline-block text-sm font-semibold text-green-800 underline">{t('setup.seasonRosterManage')}</Link>
     </> : null}
