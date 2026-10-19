@@ -1,9 +1,122 @@
 {
+  "skills": {
+    "title": "Player skills",
+    "subtitle": "Peer ratings · 0–100 · Shared across leagues",
+    "chartTitle": "{{group}} radar chart",
+    "chartDescription": "{{count}} spokes show average scores from 0 at the center to 100 at the edge. Gaps indicate unrated attributes. All values and rating counts are listed below the chart.",
+    "groups": {
+      "shots": "Shot Skills",
+      "attributes": "Game Attributes"
+    },
+    "about": "About these attributes",
+    "distinctions": "Positioning concerns where to be; Footwork concerns how to move. Shot Selection concerns the immediate decision; Game IQ concerns reading and adapting to the game. Rate behavior you have observed on court and leave unfamiliar attributes blank.",
+    "names": {
+      "drive": "Drive",
+      "drop": "Drop",
+      "serve": "Serve",
+      "dink": "Dink",
+      "return": "Return",
+      "volley": "Volley",
+      "lob": "Lob",
+      "reset": "Reset",
+      "overhead": "Overhead / Smash",
+      "footwork": "Footwork",
+      "hand_speed": "Hand Speed",
+      "stamina": "Stamina",
+      "positioning": "Positioning",
+      "shot_selection": "Shot Selection",
+      "game_iq": "Game IQ",
+      "mental_game": "Mental Game",
+      "teamwork": "Teamwork",
+      "consistency": "Consistency"
+    },
+    "chartNames": {
+      "drive": "Drive",
+      "drop": "Drop",
+      "serve": "Serve",
+      "dink": "Dink",
+      "return": "Return",
+      "volley": "Volley",
+      "lob": "Lob",
+      "reset": "Reset",
+      "overhead": "Overhead",
+      "footwork": "Footwork",
+      "hand_speed": "Hand|Speed",
+      "stamina": "Stamina",
+      "positioning": "Positioning",
+      "shot_selection": "Shot|Selection",
+      "game_iq": "Game IQ",
+      "mental_game": "Mental|Game",
+      "teamwork": "Teamwork",
+      "consistency": "Consistency"
+    },
+    "descriptions": {
+      "drive": "Hit firm groundstrokes with controlled pace, depth, and placement.",
+      "drop": "Land a soft shot in the kitchen to approach the net safely.",
+      "serve": "Start rallies with a reliable serve and purposeful depth and placement.",
+      "dink": "Control soft exchanges near the kitchen and create opportunities.",
+      "return": "Return serves reliably with depth and placement to establish position.",
+      "volley": "Control and place shots taken out of the air before the bounce.",
+      "lob": "Lift the ball over opponents with enough height and depth to move them back.",
+      "reset": "Soften an opponent’s attack to regain control of the rally.",
+      "overhead": "Finish high balls with power and placement.",
+      "footwork": "Move efficiently, maintain balance, and recover between shots.",
+      "hand_speed": "React and control the paddle during rapid exchanges.",
+      "stamina": "Maintain movement, effort, and shot quality through longer games.",
+      "positioning": "Choose where to stand, cover gaps, and transition with a partner.",
+      "shot_selection": "Choose when to drive, drop, dink, attack, or defend during a rally.",
+      "game_iq": "Read opponents, recognize patterns, and adjust the broader tactical plan.",
+      "mental_game": "Maintain focus, composure, patience, and resilience under pressure.",
+      "teamwork": "Communicate clearly, coordinate responsibilities, and support a partner.",
+      "consistency": "Sustain reliable execution and limit avoidable errors."
+    },
+    "raters_one": "Rated by {{count}} player",
+    "raters_other": "Rated by {{count}} players",
+    "votes_one": "{{count}} rating",
+    "votes_other": "{{count}} ratings",
+    "notRated": "Not rated",
+    "empty": "No peer ratings yet. Skill scores will appear here after the first rating.",
+    "signIn": "Sign in with a linked player account to rate other players in your league.",
+    "rate": "Rate skills",
+    "edit": "Edit your rating",
+    "formTitle": "Your skill rating",
+    "formHelp": "Enter whole numbers from 0–100. Rate any observed attributes in either group and leave the rest blank. Rate at least one attribute. Only averages and counts are public; your submission is visible only to you.",
+    "save": "Save rating",
+    "saving": "Saving…",
+    "remove": "Remove your rating",
+    "saved": "Your rating has been saved.",
+    "removed": "Your rating has been removed.",
+    "validation": "Rate at least one attribute using whole numbers from 0 to 100, or leave an attribute blank.",
+    "loadError": "Could not load skill scores.",
+    "accountError": "Could not check your linked player account.",
+    "ratingError": "Could not load your rating or check eligibility.",
+    "saveError": "Could not save your rating. Your entries are kept. Check that your account is still linked to a player and both players are active in this league, then try again.",
+    "removeError": "Could not remove your rating. Please try again.",
+    "eligibility": {
+      "self": "These scores come from other players. You cannot rate yourself.",
+      "unlinked": "Ask an administrator to link your account to a player before rating skills.",
+      "league_inactive": "New ratings are unavailable in an archived league.",
+      "not_member": "Both players must belong to this league to submit a rating.",
+      "inactive": "Both players must be active in this league to submit a rating."
+    }
+  },
   "me": {
     "title": "My Profile",
     "menu": "My profile navigation",
-    "tabs": { "overview": "Overview", "stats": "Stats", "matches": "Matches", "points": "Points", "settings": "Settings" },
-    "menuItems": { "overview": "Profile overview", "stats": "My stats", "matches": "My matches", "points": "My Pickle points", "settings": "Account settings" },
+    "tabs": {
+      "overview": "Overview",
+      "stats": "Stats",
+      "matches": "Matches",
+      "points": "Points",
+      "settings": "Settings"
+    },
+    "menuItems": {
+      "overview": "Profile overview",
+      "stats": "My stats",
+      "matches": "My matches",
+      "points": "My Pickle points",
+      "settings": "Account settings"
+    },
     "linked": "Linked player account",
     "linkedPlayer": "Linked player",
     "notLinked": "Not linked yet",
@@ -28,7 +141,12 @@
     "noSeason": "This league has no season yet.",
     "noFixtures": "You have no fixtures in the selected season.",
     "seasonMatches": "Matches in the selected season",
-    "matchGroups": { "playing": "Playing now", "upNext": "Up next", "remaining": "Remaining matches", "results": "Results" },
+    "matchGroups": {
+      "playing": "Playing now",
+      "upNext": "Up next",
+      "remaining": "Remaining matches",
+      "results": "Results"
+    },
     "court": "Court {{number}}",
     "forfeit": "Forfeit · unrated",
     "matchRating": "Rating {{delta}}",
@@ -541,56 +659,6 @@
     "provisionalSection": "Provisional players",
     "inactiveSection": "Inactive players",
     "empty": "No players in the pool yet."
-  },
-  "titles": {
-    "on_fire": {
-      "name": "On Fire",
-      "why": "Won {{count}} straight — bring a fire extinguisher"
-    },
-    "ice_cold": {
-      "name": "Cold Snap",
-      "why": "Lost {{count}} straight — currently accepting warm hugs"
-    },
-    "silver_forever": {
-      "name": "Silver Magnet",
-      "why": "Finished 2nd in {{count}} tournaments across your league history"
-    },
-    "almost_there": {
-      "name": "So Close",
-      "why": "Runner-up {{count}} times across your league history, with no tournament win yet"
-    },
-    "giant_killer": {
-      "name": "Giant Slayer",
-      "why": "Won {{count}} matches as the underdog across your league history"
-    },
-    "climbing": {
-      "name": "To the Moon",
-      "why": "Rating changed {{delta}} over your last {{seasons}} played tournaments ({{matches}} rated matches)"
-    },
-    "free_fall": {
-      "name": "Tumbling Down",
-      "why": "Rating changed {{delta}} over your last {{seasons}} played tournaments ({{matches}} rated matches)"
-    },
-    "loyal_duo": {
-      "name": "Partner in Crime",
-      "why": "Across your league history with {{partner}}: {{wins}} wins from {{played}} matches"
-    },
-    "closer": {
-      "name": "Cardiac Kid",
-      "why": "Won {{count}} matches by 2 points or fewer across your league history"
-    },
-    "blowout": {
-      "name": "Steamroller",
-      "why": "Won {{count}} matches by 5 or more points across your league history"
-    },
-    "iron": {
-      "name": "Match Veteran",
-      "why": "Played {{count}} rated matches across your league history"
-    },
-    "wildcard": {
-      "name": "Chaos Agent",
-      "why": "Your largest single-match rating change across league history was {{swing}} points"
-    }
   },
   "profile": {
     "title": "Player Profile",
@@ -1395,5 +1463,15 @@
     "preserve": "The season, selected players, squads, ratings and other seasons are preserved. Team Duel needs a freshly saved draft before generating again.",
     "stale": "Matches or bets changed after review. Nothing was deleted. Review the current counts and try again.",
     "success": "Deleted {{matches}} matches and {{bets}} bets. Reserved stakes have been released."
+  },
+  "badges": {
+    "edit": "Edit badge",
+    "label": "Player badge",
+    "help": "Choose a badge for this player in this league. Leave blank to remove it. Maximum 60 characters.",
+    "save": "Save badge",
+    "saving": "Saving…",
+    "saved": "Badge saved.",
+    "error": "Could not save the badge. Your text is kept. Try again.",
+    "tooLong": "Use no more than 60 characters."
   }
 }

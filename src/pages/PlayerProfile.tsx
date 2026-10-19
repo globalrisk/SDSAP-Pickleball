@@ -10,6 +10,8 @@ import { usePlayerProfile } from '../hooks/usePlayerProfile'
 import { formatMatchDate } from '../lib/formatDate'
 import { roundRating } from '../lib/ratings'
 import { useLeague } from '../context/LeagueContext'
+import { PlayerSkills } from '../components/PlayerSkills'
+import { PlayerBadgeEditor } from '../components/PlayerBadgeEditor'
 
 function formatDelta(delta: number): string {
   const rounded = roundRating(delta)
@@ -20,7 +22,7 @@ function formatDelta(delta: number): string {
 export function PlayerProfilePage() {
   const { t, i18n } = useTranslation()
   const { playerId } = useParams<{ playerId: string }>()
-  const { leaguePath } = useLeague()
+  const { league, leaguePath } = useLeague()
   const { data: profile, isError, error, isLoading } = usePlayerProfile(playerId)
 
   if (isError) return <ErrorState message={(error as Error).message} />
@@ -81,9 +83,10 @@ export function PlayerProfilePage() {
       />
       {profile.title ? (
         <div className="mb-6 -mt-2">
-          <PlayerTitleBadge title={profile.title} size="md" showWhy />
+          <PlayerTitleBadge title={profile.title} size="md" />
         </div>
       ) : null}
+      <PlayerBadgeEditor key={`${league.id}:${profile.id}`} playerId={profile.id} badge={profile.title?.label ?? ''} />
 
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatCard label={t('profile.rating')} value={String(roundRating(profile.rating))} />
@@ -102,6 +105,7 @@ export function PlayerProfilePage() {
         />
       </div>
 
+      <div className="mb-6"><PlayerSkills key={profile.id} playerId={profile.id} /></div>
       <ProfileFunStats stats={profile.funStats} playerName={profile.name} />
       <ProfileRivalries playerName={profile.name} rivalries={profile.rivalries} />
 

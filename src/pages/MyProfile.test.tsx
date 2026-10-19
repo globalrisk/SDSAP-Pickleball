@@ -17,6 +17,7 @@ vi.mock('../hooks/usePlayerPool', () => ({ usePlayerPool: () => ({ data: state.p
 vi.mock('../hooks/usePlayerProfile', () => ({ usePlayerProfile: () => { state.profileCalls++; return { data: state.profile, isLoading: false, isError: false } } }))
 vi.mock('../hooks/useMatches', () => ({ useMatches: () => ({ data: [], isLoading: false, isError: false }) }))
 vi.mock('../hooks/useTournamentRealtime', () => ({ useTournamentRealtime: () => {} }))
+vi.mock('../components/PlayerSkills', () => ({ PlayerSkills: () => <div>Player skills</div> }))
 import { MyProfilePage } from './MyProfile'
 import { SignedInRoute } from '../components/SignedInRoute'
 
@@ -51,6 +52,8 @@ describe('Personal hub identity and membership boundaries', () => {
     expect(html).toContain('Linked player')
     expect(html).toContain('membership is inactive')
     expect(html).toContain('Current rating')
+    expect(html).toContain('Player skills')
+    expect(render('stats')).toContain('Player skills')
     expect(html).not.toContain('private@example.test')
     expect(render('points')).toContain('750')
     expect(state.pointsCalls).toBe(1)

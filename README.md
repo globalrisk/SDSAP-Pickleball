@@ -104,6 +104,58 @@ for each league in the current browser. **Clear selection** removes it; no
 account or extra permissions are created. Completed personal recaps can be
 copied into a group chat.
 
+## Peer-rated player skills
+
+Player badges are optional, administrator-written text (up to 60 characters) per
+league. Open a player's public profile as an administrator and choose **Edit badge**;
+save a blank value to remove it. Profiles, My Profile, and rankings display only
+this saved text. Match results never generate or replace badges. Apply the
+`admin_custom_player_badges` migration before deploying this frontend.
+
+Public player profiles and **My Profile → Overview / Stats** show two shared,
+nine-axis radar charts. **Shot Skills** covers Drive, Drop, Serve, Dink, Return,
+Volley, Lob, Reset and Overhead / Smash. **Game Attributes** covers Footwork,
+Hand Speed, Stamina, Positioning, Shot Selection, Game IQ, Mental Game, Teamwork
+and Consistency. These peer scores are separate from match ratings and do not
+change with season filters. Both charts show individual scores, rating counts,
+and a distinct-rater count for that group. A person who rates both groups counts
+once in each group and once in the total.
+
+**About these attributes** explains every score. Positioning concerns where to be,
+while Footwork concerns movement technique. Shot Selection covers the immediate
+choice; Game IQ covers reading opponents and adapting the tactical plan. The
+rating form has one fieldset per group and one Save action; score any observed
+attributes and leave the others blank.
+
+Signed-in accounts linked to active players can rate any other active player in
+the same active league. Recipients do not need linked accounts. There is no
+self-rating or administrator override. Scores are whole numbers
+from 0–100; leave unobserved skills blank and score at least one. Each skill displays
+its current average and count. One editable submission per pair follows both
+identities across leagues; only averages and counts are public. The rater can see,
+edit, or withdraw their own submission. Withdrawal remains available after membership
+changes. Existing ratings survive account unlink/relink. Unlinked accounts cannot
+submit ratings; players without linked accounts can still receive them. The current account linked to an identity controls
+that identity's previous submissions.
+
+Apply the `peer_rated_player_skills`, `expand_player_attributes`, and
+`allow_unlinked_players_to_receive_skill_ratings` migrations before
+deploying the frontend. Expansion preserves all eight original scores and timestamps;
+Footwork moves between charts only. The ten added attributes start unrated. Older
+clients that omit the new fields preserve their previous values. Current clients
+send all eighteen fields and clear individual scores with explicit nulls.
+Raw submissions live in the unexposed `player_skills_private` schema; do not add
+that schema to the Data API's exposed schemas. Its RLS-enabled table intentionally
+has no client grants or policies. Four public invoker RPCs call narrowly granted
+private functions with fixed search paths; aggregates never return individual votes.
+The [RLS-without-policy informational notice](https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy)
+is expected for this private table. The new target index can also show an
+[unused-index notice](https://supabase.com/docs/guides/database/database-linter?lint=0005_unused_index)
+until real ratings and queries exercise it.
+
+For disposable browser verification, run `node scripts/test-support/skills-browser-server.mjs`.
+It prints a localhost URL and synthetic accounts; all test data is discarded on exit.
+
 ## Rating maintenance
 
 The app and maintenance script use the same league-scoped TrueSkill replay. Seeded

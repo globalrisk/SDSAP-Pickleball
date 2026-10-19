@@ -54,8 +54,7 @@ export interface PoolPlayer {
 }
 
 export interface PlayerTitle {
-  id: string
-  whyParams: Record<string, string | number>
+  label: string
 }
 
 export interface PlayerRankingRow {

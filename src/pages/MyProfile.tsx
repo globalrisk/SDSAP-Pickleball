@@ -20,6 +20,7 @@ import { ProfileRivalries } from '../components/ProfileRivalries'
 import { PlayerTitleBadge } from '../components/PlayerTitleBadge'
 import { RatingHistoryChart } from '../components/RatingHistoryChart'
 import { ErrorState, LoadingState, PageHeader } from '../components/Layout'
+import { PlayerSkills } from '../components/PlayerSkills'
 import type { PlayerProfile, PoolPlayer } from '../types'
 
 function Retry({ onRetry, message }: { onRetry: () => void; message: string }) {
@@ -86,8 +87,9 @@ function MemberProfile({ member, players, tab }: { member: PoolPlayer; players: 
   const stats = seasonal ? seasonStats : data
   return <div className="space-y-5">
     {member.status === 'inactive' ? <IdentityNotice message={t('me.inactive')} /> : null}
+    <PlayerSkills playerId={member.id} />
     <section className="rounded-xl border border-green-200 bg-white p-5">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><h2 className="font-bold text-green-950">{t('me.currentStanding')}</h2>{data.title ? <PlayerTitleBadge title={data.title} showWhy size="md" /> : null}</div>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><h2 className="font-bold text-green-950">{t('me.currentStanding')}</h2>{data.title ? <PlayerTitleBadge title={data.title} size="md" /> : null}</div>
       <div className="grid grid-cols-2 gap-3"><ProfileStatCard label={t('me.currentRating')} value={String(roundRating(data.rating))} /><ProfileStatCard label={t('me.currentRank')} value={data.rank == null ? t(data.provisional ? 'me.provisional' : 'me.unranked') : `#${data.rank}`} /></div>
     </section>
     {tab === 'stats' ? <div className="flex flex-wrap items-center justify-between gap-3"><div role="group" aria-label={t('me.statsPeriod')} className="flex gap-2">{['all', 'season'].map(scope => <button key={scope} type="button" aria-pressed={seasonal === (scope === 'season')} onClick={() => setParams(previous => { const next = new URLSearchParams(previous); next.set('scope', scope); return next })} className={`min-h-11 rounded-lg px-4 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 ${seasonal === (scope === 'season') ? 'bg-green-700 text-white' : 'border border-green-200 bg-white text-green-800'}`}>{t(scope === 'all' ? 'me.allTime' : 'me.selectedSeason')}</button>)}</div><p className="text-sm text-gray-600">{seasonal ? selectedSeason?.name : t('me.allTimeLeague')}</p></div> : <p className="text-sm font-semibold text-gray-600">{t('me.allTimeLeague')}</p>}

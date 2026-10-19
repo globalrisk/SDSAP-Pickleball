@@ -1,9 +1,120 @@
 {
+  "skills": {
+    "title": "Kỹ năng người chơi",
+    "subtitle": "Đánh giá từ người chơi · 0–100 · Dùng chung giữa các giải",
+    "chartTitle": "Biểu đồ radar {{group}}",
+    "chartDescription": "{{count}} trục thể hiện điểm trung bình, từ 0 ở tâm đến 100 ở ngoài cùng. Khoảng trống là thuộc tính chưa được đánh giá. Điểm và số lượt đánh giá được liệt kê bên dưới biểu đồ.",
+    "groups": {
+      "shots": "Kỹ thuật đánh bóng",
+      "attributes": "Năng lực thi đấu"
+    },
+    "about": "Giải thích các thuộc tính",
+    "distinctions": "Vị trí là chọn nơi đứng; Di chuyển là cách di chuyển. Chọn cú đánh là quyết định trong tình huống hiện tại; Tư duy chiến thuật là đọc và thích nghi với trận đấu. Chỉ đánh giá hành vi bạn đã quan sát trên sân và để trống thuộc tính chưa rõ.",
+    "names": {
+      "drive": "Drive",
+      "drop": "Drop",
+      "serve": "Giao bóng",
+      "dink": "Dink",
+      "return": "Trả giao bóng",
+      "volley": "Volley",
+      "lob": "Lốp bóng",
+      "reset": "Reset",
+      "overhead": "Đập bóng / Smash",
+      "footwork": "Di chuyển",
+      "hand_speed": "Tốc độ tay",
+      "stamina": "Sức bền",
+      "positioning": "Vị trí",
+      "shot_selection": "Chọn cú đánh",
+      "game_iq": "Tư duy chiến thuật",
+      "mental_game": "Tâm lý thi đấu",
+      "teamwork": "Phối hợp",
+      "consistency": "Độ ổn định"
+    },
+    "chartNames": {
+      "drive": "Drive",
+      "drop": "Drop",
+      "serve": "Giao|bóng",
+      "dink": "Dink",
+      "return": "Trả giao|bóng",
+      "volley": "Volley",
+      "lob": "Lốp bóng",
+      "reset": "Reset",
+      "overhead": "Đập bóng",
+      "footwork": "Di chuyển",
+      "hand_speed": "Tốc độ|tay",
+      "stamina": "Sức bền",
+      "positioning": "Vị trí",
+      "shot_selection": "Chọn cú|đánh",
+      "game_iq": "Tư duy|chiến thuật",
+      "mental_game": "Tâm lý|thi đấu",
+      "teamwork": "Phối hợp",
+      "consistency": "Độ ổn định"
+    },
+    "descriptions": {
+      "drive": "Đánh bóng mạnh sau nảy với tốc độ, độ sâu và vị trí được kiểm soát.",
+      "drop": "Đưa bóng nhẹ vào vùng kitchen để tiến lên lưới an toàn.",
+      "serve": "Giao bóng ổn định, có chủ đích về độ sâu và vị trí.",
+      "dink": "Kiểm soát các pha bóng nhẹ sát kitchen và tạo cơ hội tấn công.",
+      "return": "Trả giao bóng ổn định, có độ sâu và vị trí để chiếm vị trí thuận lợi.",
+      "volley": "Kiểm soát và đặt bóng khi đánh trên không trước khi bóng nảy.",
+      "lob": "Đưa bóng qua đầu đối thủ với độ cao và độ sâu đủ để đẩy họ lùi lại.",
+      "reset": "Hóa giải cú tấn công của đối thủ bằng bóng nhẹ để lấy lại thế chủ động.",
+      "overhead": "Kết thúc bóng cao bằng sức mạnh và vị trí chính xác.",
+      "footwork": "Di chuyển hiệu quả, giữ thăng bằng và hồi vị giữa các cú đánh.",
+      "hand_speed": "Phản ứng và điều khiển vợt trong các pha bóng nhanh.",
+      "stamina": "Duy trì di chuyển, nỗ lực và chất lượng cú đánh trong trận dài.",
+      "positioning": "Chọn nơi đứng, che khoảng trống và chuyển vị trí cùng đồng đội.",
+      "shot_selection": "Chọn lúc drive, drop, dink, tấn công hoặc phòng thủ trong pha bóng.",
+      "game_iq": "Đọc đối thủ, nhận ra quy luật và điều chỉnh kế hoạch chiến thuật tổng thể.",
+      "mental_game": "Giữ tập trung, bình tĩnh, kiên nhẫn và phục hồi tinh thần dưới áp lực.",
+      "teamwork": "Giao tiếp rõ ràng, phối hợp trách nhiệm và hỗ trợ đồng đội.",
+      "consistency": "Duy trì khả năng thực hiện ổn định và hạn chế lỗi có thể tránh."
+    },
+    "raters_other": "Được {{count}} người chơi đánh giá",
+    "votes_other": "{{count}} lượt đánh giá",
+    "notRated": "Chưa đánh giá",
+    "empty": "Chưa có đánh giá từ người chơi khác. Điểm kỹ năng sẽ xuất hiện sau lượt đánh giá đầu tiên.",
+    "signIn": "Đăng nhập bằng tài khoản đã liên kết với người chơi để đánh giá người khác trong giải.",
+    "rate": "Đánh giá kỹ năng",
+    "edit": "Sửa đánh giá của bạn",
+    "formTitle": "Đánh giá kỹ năng của bạn",
+    "formHelp": "Nhập số nguyên từ 0–100. Đánh giá thuộc tính đã quan sát ở một hoặc cả hai nhóm và để trống phần còn lại. Đánh giá ít nhất một thuộc tính. Chỉ điểm trung bình và số lượt được công khai; chỉ bạn xem được đánh giá của mình.",
+    "save": "Lưu đánh giá",
+    "saving": "Đang lưu…",
+    "remove": "Xóa đánh giá của bạn",
+    "saved": "Đã lưu đánh giá của bạn.",
+    "removed": "Đã xóa đánh giá của bạn.",
+    "validation": "Đánh giá ít nhất một thuộc tính bằng số nguyên từ 0 đến 100, hoặc để trống thuộc tính.",
+    "loadError": "Không thể tải điểm kỹ năng.",
+    "accountError": "Không thể kiểm tra tài khoản người chơi đã liên kết.",
+    "ratingError": "Không thể tải đánh giá hoặc kiểm tra điều kiện đánh giá.",
+    "saveError": "Không thể lưu đánh giá. Các giá trị đã nhập vẫn được giữ lại. Kiểm tra tài khoản của bạn vẫn liên kết với người chơi và cả hai người chơi đang hoạt động trong giải rồi thử lại.",
+    "removeError": "Không thể xóa đánh giá. Vui lòng thử lại.",
+    "eligibility": {
+      "self": "Điểm này do người chơi khác đánh giá. Bạn không thể tự đánh giá mình.",
+      "unlinked": "Nhờ quản trị viên liên kết tài khoản với người chơi trước khi đánh giá kỹ năng.",
+      "league_inactive": "Không thể gửi đánh giá mới trong giải đã lưu trữ.",
+      "not_member": "Cả hai người chơi phải là thành viên của giải này để gửi đánh giá.",
+      "inactive": "Cả hai người chơi phải đang hoạt động trong giải này để gửi đánh giá."
+    }
+  },
   "me": {
     "title": "Hồ sơ của tôi",
     "menu": "Điều hướng hồ sơ của tôi",
-    "tabs": { "overview": "Tổng quan", "stats": "Thống kê", "matches": "Trận đấu", "points": "Điểm", "settings": "Cài đặt" },
-    "menuItems": { "overview": "Tổng quan hồ sơ", "stats": "Thống kê của tôi", "matches": "Trận đấu của tôi", "points": "Điểm Pickle của tôi", "settings": "Cài đặt tài khoản" },
+    "tabs": {
+      "overview": "Tổng quan",
+      "stats": "Thống kê",
+      "matches": "Trận đấu",
+      "points": "Điểm",
+      "settings": "Cài đặt"
+    },
+    "menuItems": {
+      "overview": "Tổng quan hồ sơ",
+      "stats": "Thống kê của tôi",
+      "matches": "Trận đấu của tôi",
+      "points": "Điểm Pickle của tôi",
+      "settings": "Cài đặt tài khoản"
+    },
     "linked": "Tài khoản đã liên kết với người chơi",
     "linkedPlayer": "Người chơi đã liên kết",
     "notLinked": "Chưa liên kết",
@@ -28,7 +139,12 @@
     "noSeason": "Giải này chưa có mùa thi đấu.",
     "noFixtures": "Bạn chưa có lịch đấu trong mùa đang chọn.",
     "seasonMatches": "Trận đấu trong mùa đang chọn",
-    "matchGroups": { "playing": "Đang thi đấu", "upNext": "Sắp lên sân", "remaining": "Trận còn lại", "results": "Kết quả" },
+    "matchGroups": {
+      "playing": "Đang thi đấu",
+      "upNext": "Sắp lên sân",
+      "remaining": "Trận còn lại",
+      "results": "Kết quả"
+    },
     "court": "Sân {{number}}",
     "forfeit": "Bỏ cuộc · không tính rating",
     "matchRating": "Rating {{delta}}",
@@ -539,56 +655,6 @@
     "provisionalSection": "Người chơi tạm xếp",
     "inactiveSection": "Người chơi không hoạt động",
     "empty": "Chưa có người chơi trong danh sách."
-  },
-  "titles": {
-    "on_fire": {
-      "name": "Đang cháy",
-      "why": "Thắng liền {{count}} trận"
-    },
-    "ice_cold": {
-      "name": "Đóng băng",
-      "why": "Thua liền {{count}} trận"
-    },
-    "silver_forever": {
-      "name": "Vua về nhì",
-      "why": "Đã về nhì {{count}} giải đấu trong toàn bộ lịch sử của bạn tại giải"
-    },
-    "almost_there": {
-      "name": "Thiếu chút nữa",
-      "why": "Đã về nhì {{count}} lần trong lịch sử tham gia giải, chưa từng vô địch"
-    },
-    "giant_killer": {
-      "name": "Khắc tinh cửa trên",
-      "why": "Đã thắng {{count}} trận khi là cửa dưới trong toàn bộ lịch sử tham gia giải"
-    },
-    "climbing": {
-      "name": "Lên như diều",
-      "why": "Điểm thay đổi {{delta}} trong {{seasons}} giải đấu gần nhất bạn tham gia ({{matches}} trận tính điểm)"
-    },
-    "free_fall": {
-      "name": "Tụt không phanh",
-      "why": "Điểm thay đổi {{delta}} trong {{seasons}} giải đấu gần nhất bạn tham gia ({{matches}} trận tính điểm)"
-    },
-    "loyal_duo": {
-      "name": "Cạ cứng",
-      "why": "Trong toàn bộ lịch sử đánh cặp với {{partner}}: thắng {{wins}}/{{played}} trận"
-    },
-    "closer": {
-      "name": "Vua sát nút",
-      "why": "Đã thắng {{count}} trận với cách biệt không quá 2 điểm trong lịch sử tham gia giải"
-    },
-    "blowout": {
-      "name": "Vua áp đảo",
-      "why": "Đã thắng {{count}} trận với cách biệt từ 5 điểm trong lịch sử tham gia giải"
-    },
-    "iron": {
-      "name": "Dày dạn trận mạc",
-      "why": "Đã chơi {{count}} trận tính điểm trong toàn bộ lịch sử tham gia giải"
-    },
-    "wildcard": {
-      "name": "Ẩn số",
-      "why": "Biến động điểm lớn nhất trong một trận của bạn là {{swing}} điểm, xét toàn bộ lịch sử tham gia giải"
-    }
   },
   "profile": {
     "title": "Hồ sơ người chơi",
@@ -1391,5 +1457,15 @@
     "preserve": "Giữ nguyên mùa giải, danh sách người chơi, đội, xếp hạng và các mùa khác. Với Team Duel, cần lưu bản chia đội mới trước khi tạo lại lịch đấu.",
     "stale": "Các trận hoặc cược đã thay đổi sau khi xem trước. Chưa xóa dữ liệu. Hãy xem lại số lượng và thử lại.",
     "success": "Đã xóa {{matches}} trận và {{bets}} cược. Điểm đang giữ đã được giải phóng."
+  },
+  "badges": {
+    "edit": "Chỉnh sửa huy hiệu",
+    "label": "Huy hiệu người chơi",
+    "help": "Đặt huy hiệu cho người chơi trong giải này. Để trống để xóa. Tối đa 60 ký tự.",
+    "save": "Lưu huy hiệu",
+    "saving": "Đang lưu…",
+    "saved": "Đã lưu huy hiệu.",
+    "error": "Không thể lưu huy hiệu. Nội dung đã nhập được giữ lại. Vui lòng thử lại.",
+    "tooLong": "Nhập tối đa 60 ký tự."
   }
 }

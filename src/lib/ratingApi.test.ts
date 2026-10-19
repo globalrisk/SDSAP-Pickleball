@@ -1,12 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { TitlePlayerStats } from './playerTitles'
 
 const state = vi.hoisted(() => ({
   tables: {} as Record<string, Record<string, unknown>[]>,
   revision: 0,
   overlap: false,
   calls: [] as Record<string, unknown>[],
-  titleStats: [] as unknown[],
 }))
 
 vi.mock('./supabase', () => ({
@@ -40,18 +38,12 @@ vi.mock('./supabase', () => ({
   },
 }))
 
-vi.mock('./playerTitles', async (importOriginal) => ({
-  ...await importOriginal<typeof import('./playerTitles')>(),
-  assignPlayerTitles(stats: unknown[]) { state.titleStats = stats; return new Map() },
-}))
-
 import { fetchPlayerTitlesMap, recomputeAllRatings } from './api'
 
 beforeEach(() => {
   state.revision = 0
   state.overlap = false
   state.calls = []
-  state.titleStats = []
   state.tables = {
     league_players: ['a', 'b', 'c', 'd'].map((pool_player_id, i) => ({
       pool_player_id, initial_rating: i < 2 ? 1200 : 1800,
@@ -75,22 +67,12 @@ beforeEach(() => {
 })
 
 describe('rating API regressions', () => {
-  it('provides played tournament metadata for recent badge calculations', async () => {
-    state.tables.seasons = [{ id: 'season', name: 'September Cup', starts_at: '2026-09-01', status: 'active' }]
-    await fetchPlayerTitlesMap('league')
-    const player = (state.titleStats as TitlePlayerStats[]).find((p) => p.id === 'a')!
-    expect(player.recentSeasonsPlayed).toBe(1)
-    expect(player.recentMatchesPlayed).toBe(1)
-    expect(player.matchesBeforeRecentWindow).toBe(0)
-  })
-
-  it('classifies a past upset from pre-match evidence even when the winners are now favorites', async () => {
-    await fetchPlayerTitlesMap('league')
-    expect((state.titleStats as TitlePlayerStats[]).find((p) => p.id === 'a')!.underdogWins).toBe(1)
+  it('returns only administrator-entered badges without generating titles from results', async () => {
+    state.tables.league_players[0].badge = 'Kitchen Commander'
+    state.tables.league_players[1].badge = null
+    expect(await fetchPlayerTitlesMap('league')).toEqual(new Map([['a', { label: 'Kitchen Commander' }]]))
     state.tables.league_players[0].rating = 2500
-    state.tables.rating_history.push({ id: 'future', pool_player_id: 'a', match_id: 'later', sequence: 8, rating: 2500, rating_deviation: 70 })
-    await fetchPlayerTitlesMap('league')
-    expect((state.titleStats as TitlePlayerStats[]).find((p) => p.id === 'a')!.underdogWins).toBe(1)
+    expect(await fetchPlayerTitlesMap('league')).toEqual(new Map([['a', { label: 'Kitchen Commander' }]]))
   })
 
   it('retries an overlapping commit with both saved results included in the replacement', async () => {

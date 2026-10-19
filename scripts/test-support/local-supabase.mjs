@@ -75,6 +75,7 @@ export async function startLocalSupabase({ port = 0, seed = true, beforeMigratio
   let serial = Promise.resolve()
   const calls = []
   let conflictOnce = false
+  let skillSaveFailureOnce = false
   const server = createServer((req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*')
     res.setHeader('Access-Control-Allow-Headers', '*')
@@ -110,6 +111,7 @@ export async function startLocalSupabase({ port = 0, seed = true, beforeMigratio
           const name = url.pathname.split('/').at(-1)
           calls.push({ name, args: structuredClone(body) })
           if (name === 'save_match_and_ratings_atomic' && conflictOnce) { conflictOnce = false; throw Object.assign(new Error('Rating revision conflict'), { code: '40001' }) }
+          if (name === 'save_player_skill_rating' && skillSaveFailureOnce) { skillSaveFailureOnce = false; throw Object.assign(new Error('Disposable skill save failure'), { code: '40001' }) }
           const entries = Object.entries(body ?? {})
           const args = entries.map(([key], i) => `${identifier(key)} => $${i + 1}`).join(',')
           const returnsSet = (await db.query("SELECT bool_or(proretset) AS is_set FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname=$1", [name])).rows[0]?.is_set
@@ -197,6 +199,7 @@ export async function startLocalSupabase({ port = 0, seed = true, beforeMigratio
   await new Promise((resolve) => server.listen(port, '127.0.0.1', resolve))
   return { db, url: `http://127.0.0.1:${server.address().port}`, token, seeded, calls, addAccount,
     conflictOnNextSave() { conflictOnce = true },
+    failNextSkillSave() { skillSaveFailureOnce = true },
     async close() { await new Promise((resolve) => server.close(resolve)); await db.close() } }
 }
 

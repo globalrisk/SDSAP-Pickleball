@@ -5,22 +5,15 @@ import {
 } from './ratings'
 import { buildRatingsReplacement, type PendingRatingMatch } from './ratingRepository'
 import { fetchAllPages } from './pagination'
-import { buildPreMatchRatings } from './historicalRatings'
 import { buildRoundRobinMatches } from './schedule'
 import { generateLeagueDuelSeasonMatches } from './leagueTeamDuelApi'
 import { validateTeamDuelScore } from './teamDuelSchedule'
 import { partnershipKey } from './balanceTeams'
 import { validateForfeitTeam, validateMatchResult } from './matchResultValidation'
 import { computePlayerFunStats } from './engagement'
-import {
-  assignPlayerTitles,
-  buildTitlePlayerStats,
-  type PlayerTitle as AssignedPlayerTitle,
-} from './playerTitles'
 import { buildPlayerMatchEvents } from './playerMatches'
 import { computePlayerRivalries } from './rivalries'
 import { computeSeasonRecap, type RatingHistoryRow } from './seasonRecap'
-import { computeStandings } from './standings'
 import type { MatchResultSnapshot } from './matchSaveRecovery'
 import type { BetCorrection } from './betsApi'
 import type {
@@ -148,242 +141,20 @@ export async function fetchPlayerRankings(leagueId: string): Promise<PlayerRanki
   }))
 }
 
-function toPublicTitle(title: AssignedPlayerTitle | undefined): PlayerTitle | null {
-  if (!title) return null
-  return { id: title.id, whyParams: title.whyParams }
+/** Badges are assigned by administrators, never inferred from match results. */
+export async function fetchPlayerTitlesMap(leagueId: string): Promise<Map<string, PlayerTitle>> {
+  const { data, error } = await fetchAllPages((from, to) => supabase
+    .from('league_players').select('pool_player_id, badge')
+    .eq('league_id', leagueId).order('pool_player_id').range(from, to))
+  if (error) throw error
+  return new Map((data ?? []).filter(row => row.badge).map(row => [row.pool_player_id, { label: row.badge }]))
 }
 
-export async function fetchPlayerTitlesMap(leagueId: string): Promise<Map<string, PlayerTitle>> {
-  const { data: pool, error: poolError } = await fetchAllPages((from, to) => supabase
-    .from('league_players')
-    .select('pool_player_id, status, rating, rating_deviation, volatility, initial_rating, created_at, player_pool!inner(id, name, created_at)')
-    .eq('league_id', leagueId)
-    .order('pool_player_id')
-    .range(from, to),
-  )
-  if (poolError) throw poolError
-
-  const poolRows = ((pool ?? []) as unknown as LeaguePlayerRow[]).map(mapLeaguePlayer)
-  if (poolRows.length === 0) return new Map()
-
-  const seedsById = new Map(
-    poolRows.map((row) => [
-      row.id,
-      { rating: row.initial_rating, rd: TRUESKILL_DEFAULTS.rd },
-    ]),
-  )
-  const nameById = new Map(poolRows.map((row) => [row.id, row.name as string]))
-
-  const { data: historyRows, error: historyError } = await fetchAllPages((from, to) => supabase
-    .from('rating_history')
-    .select('id, pool_player_id, match_id, rating, rating_deviation, recorded_at, sequence')
-    .eq('league_id', leagueId)
-    .order('sequence')
-    .order('id')
-    .range(from, to),
-  )
-  if (historyError) throw historyError
-
-  const { data: matches, error: matchError } = await fetchAllPages((from, to) => supabase
-    .from('matches')
-    .select(
-      'id, season_id, status, winner_team_id, home_team_id, away_team_id, home_score, away_score, home_pool_player_ids, away_pool_player_ids, result_recorded_at, seasons!inner(league_id)',
-    )
-    .eq('seasons.league_id', leagueId)
-    .order('id')
-    .range(from, to),
-  )
-  if (matchError) throw matchError
-
-  const { data: teams, error: teamsError } = await fetchAllPages((from, to) => supabase
-    .from('teams')
-    .select('id, season_id, name, color, created_at, players(id, name, pool_player_id, team_id, is_present, created_at), seasons!inner(league_id)')
-    .eq('seasons.league_id', leagueId)
-    .order('id')
-    .range(from, to),
-  )
-  if (teamsError) throw teamsError
-
-  const { data: seasons, error: seasonsError } = await fetchAllPages((from, to) => supabase
-    .from('seasons')
-    .select('id, status, name, starts_at, format')
-    .eq('league_id', leagueId)
-    .order('id')
-    .range(from, to),
-  )
-  if (seasonsError) throw seasonsError
-
-  const teamsBySeason = new Map<string, TeamWithPlayers[]>()
-  for (const team of teams ?? []) {
-    const list = teamsBySeason.get(team.season_id) ?? []
-    list.push({
-      ...team,
-      players: [...(team.players ?? [])].sort((a, b) =>
-        a.created_at.localeCompare(b.created_at),
-      ),
-    } as unknown as TeamWithPlayers)
-    teamsBySeason.set(team.season_id, list)
-  }
-
-  const matchesBySeason = new Map<string, MatchWithTeams[]>()
-  for (const match of matches ?? []) {
-    const list = matchesBySeason.get(match.season_id) ?? []
-    list.push(match as unknown as MatchWithTeams)
-    matchesBySeason.set(match.season_id, list)
-  }
-
-  const seasonFinishes: {
-    seasonId: string
-    ranks: Map<string, number>
-  }[] = []
-
-  for (const season of seasons ?? []) {
-    const seasonTeams = teamsBySeason.get(season.id) ?? []
-    const seasonMatches = matchesBySeason.get(season.id) ?? []
-    const finished = seasonMatches.filter(
-      (m) => m.status === 'completed' || m.status === 'forfeit',
-    )
-    if (seasonTeams.length === 0 || finished.length === 0) continue
-    // Prefer archived seasons; allow active if most fixtures are done
-    const totalFixtures = seasonMatches.length
-    const doneRatio = totalFixtures > 0 ? finished.length / totalFixtures : 0
-    if (season.status !== 'archived' && doneRatio < 0.8) continue
-
-    const standings = computeStandings(seasonTeams, finished, season.format)
-    const ranks = new Map<string, number>()
-    for (const row of standings) {
-      for (const player of row.players) {
-        ranks.set(player.poolPlayerId, row.rank)
-      }
-    }
-    seasonFinishes.push({ seasonId: season.id, ranks })
-  }
-
-  const completedMatches = (matches ?? []).filter((m) => m.status === 'completed')
-
-  const preMatchRatings = buildPreMatchRatings(historyRows, seedsById)
-  const matchForTitles = completedMatches.map((match) => {
-    const homeIds = (match.home_pool_player_ids ?? []) as string[]
-    const awayIds = (match.away_pool_player_ids ?? []) as string[]
-    const resolvePlayers = (ids: string[]) =>
-      ids.map((id) => {
-        const skill = preMatchRatings.get(`${match.id}:${id}`) ?? seedsById.get(id)
-        return {
-          id,
-          name: nameById.get(id) ?? '?',
-          rating: skill?.rating ?? 1500,
-          rd: skill?.rd ?? TRUESKILL_DEFAULTS.rd,
-        }
-      })
-
-    // Fallback to roster if snapshot missing
-    let homePlayers = resolvePlayers(homeIds)
-    let awayPlayers = resolvePlayers(awayIds)
-    if (homePlayers.length === 0 || awayPlayers.length === 0) {
-      const homeTeam = (teams ?? []).find((t) => t.id === match.home_team_id)
-      const awayTeam = (teams ?? []).find((t) => t.id === match.away_team_id)
-      if (homePlayers.length === 0 && homeTeam?.players) {
-        homePlayers = resolvePlayers(homeTeam.players.map((p) => p.pool_player_id))
-      }
-      if (awayPlayers.length === 0 && awayTeam?.players) {
-        awayPlayers = resolvePlayers(awayTeam.players.map((p) => p.pool_player_id))
-      }
-    }
-
-    return {
-      id: match.id,
-      winner_team_id: match.winner_team_id,
-      home_team_id: match.home_team_id,
-      away_team_id: match.away_team_id,
-      home_score: match.home_score,
-      away_score: match.away_score,
-      home_pool_player_ids: homePlayers.map((player) => player.id),
-      away_pool_player_ids: awayPlayers.map((player) => player.id),
-      homePlayers,
-      awayPlayers,
-    }
+export async function updatePlayerBadge(leagueId: string, playerId: string, label: string): Promise<void> {
+  const { error } = await supabase.rpc('set_player_badge', {
+    p_league_id: leagueId, p_player_id: playerId, p_badge: label.trim() || null,
   })
-
-  const resultByMatchPlayer = new Map<string, 'W' | 'L'>()
-  const partnerByMatchPlayer = new Map<string, string>()
-  const opponentsByMatchPlayer = new Map<string, string[]>()
-
-  for (const match of matchForTitles) {
-    if (!match.winner_team_id) continue
-    const homeIds = match.homePlayers.map((p) => p.id)
-    const awayIds = match.awayPlayers.map((p) => p.id)
-    const homeWon = match.winner_team_id === match.home_team_id
-
-    for (const id of homeIds) {
-      const key = `${match.id}:${id}`
-      resultByMatchPlayer.set(key, homeWon ? 'W' : 'L')
-      partnerByMatchPlayer.set(
-        key,
-        homeIds.filter((x) => x !== id).map((x) => nameById.get(x) ?? '?')[0] ?? '?',
-      )
-      opponentsByMatchPlayer.set(
-        key,
-        awayIds.map((x) => nameById.get(x) ?? '?'),
-      )
-    }
-    for (const id of awayIds) {
-      const key = `${match.id}:${id}`
-      resultByMatchPlayer.set(key, homeWon ? 'L' : 'W')
-      partnerByMatchPlayer.set(
-        key,
-        awayIds.filter((x) => x !== id).map((x) => nameById.get(x) ?? '?')[0] ?? '?',
-      )
-      opponentsByMatchPlayer.set(
-        key,
-        homeIds.map((x) => nameById.get(x) ?? '?'),
-      )
-    }
-  }
-
-  const matchById = new Map((matches ?? []).map((match) => [match.id, match]))
-  const seasonById = new Map((seasons ?? []).map((season) => [season.id, season]))
-  const historyByPlayer = new Map<string, RatingHistoryPoint[]>()
-  for (const row of historyRows ?? []) {
-    const list = historyByPlayer.get(row.pool_player_id) ?? []
-    const key = row.match_id ? `${row.match_id}:${row.pool_player_id}` : null
-    const match = row.match_id ? matchById.get(row.match_id) : undefined
-    const season = match ? seasonById.get(match.season_id) : undefined
-    list.push({
-      id: row.id,
-      matchId: row.match_id,
-      rating: row.rating,
-      ratingDeviation: row.rating_deviation,
-      recordedAt: row.recorded_at,
-      sequence: row.sequence,
-      roundNumber: null,
-      seasonId: match?.season_id ?? null,
-      seasonName: season?.name ?? null,
-      seasonStartsAt: season?.starts_at ?? null,
-      resultRecordedAt: match?.result_recorded_at ?? null,
-      result: key ? resultByMatchPlayer.get(key) ?? null : null,
-      partnerName: key ? partnerByMatchPlayer.get(key) ?? null : null,
-      opponentNames: key ? opponentsByMatchPlayer.get(key) ?? [] : [],
-      scoreLabel: null,
-    })
-    historyByPlayer.set(row.pool_player_id, list)
-  }
-
-  const stats = poolRows.map((player) =>
-    buildTitlePlayerStats({
-      id: player.id,
-      name: player.name,
-      history: historyByPlayer.get(player.id) ?? [],
-      matches: matchForTitles,
-      seasonFinishes,
-    }),
-  )
-
-  const assigned = assignPlayerTitles(stats)
-  const publicMap = new Map<string, PlayerTitle>()
-  for (const [id, title] of assigned) {
-    publicMap.set(id, toPublicTitle(title)!)
-  }
-  return publicMap
+  if (error) throw error
 }
 
 export async function fetchPlayerProfile(
