@@ -25,6 +25,7 @@ import { roundRating } from '../lib/ratings'
 import { ArchivedSeasonBanner } from '../components/ArchivedSeasonBanner'
 import { BalancedTeamsBuilder } from '../components/BalancedTeamsBuilder'
 import { LeagueTeamDuelSetup } from '../components/LeagueTeamDuelSetup'
+import { SeasonMatchDeletion } from '../components/SeasonMatchDeletion'
 import { PicklePrizeSettings, PickleDistribution } from '../components/PicklePrizeSettings'
 import { fetchPicklePreview } from '../lib/picklePointsApi'
 import { formatPicklePoints } from '../lib/picklePoints'
@@ -1447,6 +1448,8 @@ export function SetupPage() {
           </form>
         </section>
       )}
+
+      {activeSection === 'teams' && !isDuel && isSelectedSeasonActive && selectedSeason && !!activeSeasonMatches?.length ? <div className="mb-8"><SeasonMatchDeletion season={selectedSeason} fixtures={activeSeasonMatches} busy={deleteTeamsMutation.isPending || createTeamMutation.isPending || balanceTeamsMutation.isPending} /></div> : null}
 
       {activeSection === 'teams' && !isDuel && isSelectedSeasonActive && (teams ?? []).length > 0 ? (
         <details className="mb-8 rounded-xl border border-red-200 bg-red-50 p-4">

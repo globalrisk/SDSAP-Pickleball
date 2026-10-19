@@ -1383,5 +1383,17 @@
     "eligibleOnly": "Only matches I can bet on",
     "startTitle": "Start with a match",
     "startHelp": "See the pairs and estimated win chances in Matches, then choose your side and stake."
+  },
+  "seasonDelete": {
+    "title": "Delete season matches and bets",
+    "button": "Delete all matches and bets",
+    "help": "Remove every unplayed match in this season and its associated bets, including accepted bets. Reserved stakes become available again.",
+    "blocked": "Available before any result or forfeit is recorded, with no match on court, linked rating history, or bet settlement. Archived and awarded seasons stay protected.",
+    "confirm": "Permanently remove the full schedule and its bets from {{name}}? This action cannot be undone in the app.",
+    "counts": "{{matches}} matches and {{bets}} bets will be deleted ({{open}} open, {{accepted}} accepted).",
+    "release": "Reserved stakes to release: {{amount}}. Wallet balances do not change.",
+    "preserve": "The season, selected players, squads, ratings and other seasons are preserved. Team Duel needs a freshly saved draft before generating again.",
+    "stale": "Matches or bets changed after review. Nothing was deleted. Review the current counts and try again.",
+    "success": "Deleted {{matches}} matches and {{bets}} bets. Reserved stakes have been released."
   }
 }

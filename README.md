@@ -245,6 +245,9 @@ league members can back either pair. **Only matches I can bet on** includes the
 player's own unstarted matches and filters out closed matches. **Bets** remains the wallet, offer,
 history, and administrator review dashboard in desktop navigation and mobile **More**.
 Its **Create an offer** button opens Matches with the eligibility filter enabled.
+
+Administrators can use **League setup → Season → Teams & fixtures → Advanced fixture actions → Delete all matches and bets** to reset an active, unplayed season. Review the current match and bet counts, including accepted bets, before confirming. The operation removes all associated contracts and releases reserved stakes without changing wallet balances, ratings, squads or roster. A stale review is rejected if a match or bet changes. Completed/forfeited/playing matches, linked rating history, financial settlements, awards and archived seasons remain protected. A private immutable receipt preserves the deletion snapshot; API clients cannot access it. Team Duel requires a freshly saved draft before regenerating. Deploy the `delete_unplayed_season_matches_and_bets` migration before using this action.
+
 Active league members can offer positive stakes in increments of 1,000. Creating an offer reserves
 the creator's stake; acceptance reserves the opponent's stake. Accepted contracts cannot
 be withdrawn. Match start or a recorded result closes unaccepted offers permanently;

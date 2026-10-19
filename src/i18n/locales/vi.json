@@ -1379,5 +1379,17 @@
     "eligibleOnly": "Chỉ hiện trận tôi có thể cược",
     "startTitle": "Bắt đầu từ trận đấu",
     "startHelp": "Xem các cặp và xác suất thắng ước tính tại Trận đấu, sau đó chọn cặp và mức cược."
+  },
+  "seasonDelete": {
+    "title": "Xóa các trận và cược của mùa giải",
+    "button": "Xóa tất cả trận và cược",
+    "help": "Xóa toàn bộ trận chưa thi đấu của mùa này và các cược liên quan, kể cả cược đã chấp nhận. Điểm đang giữ sẽ được giải phóng.",
+    "blocked": "Chỉ dùng trước khi có kết quả hoặc xử thua, không có trận đang thi đấu, lịch sử xếp hạng hoặc quyết toán cược. Không áp dụng cho mùa đã lưu trữ hoặc trao thưởng.",
+    "confirm": "Xóa vĩnh viễn toàn bộ lịch đấu và các cược của {{name}}? Không thể hoàn tác trong ứng dụng.",
+    "counts": "Sẽ xóa {{matches}} trận và {{bets}} cược ({{open}} đang mở, {{accepted}} đã chấp nhận).",
+    "release": "Điểm đang giữ sẽ được giải phóng: {{amount}}. Tổng số dư ví không thay đổi.",
+    "preserve": "Giữ nguyên mùa giải, danh sách người chơi, đội, xếp hạng và các mùa khác. Với Team Duel, cần lưu bản chia đội mới trước khi tạo lại lịch đấu.",
+    "stale": "Các trận hoặc cược đã thay đổi sau khi xem trước. Chưa xóa dữ liệu. Hãy xem lại số lượng và thử lại.",
+    "success": "Đã xóa {{matches}} trận và {{bets}} cược. Điểm đang giữ đã được giải phóng."
   }
 }
