@@ -186,7 +186,8 @@ closing the process discards them.
 
 ## Match bets with Pickle points
 
-Deploy `20261012160242_pickle_match_bets.sql` before the betting frontend. It credits
+Deploy `20261012160242_pickle_match_bets.sql` and
+`20261019031307_allow_players_to_back_own_pair.sql` before the betting frontend. The original migration credits
 existing prize allocations into league wallets once and preserves final award receipts.
 It also removes automatic administrator assignment for new Supabase Auth accounts;
 existing administrators retain their roles. Any future
@@ -237,11 +238,14 @@ administrator role; its privileged-RPC notice is expected as described above.
 **Matches** is the entry point for creating offers: compare the pairs and estimated
 win chances, then choose **🥒 Bet on this match**. The inline panel defaults to equal
 stakes, supports a different opposing stake, previews the pot and profits, and lets
-spectators accept existing offers for that match. **Only matches I can bet on** filters
-out the player's own matches and closed matches. **Bets** remains the wallet, offer,
+league members accept existing offers for that match. Players in a match can create
+offers backing their own pair or accept offers backing the opposing pair (so the
+acceptor backs their own pair). They cannot bet against themselves. Non-playing
+league members can back either pair. **Only matches I can bet on** includes the
+player's own unstarted matches and filters out closed matches. **Bets** remains the wallet, offer,
 history, and administrator review dashboard in desktop navigation and mobile **More**.
 Its **Create an offer** button opens Matches with the eligibility filter enabled.
-Active league spectators can offer positive stakes in increments of 1,000. Creating an offer reserves
+Active league members can offer positive stakes in increments of 1,000. Creating an offer reserves
 the creator's stake; acceptance reserves the opponent's stake. Accepted contracts cannot
 be withdrawn. Match start or a recorded result closes unaccepted offers permanently;
 changed players or sides void pending contracts. Renaming players preserves contracts.

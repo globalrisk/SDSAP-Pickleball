@@ -10,7 +10,7 @@ import { useMatches } from '../hooks/useMatches'
 import { usePlayerPool } from '../hooks/usePlayerPool'
 import { acceptBet, betErrorMessage, cancelBet, type PickleBet } from '../lib/betsApi'
 import { formatPicklePoints, formatSignedPicklePoints } from '../lib/picklePoints'
-import { hasBetFunds, matchBettingStatus } from '../lib/matchBetting'
+import { canAcceptMatchOffer, hasBetFunds, matchBettingStatus } from '../lib/matchBetting'
 import { useConfirm } from '../lib/confirmation'
 import { ErrorState, PageHeader } from '../components/Layout'
 import { BetSettlementReview } from '../components/BetSettlementReview'
@@ -34,18 +34,20 @@ export function BetsPage() {
   const playerId = account.data?.playerId
   const activeMember = pool.data?.some(p => p.id === playerId && p.status === 'active')
   const canBet = !!playerId && activeMember && league.status === 'active' && selectedSeason?.status === 'active' && !wallet.isError
-  const matchStatuses = new Map((matches.data ?? []).map(match => [match.id, matchBettingStatus(match, playerId)]))
+  const matchesById = new Map((matches.data ?? []).map(match => [match.id, match]))
+  const canReviewOffer = (bet: PickleBet) => canBet && bet.creatorId !== playerId && bet.state === 'open'
+    && canAcceptMatchOffer(matchesById.get(bet.matchId), bet.creatorSide, playerId)
   const refresh = async () => { await Promise.all(['bets','pickle-points','matches'].map(key=>client.invalidateQueries({queryKey:[key]}))) }
   const action = useMutation({ mutationFn: async ({bet,cancel}:{bet:PickleBet;cancel:boolean}) => {
     if (cancel) { await cancelBet(bet.id); return }
-    if (!canBet || bet.creatorId === playerId || bet.state !== 'open' || matchStatuses.get(bet.matchId) !== 'open') throw new Error(t('matchBets.closed'))
+    if (!canReviewOffer(bet)) throw new Error(t('matchBets.closed'))
     if (!hasBetFunds(wallet.data?.available, bet.acceptorStake)) throw new Error(t('matchBets.insufficient'))
     let id=acceptRequests.current.get(bet.id)
     if(!id){id=crypto.randomUUID();acceptRequests.current.set(bet.id,id)}
     await acceptBet(bet.id,id)
   }, onSuccess: refresh })
   async function reviewOffer(bet: PickleBet) {
-    if (action.isPending) return
+    if (action.isPending || !canReviewOffer(bet) || !hasBetFunds(wallet.data?.available, bet.acceptorStake)) return
     if (await confirm(t('betSlip.reviewTerms'), { title: t('betSlip.reviewTitle'), confirmLabel: t('betSlip.acceptOffer'), details: <BetAcceptanceDetails bet={bet} /> })) {
       action.mutate({ bet, cancel: false })
     }
@@ -70,9 +72,9 @@ export function BetsPage() {
     <nav className="mb-4 flex flex-wrap gap-2" aria-label={t('bets.views')}>{(['open','mine','history'] as const).map(view=><button key={view} type="button" aria-pressed={tab===view} onClick={()=>setParams({tab:view})} className={`min-h-11 rounded-lg px-4 text-sm font-bold ${tab===view?'bg-green-700 text-white':'border border-green-200 bg-white text-green-800'}`}>{t(`bets.${view}`)}</button>)}</nav>
     {bets.isLoading ? <p>{t('common.loading')}</p> : bets.error ? <ErrorState message={betErrorMessage(bets.error, t)}/> : <div className="grid items-start gap-4 md:grid-cols-2">{!shown.length ? <p className="text-sm text-gray-500">{t('bets.empty')}</p> : shown.map(b => <BetOfferCard
       key={b.id} bet={b} playerId={playerId} wallet={wallet.data} pending={action.isPending}
-      canReview={canBet && matchStatuses.get(b.matchId) === 'open'}
+      canReview={canReviewOffer(b)}
       context={b.seasonId === selectedSeason?.id ? selectedSeason.name : undefined}
-      unavailableReason={t(!playerId ? 'bets.unlinked' : !activeMember ? 'bets.inactive' : matchStatuses.get(b.matchId) === 'participant' ? 'matchBets.participant' : 'matchBets.closed')}
+      unavailableReason={t(!playerId ? 'bets.unlinked' : !activeMember ? 'bets.inactive' : matchesById.has(b.matchId) && matchBettingStatus(matchesById.get(b.matchId)!) === 'open' ? 'matchBets.ownSideOnly' : 'matchBets.closed')}
       onReview={() => { void reviewOffer(b) }}
       onCancel={() => action.mutate({ bet: b, cancel: true })}
     />)}</div>}

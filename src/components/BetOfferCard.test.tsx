@@ -54,13 +54,13 @@ describe('Pair-first bet offers', () => {
     expect(html).not.toContain('Review offer')
   })
 
-  it('does not label an ineligible spectator as backing a pair', () => {
-    const html = render({ canReview: false, unavailableReason: en.matchBets.participant })
+  it('does not label an player who cannot back the offered side as backing a pair', () => {
+    const html = render({ canReview: false, unavailableReason: en.matchBets.ownSideOnly })
     expect(html).not.toContain('You back')
     expect(html).toContain('Opposing pair')
     expect(html).toContain('Stake to accept')
     expect(html).toContain('Includes the stake to accept')
-    expect(html).toContain(en.matchBets.participant)
+    expect(html).toContain(en.matchBets.ownSideOnly)
     expect(html).toContain('disabled=""')
   })
 

@@ -1,10 +1,24 @@
 import { resolveMatchLineups } from './playerMatches'
 import type { MatchWithTeams } from '../types'
 
-export function matchBettingStatus(match: MatchWithTeams, playerId?: string): 'open' | 'closed' | 'participant' {
+export function matchBettingStatus(match: MatchWithTeams): 'open' | 'closed' {
   if (match.status !== 'scheduled' || match.live_status === 'playing' || match.betting_closed_at) return 'closed'
+  return 'open'
+}
+
+/** Actual participants can back their own pair; spectators can back either pair. */
+export function matchBettingSides(match: MatchWithTeams, playerId?: string): string[] {
   const { homeIds, awayIds } = resolveMatchLineups(match)
-  return playerId && [...homeIds, ...awayIds].includes(playerId) ? 'participant' : 'open'
+  return [
+    ...(!playerId || !awayIds.includes(playerId) ? [match.home_team_id] : []),
+    ...(!playerId || !homeIds.includes(playerId) ? [match.away_team_id] : []),
+  ]
+}
+
+export function canAcceptMatchOffer(match: MatchWithTeams | undefined, creatorSide: string, playerId?: string): boolean {
+  if (!match || matchBettingStatus(match) !== 'open' || ![match.home_team_id, match.away_team_id].includes(creatorSide)) return false
+  const acceptorSide = creatorSide === match.home_team_id ? match.away_team_id : match.home_team_id
+  return matchBettingSides(match, playerId).includes(acceptorSide)
 }
 
 /** Wallet amounts are decimal strings; compare funds without floating point rounding. */

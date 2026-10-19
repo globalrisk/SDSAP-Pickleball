@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { hasBetFunds, matchBettingStatus } from './matchBetting'
+import { canAcceptMatchOffer, hasBetFunds, matchBettingSides, matchBettingStatus } from './matchBetting'
 import type { MatchWithTeams } from '../types'
 
 const match = {
+  home_team_id: 'home', away_team_id: 'away',
   status: 'scheduled', live_status: 'available', betting_closed_at: null,
   home_pool_player_ids: ['h1', 'h2'], away_pool_player_ids: ['a1', 'a2'],
   home_team: { players: [{ pool_player_id: 'h1' }, { pool_player_id: 'bench' }] },
@@ -10,19 +11,34 @@ const match = {
 } as MatchWithTeams
 
 describe('match betting eligibility', () => {
-  it('blocks actual participants, while allowing another member of their squad', () => {
-    expect(matchBettingStatus(match, 'h2')).toBe('participant')
-    expect(matchBettingStatus(match, 'a2')).toBe('participant')
-    expect(matchBettingStatus(match, 'bench')).toBe('open')
+  it('allows participants to back their own pair and spectators to back either pair', () => {
+    expect(matchBettingStatus(match)).toBe('open')
+    expect(matchBettingSides(match, 'h2')).toEqual(['home'])
+    expect(matchBettingSides(match, 'a2')).toEqual(['away'])
+    expect(matchBettingSides(match, 'bench')).toEqual(['home', 'away'])
+    expect(matchBettingSides(match)).toEqual(['home', 'away'])
   })
   it('keeps betting closed when a previously started match returns to the queue', () => {
-    expect(matchBettingStatus({ ...match, betting_closed_at: '2026-10-13T00:00:00Z' }, 'bench')).toBe('closed')
-    expect(matchBettingStatus({ ...match, live_status: 'playing' }, 'bench')).toBe('closed')
-    expect(matchBettingStatus({ ...match, status: 'completed' }, 'bench')).toBe('closed')
-    expect(matchBettingStatus({ ...match, status: 'forfeit' }, 'bench')).toBe('closed')
+    expect(matchBettingStatus({ ...match, betting_closed_at: '2026-10-13T00:00:00Z' })).toBe('closed')
+    expect(matchBettingStatus({ ...match, live_status: 'playing' })).toBe('closed')
+    expect(matchBettingStatus({ ...match, status: 'completed' })).toBe('closed')
+    expect(matchBettingStatus({ ...match, status: 'forfeit' })).toBe('closed')
   })
   it('uses current pair identities when a legacy match has no lineup snapshot', () => {
-    expect(matchBettingStatus({ ...match, home_pool_player_ids: null }, 'bench')).toBe('participant')
+    expect(matchBettingSides({ ...match, home_pool_player_ids: null }, 'bench')).toEqual(['home'])
+  })
+  it('allows participants to accept only offers backing the other pair', () => {
+    expect(canAcceptMatchOffer(match, 'away', 'h2')).toBe(true)
+    expect(canAcceptMatchOffer(match, 'home', 'h2')).toBe(false)
+    expect(canAcceptMatchOffer(match, 'home', 'a2')).toBe(true)
+    expect(canAcceptMatchOffer(match, 'away', 'a2')).toBe(false)
+    expect(canAcceptMatchOffer(match, 'home', 'bench')).toBe(true)
+    expect(canAcceptMatchOffer(match, 'away', 'bench')).toBe(true)
+  })
+  it('does not accept offers with a missing match, invalid side, or closed betting', () => {
+    expect(canAcceptMatchOffer(undefined, 'away', 'h2')).toBe(false)
+    expect(canAcceptMatchOffer(match, 'other', 'h2')).toBe(false)
+    expect(canAcceptMatchOffer({ ...match, betting_closed_at: '2026-10-13T00:00:00Z' }, 'away', 'h2')).toBe(false)
   })
 })
 

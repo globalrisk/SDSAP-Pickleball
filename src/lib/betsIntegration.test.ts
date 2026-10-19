@@ -43,6 +43,14 @@ describe('Player account → bet → review → correction → rankings',()=>{
     const initial=await fetchLeaguePickleLeaderboard(leagueId)
     const aBalance=initial.find(p=>p.id===spectators[0]!.id)!.balance
     const bBalance=initial.find(p=>p.id===spectators[1]!.id)!.balance
+    state.client=client(own.token)
+    const ownRequest=crypto.randomUUID()
+    const ownOffer=await createBet(m.id,m.home_team_id,'1000','1000',ownRequest)
+    expect(await createBet(m.id,m.home_team_id,'1000','1000',ownRequest)).toBe(ownOffer)
+    expect(await fetchWallet(leagueId)).toMatchObject({reserved:'1000.000000'})
+    await expect(createBet(m.id,m.away_team_id,'1000','1000',crypto.randomUUID())).rejects.toMatchObject({message:expect.stringContaining('BET_SELF_SIDE')})
+    await cancelBet(ownOffer)
+    expect(await fetchWallet(leagueId)).toMatchObject({reserved:'0'})
     state.client=client(a.token)
     const signed=await state.client.auth.signInWithPassword({email:a.email,password:a.password});expect(signed.error).toBeNull();expect(signed.data.user?.app_metadata.role).toBe('player')
     expect(await fetchMyPlayerAccount()).toMatchObject({playerId:spectators[0]!.id})
@@ -52,7 +60,7 @@ describe('Player account → bet → review → correction → rankings',()=>{
     expect(first).toBe(retry);expect(await fetchWallet(leagueId)).toMatchObject({balance:aBalance,reserved:'1000.000000',available:addPoints(aBalance,'-1000')})
     expect((await state.client.from('pickle_wallets').select('*')).data).toHaveLength(1)
     expect((await state.client.from('pickle_wallets').update({balance:'999999'}).eq('league_id',leagueId)).error?.code).toBe('42501')
-    state.client=client(own.token);await expect(acceptBet(first,crypto.randomUUID())).rejects.toMatchObject({message:expect.stringContaining('BET_SPECTATOR')})
+    state.client=client(own.token);await expect(acceptBet(first,crypto.randomUUID())).rejects.toMatchObject({message:expect.stringContaining('BET_SELF_SIDE')})
     const bClient=client(b.token),cClient=client(c.token)
     const acceptRequest=crypto.randomUUID()
     const [accepted,competing]=await Promise.all([bClient.rpc('accept_pickle_bet',{p_bet_id:first,p_request_id:acceptRequest}),cClient.rpc('accept_pickle_bet',{p_bet_id:first,p_request_id:crypto.randomUUID()})])

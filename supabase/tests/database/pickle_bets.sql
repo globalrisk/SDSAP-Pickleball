@@ -47,7 +47,7 @@ BEGIN
   IF (public.pickle_wallet(league)->>'reserved')::numeric<>1000 OR (public.pickle_wallet(league)->>'available')::numeric<>0 THEN RAISE EXCEPTION 'Reservation wrong'; END IF;
   IF (SELECT count(*) FROM public.pickle_wallets WHERE league_id=league)<>1 THEN RAISE EXCEPTION 'Private wallets exposed'; END IF;
   PERFORM set_config('request.jwt.claims',jsonb_build_object('sub',users[4])::text,true);
-  BEGIN PERFORM public.accept_pickle_bet(bet,gen_random_uuid()); RAISE EXCEPTION 'Participant accepted'; EXCEPTION WHEN others THEN IF SQLERRM NOT LIKE 'BET_SPECTATOR:%' THEN RAISE; END IF; END;
+  BEGIN PERFORM public.accept_pickle_bet(bet,gen_random_uuid()); RAISE EXCEPTION 'Participant backed opposing side'; EXCEPTION WHEN others THEN IF SQLERRM NOT LIKE 'BET_SELF_SIDE:%' THEN RAISE; END IF; END;
   PERFORM set_config('request.jwt.claims',jsonb_build_object('sub',users[2])::text,true);
   request:=gen_random_uuid(); PERFORM public.accept_pickle_bet(bet,request); PERFORM public.accept_pickle_bet(bet,request);
   PERFORM set_config('request.jwt.claims',jsonb_build_object('sub',admin,'app_metadata',jsonb_build_object('role','admin'))::text,true);
