@@ -42,7 +42,7 @@ export function MyProfilePage() {
   if (tab === 'settings') {
     content = <>
       {account.isError ? <Retry message={t('me.accountError')} onRetry={() => void account.refetch()} /> : account.isLoading ? <p role="status" className="mb-3 text-sm text-gray-600">{t('common.loading')}</p> : null}
-      <MyAccountSettings key={user?.id} playerName={account.data?.name} />
+      <MyAccountSettings key={user?.id} playerId={account.data?.playerId} playerName={account.data?.name} />
     </>
   } else if (account.isLoading) content = <LoadingState />
   else if (account.isError) content = <Retry message={t('me.accountError')} onRetry={() => void account.refetch()} />
