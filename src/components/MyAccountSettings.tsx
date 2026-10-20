@@ -5,8 +5,9 @@ import { useAuth } from '../context/AuthContext'
 import { useLeague } from '../context/LeagueContext'
 import { LanguageSwitcher } from './LanguageSwitcher'
 import { validatePasswordChange } from '../lib/playerAuth'
+import { PlayerNameForm } from './PlayerNameForm'
 
-export function MyAccountSettings({ playerName }: { playerName?: string }) {
+export function MyAccountSettings({ playerId, playerName }: { playerId?: string; playerName?: string }) {
   const { t } = useTranslation()
   const { user, isAdmin, changePassword } = useAuth()
   const { leaguePath } = useLeague()
@@ -48,6 +49,7 @@ export function MyAccountSettings({ playerName }: { playerName?: string }) {
         <div><dt className="text-gray-500">{t('me.linkedPlayer')}</dt><dd className="mt-1 font-semibold text-green-950">{playerName ?? t('me.notLinked')}</dd></div>
       </dl>
       <p className="mt-3 text-xs text-gray-600">{t('me.identityHelp')}</p>
+      {playerId && playerName !== undefined ? <PlayerNameForm key={playerId} playerId={playerId} playerName={playerName} /> : null}
       <div className="mt-5"><h3 className="mb-2 text-sm font-bold text-green-950">{t('language.label')}</h3><div className="inline-flex"><LanguageSwitcher /></div></div>
       {isAdmin ? <Link to={leaguePath('/account')} className="mt-5 inline-flex min-h-11 items-center font-semibold text-green-700 underline underline-offset-4">{t('me.adminUsername')}</Link> : null}
     </section>

@@ -335,7 +335,14 @@ It prints synthetic accounts and a localhost URL, and discards all data when sto
 
 Signed-in players can open **My Profile** from the header or the phone's **More** menu.
 Overview, Stats, Matches and Points use the player linked by an administrator and the
-current league. Settings includes language preference and signed-in password changes.
+current league. Settings includes language preference, signed-in password changes, and
+unlimited player-name changes for linked accounts (1–120 characters). Names are shared
+across leagues and synchronized to historical league rosters; identity, stats, points,
+and bets are preserved. Standalone Team Duel event snapshots keep their recorded names.
+Deploy the `linked_player_name_changes` migration before using the name editor. The
+authenticated RPC derives ownership from the account link, verifies the expected
+player, and shares the unlink operation's account lock. Direct player writes remain
+administrator-only; unlinked accounts cannot rename players.
 Stats can show all seasons or the selected season; wallet totals always cover the league.
 
 For disposable profile verification, run `node scripts/test-support/profile-browser-server.mjs`.
