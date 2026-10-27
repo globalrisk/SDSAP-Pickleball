@@ -42,7 +42,7 @@ export function MyProfilePage() {
   if (tab === 'settings') {
     content = <>
       {account.isError ? <Retry message={t('me.accountError')} onRetry={() => void account.refetch()} /> : account.isLoading ? <p role="status" className="mb-3 text-sm text-gray-600">{t('common.loading')}</p> : null}
-      <MyAccountSettings key={user?.id} playerId={account.data?.playerId} playerName={account.data?.name} />
+      <MyAccountSettings key={user?.id} playerId={account.data?.playerId} playerName={account.data?.name} isLeagueMember={!!member} />
     </>
   } else if (account.isLoading) content = <LoadingState />
   else if (account.isError) content = <Retry message={t('me.accountError')} onRetry={() => void account.refetch()} />
@@ -87,11 +87,11 @@ function MemberProfile({ member, players, tab }: { member: PoolPlayer; players: 
   const stats = seasonal ? seasonStats : data
   return <div className="space-y-5">
     {member.status === 'inactive' ? <IdentityNotice message={t('me.inactive')} /> : null}
-    <PlayerSkills playerId={member.id} />
     <section className="rounded-xl border border-green-200 bg-white p-5">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><h2 className="font-bold text-green-950">{t('me.currentStanding')}</h2>{data.title ? <PlayerTitleBadge title={data.title} size="md" /> : null}</div>
       <div className="grid grid-cols-2 gap-3"><ProfileStatCard label={t('me.currentRating')} value={String(roundRating(data.rating))} /><ProfileStatCard label={t('me.currentRank')} value={data.rank == null ? t(data.provisional ? 'me.provisional' : 'me.unranked') : `#${data.rank}`} /></div>
     </section>
+    <PlayerSkills playerId={member.id} />
     {tab === 'stats' ? <div className="flex flex-wrap items-center justify-between gap-3"><div role="group" aria-label={t('me.statsPeriod')} className="flex gap-2">{['all', 'season'].map(scope => <button key={scope} type="button" aria-pressed={seasonal === (scope === 'season')} onClick={() => setParams(previous => { const next = new URLSearchParams(previous); next.set('scope', scope); return next })} className={`min-h-11 rounded-lg px-4 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 ${seasonal === (scope === 'season') ? 'bg-green-700 text-white' : 'border border-green-200 bg-white text-green-800'}`}>{t(scope === 'all' ? 'me.allTime' : 'me.selectedSeason')}</button>)}</div><p className="text-sm text-gray-600">{seasonal ? selectedSeason?.name : t('me.allTimeLeague')}</p></div> : <p className="text-sm font-semibold text-gray-600">{t('me.allTimeLeague')}</p>}
     {tab === 'stats' && seasonal && (!stats || matches.isError || seasonsError) ? matchesView() : <>
       <RecordStats stats={tab === 'overview' ? data : stats ?? data} seasonal={tab === 'stats' && seasonal} />

@@ -1473,8 +1473,10 @@
   },
   "badges": {
     "edit": "Edit badge",
+    "loadError": "Could not load your badge.",
     "label": "Player badge",
     "help": "Choose a badge for this player in this league. Leave blank to remove it. Maximum 60 characters.",
+    "ownHelp": "Choose your badge for this league. Leave blank to remove it. Maximum 60 characters.",
     "save": "Save badge",
     "saving": "Saving…",
     "saved": "Badge saved.",

@@ -141,7 +141,7 @@ export async function fetchPlayerRankings(leagueId: string): Promise<PlayerRanki
   }))
 }
 
-/** Badges are assigned by administrators, never inferred from match results. */
+/** Badges are chosen by players or administrators, never inferred from match results. */
 export async function fetchPlayerTitlesMap(leagueId: string): Promise<Map<string, PlayerTitle>> {
   const { data, error } = await fetchAllPages((from, to) => supabase
     .from('league_players').select('pool_player_id, badge')

@@ -14,6 +14,7 @@ A shared pickleball platform for multiple independent leagues. Players have one 
 - Seasons support doubles round robin or **Team Duel**: two rated squads of 4–7, rotating partnerships, shared squad points, and individual rated games. See [setup and rollout notes](docs/league-team-duel.md).
 - Multiple leagues can each have an active season at the same time
 - Administrator-only setup and result entry; public pages are read-only
+- Linked players can edit or clear their own league badge from **My Profile → Settings**, alongside their player name, or from their player profile. Badges allow up to 60 characters; administrators can edit any player's badge.
 - Guided creation of a league, first season, roster, teams, and schedule
 - Realtime match-day and rotation-planner updates
 - Existing SDSAP data is migrated into the default `sdsap` league

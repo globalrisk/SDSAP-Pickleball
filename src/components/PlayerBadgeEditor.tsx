@@ -4,10 +4,12 @@ import { useTranslation } from 'react-i18next'
 import { useAuth } from '../context/AuthContext'
 import { useLeague } from '../context/LeagueContext'
 import { updatePlayerBadge } from '../lib/api'
+import { useMyPlayerAccount } from '../hooks/useBets'
 
 export function PlayerBadgeEditor({ playerId, badge }: { playerId: string; badge: string }) {
   const { t } = useTranslation()
-  const { isAdmin } = useAuth()
+  const { user, isAdmin } = useAuth()
+  const account = useMyPlayerAccount()
   const { league } = useLeague()
   const queryClient = useQueryClient()
   const helpId = useId()
@@ -18,6 +20,7 @@ export function PlayerBadgeEditor({ playerId, badge }: { playerId: string; badge
     mutationFn: () => updatePlayerBadge(league.id, playerId, draft),
     onSuccess: async () => {
       await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['player-badges', league.id] }),
         queryClient.invalidateQueries({ queryKey: ['player-profile', league.id] }),
         queryClient.invalidateQueries({ queryKey: ['player-rankings', league.id] }),
       ])
@@ -25,7 +28,7 @@ export function PlayerBadgeEditor({ playerId, badge }: { playerId: string; badge
     },
   })
 
-  if (!isAdmin) return null
+  if (!isAdmin && (!user || account.data?.playerId !== playerId)) return null
   return (
     <div className="mb-6">
       {editing ? (
@@ -38,7 +41,7 @@ export function PlayerBadgeEditor({ playerId, badge }: { playerId: string; badge
             <input value={draft} onChange={event => setDraft(event.target.value)} disabled={mutation.isPending} aria-describedby={helpId} aria-invalid={tooLong}
               className="mt-1 min-h-11 w-full rounded-lg border border-green-200 px-3 text-base" />
           </label>
-          <p id={helpId} className="text-sm text-gray-600">{t('badges.help')}</p>
+          <p id={helpId} className="text-sm text-gray-600">{t(isAdmin ? 'badges.help' : 'badges.ownHelp')}</p>
           {tooLong ? <p role="alert" className="text-sm text-red-700">{t('badges.tooLong')}</p> : null}
           {mutation.isError ? <p role="alert" className="text-sm text-red-700">{t('badges.error')}</p> : null}
           <div className="flex flex-wrap gap-2">

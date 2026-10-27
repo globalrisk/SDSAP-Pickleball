@@ -1467,8 +1467,10 @@
   },
   "badges": {
     "edit": "Chỉnh sửa huy hiệu",
+    "loadError": "Không thể tải huy hiệu của bạn.",
     "label": "Huy hiệu người chơi",
     "help": "Đặt huy hiệu cho người chơi trong giải này. Để trống để xóa. Tối đa 60 ký tự.",
+    "ownHelp": "Đặt huy hiệu của bạn trong giải này. Để trống để xóa. Tối đa 60 ký tự.",
     "save": "Lưu huy hiệu",
     "saving": "Đang lưu…",
     "saved": "Đã lưu huy hiệu.",

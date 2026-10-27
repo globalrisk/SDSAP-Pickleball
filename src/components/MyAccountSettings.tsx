@@ -6,11 +6,15 @@ import { useLeague } from '../context/LeagueContext'
 import { LanguageSwitcher } from './LanguageSwitcher'
 import { validatePasswordChange } from '../lib/playerAuth'
 import { PlayerNameForm } from './PlayerNameForm'
+import { useQuery } from '@tanstack/react-query'
+import { fetchPlayerTitlesMap } from '../lib/api'
+import { PlayerBadgeEditor } from './PlayerBadgeEditor'
+import { PlayerTitleBadge } from './PlayerTitleBadge'
 
-export function MyAccountSettings({ playerId, playerName }: { playerId?: string; playerName?: string }) {
+export function MyAccountSettings({ playerId, playerName, isLeagueMember = false }: { playerId?: string; playerName?: string; isLeagueMember?: boolean }) {
   const { t } = useTranslation()
   const { user, isAdmin, changePassword } = useAuth()
-  const { leaguePath } = useLeague()
+  const { league, leaguePath } = useLeague()
   const [current, setCurrent] = useState('')
   const [password, setPassword] = useState('')
   const [confirmation, setConfirmation] = useState('')
@@ -50,6 +54,7 @@ export function MyAccountSettings({ playerId, playerName }: { playerId?: string;
       </dl>
       <p className="mt-3 text-xs text-gray-600">{t('me.identityHelp')}</p>
       {playerId && playerName !== undefined ? <PlayerNameForm key={playerId} playerId={playerId} playerName={playerName} /> : null}
+      {playerId && isLeagueMember ? <PlayerBadgeSettings key={`${league.id}:${playerId}`} playerId={playerId} /> : null}
       <div className="mt-5"><h3 className="mb-2 text-sm font-bold text-green-950">{t('language.label')}</h3><div className="inline-flex"><LanguageSwitcher /></div></div>
       {isAdmin ? <Link to={leaguePath('/account')} className="mt-5 inline-flex min-h-11 items-center font-semibold text-green-700 underline underline-offset-4">{t('me.adminUsername')}</Link> : null}
     </section>
@@ -65,5 +70,24 @@ export function MyAccountSettings({ playerId, playerName }: { playerId?: string;
         {error ? <p role="alert" className="text-sm text-red-700">{error}</p> : null}
       </form>
     </section>
+  </div>
+}
+
+function PlayerBadgeSettings({ playerId }: { playerId: string }) {
+  const { t } = useTranslation()
+  const { league } = useLeague()
+  const badges = useQuery({
+    queryKey: ['player-badges', league.id],
+    queryFn: () => fetchPlayerTitlesMap(league.id),
+  })
+  const badge = badges.data?.get(playerId)
+  return <div className="mt-5 border-t border-green-100 pt-4">
+    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+      <h3 className="text-sm font-semibold text-green-950">{t('badges.label')}</h3>
+      {badge ? <PlayerTitleBadge title={badge} /> : null}
+    </div>
+    {badges.isPending ? <p role="status" className="text-sm text-gray-600">{t('common.loading')}</p>
+      : badges.isError ? <div><p role="alert" className="text-sm text-red-700">{t('badges.loadError')}</p><button type="button" onClick={() => void badges.refetch()} className="mt-2 min-h-11 text-sm font-semibold text-green-700 underline">{t('me.retry')}</button></div>
+        : <PlayerBadgeEditor playerId={playerId} badge={badge?.label ?? ''} />}
   </div>
 }
