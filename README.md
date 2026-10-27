@@ -237,7 +237,7 @@ For disposable browser verification, run
 URL. Its synthetic login, games and awards exist only in temporary PostgreSQL;
 closing the process discards them.
 
-## Match bets with Pickle points
+## Trust Me Bro with Pickle points
 
 Deploy `20261012160242_pickle_match_bets.sql` and
 `20261019033855_allow_players_to_back_own_pair.sql` before the betting frontend. The original migration credits
@@ -246,10 +246,10 @@ It also removes automatic administrator assignment for new Supabase Auth account
 existing administrators retain their roles. Any future
 administrator must receive an explicit protected `app_metadata.role = admin` claim.
 
-Players can use **Sign in → Sign up** (or **Bets → Sign up**) to create an email/password
+Players can use **Sign in → Sign up** (or **Trust Me Bro → Sign up**) to create an email/password
 account. In Supabase **Authentication → Sign In / Providers**, enable **Allow new users
 to sign up** and the Email provider. For immediate signup, disable **Confirm email**:
-the app uses the returned session and opens Bets automatically. Administrators should
+the app uses the returned session and opens Trust Me Bro automatically. Administrators should
 verify the player's identity before linking an account, since its email is unverified.
 Custom SMTP is needed for password-recovery emails, or if email confirmation is
 enabled later; Supabase's default sender is restricted to project-team addresses.
@@ -289,24 +289,24 @@ is informational for these private tables. The protected unlink RPC checks the
 administrator role; its privileged-RPC notice is expected as described above.
 
 **Matches** is the entry point for creating offers: compare the pairs and estimated
-win chances, then choose **🥒 Bet on this match**. The inline panel defaults to equal
+win chances, then choose **🥒 Trust Me Bro**. The inline panel defaults to equal
 stakes, supports a different opposing stake, previews the pot and profits, and lets
 league members accept existing offers for that match. Players in a match can create
 offers backing their own pair or accept offers backing the opposing pair (so the
 acceptor backs their own pair). They cannot bet against themselves. Non-playing
-league members can back either pair. **Only matches I can bet on** includes the
-player's own unstarted matches and filters out closed matches. **Bets** remains the wallet, offer,
+league members can back either pair. **Only matches I can make an offer on** includes the
+player's own unstarted matches and filters out closed matches. **Trust Me Bro** remains the wallet, offer,
 history, and administrator review dashboard in desktop navigation and mobile **More**.
 Its **Create an offer** button opens Matches with the eligibility filter enabled.
 
-Administrators can use **League setup → Season → Teams & fixtures → Advanced fixture actions → Delete all matches and bets** to reset an active, unplayed season. Review the current match and bet counts, including accepted bets, before confirming. The operation removes all associated contracts and releases reserved stakes without changing wallet balances, ratings, squads or roster. A stale review is rejected if a match or bet changes. Completed/forfeited/playing matches, linked rating history, financial settlements, awards and archived seasons remain protected. A private immutable receipt preserves the deletion snapshot; API clients cannot access it. Team Duel requires a freshly saved draft before regenerating. Deploy the `delete_unplayed_season_matches_and_bets` migration before using this action.
+Administrators can use **League setup → Season → Teams & fixtures → Advanced fixture actions → Delete all matches and offers** to reset an active, unplayed season. Review the current match and offer counts, including accepted offers, before confirming. The operation removes all associated contracts and releases reserved stakes without changing wallet balances, ratings, squads or roster. A stale review is rejected if a match or offer changes. Completed/forfeited/playing matches, linked rating history, financial settlements, awards and archived seasons remain protected. A private immutable receipt preserves the deletion snapshot; API clients cannot access it. Team Duel requires a freshly saved draft before regenerating. Deploy the `delete_unplayed_season_matches_and_bets` migration before using this action.
 
 Active league members can offer positive stakes in increments of 1,000. Creating an offer reserves
 the creator's stake; acceptance reserves the opponent's stake. Accepted contracts cannot
 be withdrawn. Match start or a recorded result closes unaccepted offers permanently;
 changed players or sides void pending contracts. Renaming players preserves contracts.
 
-Recorded results hold accepted stakes for administrator review in **Bets**. Confirming
+Recorded results hold accepted stakes for administrator review in **Trust Me Bro**. Confirming
 pays the winning bettor the combined pot without fees; forfeits refund both stakes.
 Corrections require a reason and reviewed revision, update results and ratings atomically,
 and append reversals plus new settlements. A correction can leave points owed if previous

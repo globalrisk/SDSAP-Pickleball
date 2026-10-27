@@ -25,7 +25,7 @@ describe('season match deletion controls', () => {
   it('offers a clearly named action for an unplayed season, including accepted-bet cleanup', () => {
     const html = render()
     expect(html).toContain(en.seasonDelete.button)
-    expect(html).toContain('including accepted bets')
+    expect(html).toContain('including accepted offers')
     expect(html).not.toContain('disabled=""')
   })
   it.each(['completed', 'forfeit', 'playing', 'empty', 'archived'])('disables deletion for %s', kind => {
