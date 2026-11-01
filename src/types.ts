@@ -1,4 +1,4 @@
-export type MatchStatus = 'scheduled' | 'completed' | 'forfeit'
+export type MatchStatus = 'scheduled' | 'completed' | 'forfeit' | 'cancelled'
 export type MatchLiveStatus = 'available' | 'playing' | 'up_next'
 export type SeasonStatus = 'active' | 'archived'
 export type SeasonFormat = 'round_robin' | 'team_duel'

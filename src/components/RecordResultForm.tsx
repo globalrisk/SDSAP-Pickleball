@@ -8,6 +8,7 @@ import {
   fetchMatchResultSnapshot,
   recordResult,
   recordForfeit,
+  cancelMatch,
   revertMatchToScheduled,
 } from '../lib/api'
 import { useSeason } from '../context/SeasonContext'
@@ -34,7 +35,7 @@ interface RecordResultFormProps {
 }
 
 export interface SavedMatchResult {
-  type: 'result' | 'revert'
+  type: 'result' | 'revert' | 'cancel'
   winnerTeamId: string | null
 }
 
@@ -42,6 +43,7 @@ type ResultMutationPayload = (
   | { type: 'result'; winnerTeamId: string; homeScore: number; awayScore: number }
   | { type: 'forfeit'; winnerTeamId: string; forfeitTeamId: string }
   | { type: 'revert' }
+  | { type: 'cancel' }
 ) & {
   reconcile?: boolean
 }
@@ -97,6 +99,7 @@ export function RecordResultForm({
   })
 
   function desiredSnapshot(payload: ResultMutationPayload): MatchResultSnapshot {
+    if (payload.type === 'cancel') return { status: 'cancelled', winnerTeamId: null, homeScore: null, awayScore: null }
     if (payload.type === 'revert') {
       return {
         status: 'scheduled',
@@ -132,6 +135,10 @@ export function RecordResultForm({
         await revertMatchToScheduled(match.id)
         return
       }
+      if (payload.type === 'cancel') {
+        await cancelMatch(match.id)
+        return
+      }
       if (payload.type === 'result') {
         await recordResult(match.id, {
           winnerTeamId: payload.winnerTeamId,
@@ -153,7 +160,7 @@ export function RecordResultForm({
       setError(null)
       setValidationCode(null)
       setFailedPayload(null)
-      const winnerTeamId = payload.type !== 'revert' ? payload.winnerTeamId : null
+      const winnerTeamId = payload.type === 'result' || payload.type === 'forfeit' ? payload.winnerTeamId : null
       if (winnerTeamId) {
         const winnerName =
           winnerTeamId === match.home_team_id
@@ -168,7 +175,7 @@ export function RecordResultForm({
           message: t('record.savedWinnerAt', { name: winnerName, time: savedAt }),
         })
       }
-      onSaved?.({ type: payload.type === 'revert' ? 'revert' : 'result', winnerTeamId })
+      onSaved?.({ type: payload.type === 'cancel' ? 'cancel' : payload.type === 'revert' ? 'revert' : 'result', winnerTeamId })
       onDone?.()
     },
     onError: (err: Error, payload) => {
@@ -245,6 +252,11 @@ export function RecordResultForm({
     const name = forfeitTeamId === match.home_team_id ? match.home_team.name : match.away_team.name
     if (!await confirm(t('leagueDuel.forfeitConfirm', { name }), { tone: 'danger' })) return
     submitPayload({ type: 'forfeit', forfeitTeamId, winnerTeamId: forfeitTeamId === match.home_team_id ? match.away_team_id : match.home_team_id }, failedPayload !== null)
+  }
+
+  async function handleCancel() {
+    if (!await confirm(t('record.cancelConfirm'), { tone: 'danger' })) return
+    submitPayload({ type: 'cancel' }, failedPayload !== null)
   }
 
   return (
@@ -365,6 +377,11 @@ export function RecordResultForm({
         <p className="mb-2 text-xs text-gray-600">{t('leagueDuel.forfeitHelp')}</p>
         <div className="flex flex-wrap gap-2">{[match.home_team, match.away_team].map((team) => <button key={team.id} type="button" disabled={mutation.isPending} onClick={() => handleForfeit(team.id)} className="min-h-11 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900 disabled:opacity-50">{t('leagueDuel.forfeitSide', { name: team.name })}</button>)}</div>
       </details> : null}
+
+      {match.status === 'scheduled' ? <div className="mt-3 border-t border-green-200 pt-3">
+        <button type="button" disabled={mutation.isPending} onClick={handleCancel} className="min-h-11 w-full rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100 disabled:opacity-50">{t('record.cancelMatch')}</button>
+        <p className="mt-2 text-xs text-gray-500">{t('record.cancelHelp')}</p>
+      </div> : null}
 
       {editing && (
         <button

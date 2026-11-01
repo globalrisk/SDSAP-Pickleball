@@ -21,6 +21,7 @@ function StatusBadge({ status }: { status: MatchWithTeams['status'] }) {
     scheduled: 'bg-blue-100 text-blue-800',
     completed: 'bg-green-100 text-green-800',
     forfeit: 'bg-red-100 text-red-800',
+    cancelled: 'bg-gray-100 text-gray-600',
   }
   return (
     <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${styles[status]}`}>
@@ -37,7 +38,7 @@ export function MatchCard({ match, showForm = true, betting }: MatchCardProps) {
   const [editing, setEditing] = useState(false)
   const isFinished = match.status === 'completed' || match.status === 'forfeit'
   const canEdit = isAdmin && league.status === 'active' && showForm && isSelectedSeasonActive
-  const probability = !isFinished
+  const probability = match.status === 'scheduled'
     ? calculateMatchProbability(match.home_team, match.away_team)
     : null
 
@@ -87,6 +88,7 @@ export function MatchCard({ match, showForm = true, betting }: MatchCardProps) {
       )}
 
       {betting}
+      {match.status === 'cancelled' ? <p className="mt-4 text-sm text-gray-500">{t('record.cancelHelp')}</p> : null}
       {canEdit && match.status === 'scheduled' && <RecordResultForm match={match} />}
 
       {canEdit && isFinished && !editing && (

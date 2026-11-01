@@ -31,6 +31,7 @@ const STATUS_FILTERS: { key: StatusFilter; labelKey: string }[] = [
   { key: 'scheduled', labelKey: 'filter.uncompleted' },
   { key: 'completed', labelKey: 'filter.completed' },
   { key: 'forfeit', labelKey: 'filter.forfeit' },
+  { key: 'cancelled', labelKey: 'status.cancelled' },
 ]
 
 export function MatchesPage() {

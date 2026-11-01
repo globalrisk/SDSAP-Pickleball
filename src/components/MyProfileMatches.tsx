@@ -34,12 +34,12 @@ export function MyProfileMatches({ profile, matches, season, names, preview = fa
         const home = homeIds.includes(profile.id)
         const partnerIds = (home ? homeIds : awayIds).filter(id => id !== profile.id)
         const lookup = (id: string) => names.get(id) ?? [...(match.home_team.players ?? []), ...(match.away_team.players ?? [])].find(player => player.pool_player_id === id)?.name ?? '?'
-        const result = match.status === 'scheduled' ? null : summary.won(match) ? 'W' : 'L'
+        const result = match.status === 'scheduled' || match.status === 'cancelled' ? null : summary.won(match) ? 'W' : 'L'
         const score = match.status !== 'forfeit' && match.home_score != null && match.away_score != null
           ? { yours: home ? match.home_score : match.away_score, opponents: home ? match.away_score : match.home_score } : null
         const change = changes.get(match.id)
         const live = group.key === 'playing' || group.key === 'upNext'
-        const badge = match.status === 'forfeit' ? `${t(result === 'W' ? 'personal.win' : 'personal.loss')} · ${t('personal.forfeit')}` : result ? t(result === 'W' ? 'personal.win' : 'personal.loss') : live ? t(`me.matchGroups.${group.key}`) : t('status.scheduled')
+        const badge = match.status === 'cancelled' ? t('status.cancelled') : match.status === 'forfeit' ? `${t(result === 'W' ? 'personal.win' : 'personal.loss')} · ${t('personal.forfeit')}` : result ? t(result === 'W' ? 'personal.win' : 'personal.loss') : live ? t(`me.matchGroups.${group.key}`) : t('status.scheduled')
         const badgeClass = match.status === 'forfeit' ? 'bg-amber-50 text-amber-800' : result === 'L' ? 'bg-red-50 text-red-700' : result === 'W' || live ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'
         return <li key={match.id} className={`flex min-w-0 flex-col overflow-hidden rounded-xl border bg-white ${live ? 'border-green-400' : 'border-green-200'}`}>
           <div className="flex flex-wrap items-center justify-between gap-2 px-3 pb-3 pt-3 sm:px-4 sm:pt-4">

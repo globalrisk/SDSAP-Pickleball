@@ -65,7 +65,7 @@ export function rankAvailableMatches(
 ): MatchWithTeams[] {
   if (matches.some((match) => match.duel_sequence_number != null)) return rankDuelMatches(matches)
   const completed = matches
-    .filter((match) => match.status !== 'scheduled')
+    .filter((match) => match.status === 'completed' || match.status === 'forfeit')
     .sort((a, b) =>
       (a.result_recorded_at ?? '').localeCompare(b.result_recorded_at ?? '') ||
       a.id.localeCompare(b.id),
@@ -180,7 +180,7 @@ export function recommendNextMatch(
 function rankDuelMatches(matches: MatchWithTeams[]): MatchWithTeams[] {
   const ids = (match: MatchWithTeams) => [...(match.home_pool_player_ids ?? []), ...(match.away_pool_player_ids ?? [])]
   const playing = matches.filter((m) => m.status === 'scheduled' && m.live_status === 'playing')
-  const history = matches.filter((m) => m.status !== 'scheduled').sort((a, b) => (a.result_recorded_at ?? '').localeCompare(b.result_recorded_at ?? '') || a.id.localeCompare(b.id))
+  const history = matches.filter((m) => m.status === 'completed' || m.status === 'forfeit').sort((a, b) => (a.result_recorded_at ?? '').localeCompare(b.result_recorded_at ?? '') || a.id.localeCompare(b.id))
   const queued = matches.filter((m) => m.status === 'scheduled' && m.live_status === 'up_next')
   const counts = new Map<string, number>()
   const last = new Map<string, number>()

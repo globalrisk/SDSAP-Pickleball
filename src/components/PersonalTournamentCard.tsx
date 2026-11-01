@@ -177,7 +177,7 @@ export function PersonalTournamentCard({ seasonId: seasonIdOverride }: { seasonI
                     const details = matchNames(match)
                     return <li key={match.id} className="flex items-start justify-between gap-3 py-3 text-sm">
                       <div><p className="font-semibold text-gray-800">{t('personal.against', { names: details.opponents })}</p><p className="mt-0.5 text-xs text-gray-500">{t('personal.round', { number: match.round_number })}{details.partner ? ` · ${t('personal.partner', { name: details.partner })}` : ''}</p></div>
-                      <span className="shrink-0 font-bold text-green-900">{t(match.status === 'forfeit' ? 'personal.forfeit' : summary.won(match) ? 'personal.win' : 'personal.loss')}{match.status !== 'forfeit' && details.score ? ` ${details.score}` : ''}</span>
+                      <span className="shrink-0 font-bold text-green-900">{t(match.status === 'cancelled' ? 'status.cancelled' : match.status === 'forfeit' ? 'personal.forfeit' : summary.won(match) ? 'personal.win' : 'personal.loss')}{match.status !== 'forfeit' && details.score ? ` ${details.score}` : ''}</span>
                     </li>
                   })}
                 </ul>

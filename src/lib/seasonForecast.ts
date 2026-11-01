@@ -65,6 +65,7 @@ export function forecastLeagueDuelSeason(matches: readonly MatchWithTeams[], tea
   for (const match of matches) {
     if (!teamIds.includes(match.home_team_id) || !teamIds.includes(match.away_team_id)
       || match.home_team_id === match.away_team_id) return null
+    if (match.status === 'cancelled') continue
     if (match.status !== 'scheduled') {
       if (match.winner_team_id === teamIds[0]) homeWins++
       else if (match.winner_team_id === teamIds[1]) awayWins++

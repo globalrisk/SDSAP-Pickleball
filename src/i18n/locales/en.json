@@ -414,7 +414,8 @@
   "status": {
     "scheduled": "Not played",
     "completed": "Completed",
-    "forfeit": "Forfeit"
+    "forfeit": "Forfeit",
+    "cancelled": "Cancelled"
   },
   "filter": {
     "all": "All",
@@ -569,7 +570,10 @@
     "offlineNotSaved": "Not saved — this device is offline.",
     "saveConflict": "This match changed on another device. The latest result has been reloaded for review.",
     "undoing": "Undoing…",
-    "undoFailed": "Could not undo the result. Please edit the match instead."
+    "undoFailed": "Could not undo the result. Please edit the match instead.",
+    "cancelMatch": "Cancel match",
+    "cancelHelp": "No points, wins, losses or rating changes. Reserved stakes are released.",
+    "cancelConfirm": "Cancel this unplayed match? Neither side receives points, wins or losses, player ratings stay unchanged, and reserved stakes are released. The fixture will remain visible as Cancelled."
   },
   "live": {
     "badge": "MATCH DAY",

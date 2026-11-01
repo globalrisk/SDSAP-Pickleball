@@ -955,7 +955,7 @@ export function SetupPage() {
           rosterCount={seasonRosterIds.size}
           teams={teams ?? []}
           fixtureCount={selectedMatches?.length ?? 0}
-          completedCount={selectedMatches?.filter(match => match.status === 'completed' || match.status === 'forfeit').length ?? 0}
+          completedCount={selectedMatches?.filter(match => match.status !== 'scheduled').length ?? 0}
           preview={selectedPreview.data}
           isLoading={seasonRosterQuery.isPending || selectedMatchesQuery.isPending || !teams || (isDuel && selectedPreview.isPending)}
           onSectionChange={navigateSection}

@@ -411,7 +411,8 @@
   "status": {
     "scheduled": "Chưa đấu",
     "completed": "Đã đấu",
-    "forfeit": "Bỏ cuộc"
+    "forfeit": "Bỏ cuộc",
+    "cancelled": "Đã hủy"
   },
   "filter": {
     "all": "Tất cả",
@@ -566,7 +567,10 @@
     "offlineNotSaved": "Chưa lưu — thiết bị này đang ngoại tuyến.",
     "saveConflict": "Trận đấu này đã được thay đổi trên thiết bị khác. Kết quả mới nhất đã được tải lại để kiểm tra.",
     "undoing": "Đang hoàn tác…",
-    "undoFailed": "Không thể hoàn tác kết quả. Hãy sửa lại trận đấu."
+    "undoFailed": "Không thể hoàn tác kết quả. Hãy sửa lại trận đấu.",
+    "cancelMatch": "Hủy trận đấu",
+    "cancelHelp": "Không tính điểm, thắng, thua hoặc thay đổi rating. Điểm cược đã giữ sẽ được giải phóng.",
+    "cancelConfirm": "Hủy trận chưa có kết quả này? Cả hai bên không nhận điểm, thắng hoặc thua; rating giữ nguyên và điểm cược đã giữ được giải phóng. Trận vẫn hiển thị với trạng thái Đã hủy."
   },
   "live": {
     "badge": "NGÀY THI ĐẤU",

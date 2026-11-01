@@ -79,7 +79,7 @@ export function buildTournamentView<T extends TournamentMatch>(matches: T[]): To
   const isBlockedByPlaying = (match: T) =>
     playing.some((active) => matchesShareTeam(match, active))
   const rounds = [...new Set(sorted.map((match) => match.round_number))].sort((a, b) => a - b)
-  const recentResult = [...completed].sort((a, b) => {
+  const recentResult = completed.filter((match) => match.status !== 'cancelled').sort((a, b) => {
     const aTime = a.result_recorded_at ? Date.parse(a.result_recorded_at) : 0
     const bTime = b.result_recorded_at ? Date.parse(b.result_recorded_at) : 0
     return bTime - aTime || b.id.localeCompare(a.id)

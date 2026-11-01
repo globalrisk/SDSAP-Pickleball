@@ -1085,6 +1085,11 @@ export async function recordForfeit(
   )
 }
 
+export async function cancelMatch(matchId: string): Promise<void> {
+  const { error } = await supabase.rpc('cancel_unplayed_match', { p_match_id: matchId })
+  if (error) throw error
+}
+
 export async function revertMatchToScheduled(matchId: string): Promise<void> {
   const { data: matchRow, error } = await supabase
     .from('matches')

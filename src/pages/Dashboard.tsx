@@ -50,7 +50,7 @@ export function Dashboard() {
 
   const seasonComplete =
     allMatches.length > 0 &&
-    allMatches.every((m) => m.status === 'completed' || m.status === 'forfeit')
+    allMatches.every((m) => m.status !== 'scheduled')
   const showRecap =
     Boolean(selectedSeason) && (!isSelectedSeasonActive || seasonComplete)
 
