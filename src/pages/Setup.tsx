@@ -51,12 +51,13 @@ import { fetchSeasonRosterIds, saveSeasonRoster, seasonRosterQueryKey } from '..
 import { useAssignedPoolPlayerIds, usePlayerPool } from '../hooks/usePlayerPool'
 import { useTeamsWithPlayers } from '../hooks/useTeams'
 import type { PoolPlayer, SeasonFormat, TeamWithPlayers } from '../types'
+import { TeamColorField } from '../components/TeamColorField'
+import { DEFAULT_TEAM_COLORS } from '../lib/teamColors'
 
 type PoolStatusFilter = 'active' | 'inactive' | 'all'
 
 const TEAM_COLORS = [
-  '#ef4444',
-  '#f97316',
+  ...DEFAULT_TEAM_COLORS,
   '#eab308',
   '#22c55e',
   '#3b82f6',
@@ -307,6 +308,7 @@ function TeamEditForm({
     [team.players],
   )
   const [teamName, setTeamName] = useState(team.name)
+  const [teamColor, setTeamColor] = useState(team.color)
   const [poolPlayerIds, setPoolPlayerIds] = useState<[string, string]>([
     team.players[0]?.pool_player_id ?? '',
     team.players[1]?.pool_player_id ?? '',
@@ -322,10 +324,12 @@ function TeamEditForm({
           id: player.id,
           poolPlayerId: poolPlayerIds[index],
         })),
+        teamColor,
       ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['teams'] })
       queryClient.invalidateQueries({ queryKey: ['teams-with-players'] })
+      queryClient.invalidateQueries({ queryKey: ['matches'] })
       queryClient.invalidateQueries({ queryKey: ['assigned-pool-players'] })
       onSaved(t('setup.teamUpdated'))
     },
@@ -388,6 +392,7 @@ function TeamEditForm({
         required
       />
 
+      <div className="mb-4"><TeamColorField value={teamColor} onChange={setTeamColor} disabled={saveMutation.isPending} /></div>
       <div className="space-y-2">
         <Select
           value={poolPlayerIds[0]}
@@ -541,6 +546,7 @@ export function SetupPage() {
   const [seasonRosterDraft, setSeasonRosterDraft] = useState<string[]>([])
   const [newTeam, setNewTeam] = useState({
     name: '',
+    color: '',
     poolPlayerId1: '',
     poolPlayerId2: '',
   })
@@ -743,7 +749,7 @@ export function SetupPage() {
       queryClient.invalidateQueries({ queryKey: ['teams'] })
       queryClient.invalidateQueries({ queryKey: ['teams-with-players'] })
       queryClient.invalidateQueries({ queryKey: ['assigned-pool-players'] })
-      setNewTeam({ name: '', poolPlayerId1: '', poolPlayerId2: '' })
+      setNewTeam({ name: '', color: '', poolPlayerId1: '', poolPlayerId2: '' })
       setFeedback({ text: t('setup.teamCreated'), tone: 'ok' })
     },
     onError: (err: Error) =>
@@ -856,7 +862,7 @@ export function SetupPage() {
     }
     createTeamMutation.mutate({
       name: newTeam.name.trim(),
-      color: pickNextTeamColor((teams ?? []).map((team) => team.color)),
+      color: newTeam.color || pickNextTeamColor((teams ?? []).map((team) => team.color)),
       poolPlayerIds: [newTeam.poolPlayerId1, newTeam.poolPlayerId2],
     })
   }
@@ -1390,6 +1396,7 @@ export function SetupPage() {
 
           <form onSubmit={handleCreateTeam} className="mt-6 space-y-3 border-t border-green-100 pt-6">
             <p className="text-sm font-medium text-green-900">{t('setup.createTeamManual')}</p>
+            <TeamColorField value={newTeam.color || pickNextTeamColor((teams ?? []).map(team => team.color))} onChange={color => setNewTeam(previous => ({ ...previous, color }))} disabled={createTeamMutation.isPending} />
             <input
               value={newTeam.name}
               aria-label={t('setup.teamNameLabel')}

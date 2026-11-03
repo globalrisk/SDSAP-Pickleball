@@ -9,6 +9,8 @@ import { duelOpponentMeetingCaps, duelTierForRank } from '../lib/leagueDuelSched
 import { DUEL_DRAFT_PRIORITIES, createDuelDraftOptions, refreshDuelDraftOptions, isSelectedDuelDraftSaved, type DuelDraftOptions } from '../lib/duelDraftOptions'
 import { ErrorState } from './Layout'
 import { LeagueDuelTeamNameForm } from './LeagueDuelTeamNameForm'
+import { TeamColorField } from './TeamColorField'
+import { DEFAULT_TEAM_COLORS } from '../lib/teamColors'
 import { seasonRosterQueryKey } from '../lib/seasonRosterApi'
 import { SeasonForecastSummary } from './SeasonForecastSummary'
 import { SeasonMatchDeletion } from './SeasonMatchDeletion'
@@ -37,6 +39,8 @@ function LegacyLeagueTeamDuelSetup({ season, rosterIds, teams, fixtures, hasFixt
   const [refreshFailed, setRefreshFailed] = useState(false)
   const interacted = useRef(false)
   const [names, setNames] = useState<[string, string]>([t('leagueDuel.squadA'), t('leagueDuel.squadB')])
+  const [colorDraft, setColors] = useState<[string, string] | null>(null)
+  const colors: [string, string] = colorDraft ?? [teams[0]?.color ?? DEFAULT_TEAM_COLORS[0], teams[1]?.color ?? DEFAULT_TEAM_COLORS[1]]
   const validSize = (LEAGUE_DUEL_ROSTER_SIZES as readonly number[]).includes(rosterIds.length)
   const meetingCaps = validSize ? duelOpponentMeetingCaps(rosterIds.length / 2) : undefined
   const needsTierDraft = teams.length > 0 && !hasFixtures && (season.duel_schedule_mode !== 'tier_matched'
@@ -65,7 +69,11 @@ function LegacyLeagueTeamDuelSetup({ season, rosterIds, teams, fixtures, hasFixt
     if (preview.isSuccess) setRefreshFailed(false)
   }, [preview.data, preview.isSuccess, savedCandidate])
   const selected = currentOptions?.drafts.find((draft) => draft.priority === selectedPriority)
-  const selectionSaved = isSelectedDuelDraftSaved(selected, season, teams, preview.data)
+  const colorsSaved = selected?.squads.every((squad, side) => {
+    const savedTeam = teams.find(team => team.players.some(player => player.pool_player_id === squad[0]?.id))
+    return savedTeam?.color.toLowerCase() === colors[side]?.toLowerCase()
+  })
+  const selectionSaved = isSelectedDuelDraftSaved(selected, season, teams, preview.data) && !!colorsSaved
   const previewUnavailable = preview.isError || refreshFailed || preview.isFetching
   async function refreshOptions() {
     interacted.current = true
@@ -85,7 +93,7 @@ function LegacyLeagueTeamDuelSetup({ season, rosterIds, teams, fixtures, hasFixt
   const save = useMutation({
     mutationFn: async () => {
       if (!selected || !preview.data || previewUnavailable) throw new Error(t('leagueDuel.selectDraft'))
-      await saveLeagueDuelDraft(season.id, selected, names, preview.data.revision, preview.data.fingerprint)
+      await saveLeagueDuelDraft(season.id, selected, names, preview.data.revision, preview.data.fingerprint, colors)
     },
     onSuccess: invalidate,
     onError: (error: Error) => { if (error.message.includes('DUEL_STALE_DRAFT')) void preview.refetch() },
@@ -146,6 +154,7 @@ function LegacyLeagueTeamDuelSetup({ season, rosterIds, teams, fixtures, hasFixt
           <div className="mt-3 grid gap-3 sm:grid-cols-2">{draft.squads.map((squad, side) => <div key={side}><p className="text-sm font-bold">{t(side === 0 ? 'leagueDuel.squadA' : 'leagueDuel.squadB')}</p><ol className="mt-1 space-y-1 text-sm">{squad.map((player, rank) => <li key={player.id}>#{rank + 1} {player.name} <span className="text-gray-500">({Math.round(player.rating)})</span> <span className="rounded bg-green-50 px-2 py-0.5 text-xs font-semibold text-green-800">{t(`leagueDuel.tier.${duelTierForRank(rank + 1, squad.length)}`)}</span></li>)}</ol></div>)}</div>
         </label>}) : null}</div>
         <div className="grid gap-3 sm:grid-cols-2">{names.map((name, side) => <label key={side} className="text-sm font-semibold">{t(side === 0 ? 'leagueDuel.nameA' : 'leagueDuel.nameB')}<input value={name} maxLength={120} disabled={save.isPending || generate.isPending} onChange={(e) => setNames((current) => side === 0 ? [e.target.value, current[1]] : [current[0], e.target.value])} className="mt-1 min-h-11 w-full rounded-lg border border-green-200 px-3 py-2" /></label>)}</div>
+        <div className="grid gap-3 sm:grid-cols-2">{colors.map((color, side) => <TeamColorField key={side} value={color} disabled={save.isPending || generate.isPending} onChange={next => { setColors(side === 0 ? [next, colors[1]] : [colors[0], next]); save.reset() }} />)}</div>
         <button type="button" className={buttonClass} disabled={!selected || previewUnavailable || save.isPending || generate.isPending || names.some((name) => !name.trim())} onClick={() => { generate.reset(); save.mutate() }}>{save.isPending ? t('common.loading') : t('leagueDuel.saveDraft')}</button>
         {save.isSuccess ? <p role="status" className="text-sm text-green-800">{t('leagueDuel.draftSaved')}</p> : null}
         {teams.length === 2 ? <div className="border-t border-green-100 pt-4"><p className="mb-3 text-sm text-gray-600">{t('leagueDuel.generateHelp', { games: rosterIds.length / 2 * (rosterIds.length / 2 - 1) / 2, appearances: rosterIds.length / 2 - 1 })}</p>{!selectionSaved ? <p className="mb-3 text-sm text-amber-800">{t('leagueDuel.saveBeforeGenerate')}</p> : null}<button type="button" className={buttonClass} disabled={needsTierDraft || !selectionSaved || previewUnavailable || generate.isPending || save.isPending} onClick={() => generate.mutate()}>{generate.isPending ? t('common.loading') : t('leagueDuel.generate')}</button></div> : null}

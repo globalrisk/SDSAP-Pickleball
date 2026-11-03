@@ -7,7 +7,8 @@ import { findDuelSchedule, measureDuelSchedule, duelScheduleId, type FlexibleDue
 import { teamWinProbability } from './ratings'
 const state = vi.hoisted(() => ({ client: null as SupabaseClient | null }))
 vi.mock('./supabase', () => ({ supabase: { from(table: string) { return state.client!.from(table) }, rpc(name: string, args: Record<string, unknown>) { return state.client!.rpc(name, args) } } }))
-import { clearUnplayedLeagueDuelFixtures, fetchFlexibleDuelContext, saveFlexibleDuelPlan, setSeasonFormat, renameLeagueDuelTeam, fetchLeagueDuelDraftPreview, saveLeagueDuelDraft, generateLeagueDuelSeasonMatches } from './leagueTeamDuelApi'
+import { clearUnplayedLeagueDuelFixtures, fetchFlexibleDuelContext, saveFlexibleDuelPlan, setSeasonFormat, renameLeagueDuelTeam, saveTeamAppearance, fetchLeagueDuelDraftPreview, saveLeagueDuelDraft, generateLeagueDuelSeasonMatches } from './leagueTeamDuelApi'
+import { DEFAULT_TEAM_COLORS } from './teamColors'
 import { fetchSeasons, fetchTeamsWithPlayers, fetchMatches, recordResult } from './api'
 import { saveSeasonRoster } from './seasonRosterApi'
 
@@ -37,6 +38,7 @@ describe('flexible plans through PostgreSQL and application APIs', () => {
     const saved = await saveFlexibleDuelPlan(s.seasonId, s.plan, ['A', 'B'], s.context.revision, s.context.fingerprint, null, false)
     expect(saved.hash).toHaveLength(32)
     expect(saved.count).toBe(0)
+    expect((await fetchTeamsWithPlayers(s.seasonId)).map(team => team.color).sort()).toEqual([...DEFAULT_TEAM_COLORS].sort())
     let season = (await fetchSeasons(s.leagueId)).find(v => v.id === s.seasonId)!
     expect(season.duel_schedule_mode).toBe('flexible')
     expect(season.duel_draft_plan).toEqual(s.plan)
@@ -54,6 +56,37 @@ describe('flexible plans through PostgreSQL and application APIs', () => {
     season = (await fetchSeasons(s.leagueId)).find(v => v.id === s.seasonId)!
     expect(season.duel_draft_plan).toBeNull(); expect(season.duel_draft_plan_hash).toBeNull()
     expect((await api.db.query('SELECT to_jsonb(m) data FROM public.matches m WHERE season_id<>$1 ORDER BY id', [s.seasonId])).rows).toEqual(untouched)
+  }, 30000)
+  it('persists custom colors through draft reload, generation and later appearance edits', async () => {
+    const s = await prepare()
+    await saveFlexibleDuelPlan(s.seasonId, s.plan, ['A', 'B'], s.context.revision, s.context.fingerprint, null, false, ['#9333ea', '#0891b2'])
+    let teams = await fetchTeamsWithPlayers(s.seasonId)
+    expect(teams.map(team => team.color).sort()).toEqual(['#0891b2', '#9333ea'])
+    const first = teams.find(team => team.name === 'A')!
+    await saveTeamAppearance(s.seasonId, first.id, first.name, '#be123c')
+    await generateLeagueDuelSeasonMatches(s.seasonId)
+    teams = await fetchTeamsWithPlayers(s.seasonId)
+    expect(teams.find(team => team.name === 'A')?.color).toBe('#be123c')
+    const fixtures = await fetchMatches(s.seasonId, s.leagueId)
+    expect(fixtures.every(match => match.home_team.color === '#be123c' && match.away_team.color === '#0891b2')).toBe(true)
+    const snapshot = await api.db.query('SELECT id,home_team_id,away_team_id,home_pool_player_ids,away_pool_player_ids,status FROM public.matches WHERE season_id=$1 ORDER BY id', [s.seasonId])
+    await saveTeamAppearance(s.seasonId, teams.find(team => team.name === 'A')!.id, 'A', '#2563eb')
+    expect((await api.db.query('SELECT id,home_team_id,away_team_id,home_pool_player_ids,away_pool_player_ids,status FROM public.matches WHERE season_id=$1 ORDER BY id', [s.seasonId])).rows).toEqual(snapshot.rows)
+    expect((await fetchMatches(s.seasonId, s.leagueId))[0]!.home_team.color).toBe('#2563eb')
+  }, 30000)
+
+  it('rejects malformed colors atomically and keeps appearance edits restricted to administrators', async () => {
+    const s = await prepare()
+    const args = { p_season_id: s.seasonId, p_plan: s.plan, p_names: ['A', 'B'], p_expected_rating_revision: s.context.revision, p_expected_rating_fingerprint: s.context.fingerprint, p_expected_plan_hash: null }
+    expect((await state.client!.rpc('save_league_duel_plan_atomic', { ...args, p_colors: ['red', '#2563eb'] })).error?.message).toContain('valid team colors')
+    expect(await fetchTeamsWithPlayers(s.seasonId)).toHaveLength(0)
+    await saveFlexibleDuelPlan(s.seasonId, s.plan, ['A', 'B'], s.context.revision, s.context.fingerprint, null, true, ['#9333ea', '#0891b2'])
+    const team = (await fetchTeamsWithPlayers(s.seasonId))[0]!
+    await expect(saveTeamAppearance(s.seasonId, team.id, team.name, 'red')).rejects.toThrow('valid team color')
+    const player = await api.addAccount({ email: 'colors@example.test' })
+    const member = createClient(api.url, 'local-anon-key', { global: { headers: { Authorization: `Bearer ${player.token}` } }, auth: { persistSession: false, autoRefreshToken: false } })
+    expect((await member.from('teams').update({ color: '#000000' }).eq('id', team.id).select('id').single()).error).not.toBeNull()
+    expect((await fetchTeamsWithPlayers(s.seasonId)).find(saved => saved.id === team.id)?.color).toBe(team.color)
   }, 30000)
   it('rejects stale snapshots and stale saved-plan hashes without partial changes', async () => {
     const s = await prepare()

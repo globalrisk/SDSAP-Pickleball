@@ -10,8 +10,9 @@ import {
   type LeagueSetupTeam,
 } from '../lib/leagueApi'
 import { ErrorState, LoadingState, PageHeader } from '../components/Layout'
+import { DEFAULT_TEAM_COLORS } from '../lib/teamColors'
 
-const TEAM_COLORS = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#a855f7', '#ec4899', '#14b8a6']
+const TEAM_COLORS = [...DEFAULT_TEAM_COLORS, '#eab308', '#22c55e', '#a855f7', '#ec4899', '#14b8a6', '#ef4444']
 
 interface TeamDraft extends LeagueSetupTeam {
   key: string

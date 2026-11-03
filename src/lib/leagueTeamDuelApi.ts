@@ -9,6 +9,7 @@ import { partnershipKey } from './balanceTeams'
 import { fetchSeasonRosterIds } from './seasonRosterApi'
 import { isSeasonForecastBalanced } from './seasonForecast'
 import { FLEXIBLE_DUEL_VERSION, type FlexibleDuelPlan } from './flexibleDuel'
+import { DEFAULT_TEAM_COLORS, isTeamColor } from './teamColors'
 
 export async function fetchFlexibleDuelContext(leagueId: string, seasonId: string) {
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -24,10 +25,12 @@ export async function fetchFlexibleDuelContext(leagueId: string, seasonId: strin
   throw new Error('DUEL_STALE_DRAFT')
 }
 
-export async function saveFlexibleDuelPlan(seasonId: string, plan: FlexibleDuelPlan, names: [string, string], revision: number, fingerprint: string, expectedHash: string | null, generate: boolean): Promise<{ hash: string; count: number }> {
+export async function saveFlexibleDuelPlan(seasonId: string, plan: FlexibleDuelPlan, names: [string, string], revision: number, fingerprint: string, expectedHash: string | null, generate: boolean, colors?: [string, string]): Promise<{ hash: string; count: number }> {
+  if (colors?.some(color => !isTeamColor(color))) throw new Error('Choose valid team colors.')
   const { data, error } = await supabase.rpc(generate ? 'save_and_generate_league_duel_plan_atomic' : 'save_league_duel_plan_atomic', {
     p_season_id: seasonId, p_plan: plan, p_names: names.map(n => n.trim()), p_expected_rating_revision: revision,
     p_expected_rating_fingerprint: fingerprint, p_expected_plan_hash: expectedHash,
+    ...(colors ? { p_colors: colors } : {}),
   })
   if (error) throw error
   return data
@@ -39,9 +42,14 @@ export async function setSeasonFormat(seasonId: string, format: SeasonFormat): P
 }
 
 export async function renameLeagueDuelTeam(seasonId: string, teamId: string, name: string): Promise<void> {
+  return saveTeamAppearance(seasonId, teamId, name)
+}
+
+export async function saveTeamAppearance(seasonId: string, teamId: string, name: string, color?: string): Promise<void> {
   const trimmed = name.trim()
   if (!trimmed || trimmed.length > 120) throw new Error('Team names must contain between 1 and 120 characters.')
-  const { error } = await supabase.from('teams').update({ name: trimmed })
+  if (color !== undefined && !isTeamColor(color)) throw new Error('Choose a valid team color.')
+  const { error } = await supabase.from('teams').update({ name: trimmed, ...(color !== undefined ? { color } : {}) })
     .eq('id', teamId).eq('season_id', seasonId).select('id').single()
   if (error) throw error
 }
@@ -90,13 +98,14 @@ export async function fetchLeagueDuelDraftPreview(leagueId: string, seasonId: st
   throw new Error('DUEL_STALE_DRAFT: League ratings changed. Refresh draft options first.')
 }
 
-export async function saveLeagueDuelDraft(seasonId: string, draft: LeagueDuelDraft, names: [string, string], revision: number, fingerprint: string): Promise<void> {
+export async function saveLeagueDuelDraft(seasonId: string, draft: LeagueDuelDraft, names: [string, string], revision: number, fingerprint: string, colors: [string, string] = DEFAULT_TEAM_COLORS): Promise<void> {
+  if (colors.some(color => !isTeamColor(color))) throw new Error('Choose valid team colors.')
   if (!isSeasonForecastBalanced(draft.schedule.seasonForecast)) throw new Error('DUEL_SEASON_BALANCE: Refresh and choose a draft within 55/45 before saving.')
   const { error } = await supabase.rpc('save_league_duel_draft_atomic', {
     p_season_id: seasonId, p_expected_rating_revision: revision,
     p_expected_rating_fingerprint: fingerprint,
     p_priority: draft.priority,
-    p_squads: draft.squads.map((players, i) => ({ name: names[i].trim(), color: i === 0 ? '#15803d' : '#1d4ed8', poolPlayerIds: players.map((p) => p.id) })),
+    p_squads: draft.squads.map((players, i) => ({ name: names[i].trim(), color: colors[i], poolPlayerIds: players.map((p) => p.id) })),
   })
   if (error) throw error
 }

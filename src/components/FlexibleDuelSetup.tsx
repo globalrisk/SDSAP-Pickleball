@@ -9,6 +9,8 @@ import type { MatchWithTeams, Season, TeamWithPlayers } from '../types'
 import { SeasonForecastSummary } from './SeasonForecastSummary'
 import { SeasonMatchDeletion } from './SeasonMatchDeletion'
 import { LeagueDuelTeamNameForm } from './LeagueDuelTeamNameForm'
+import { TeamColorField } from './TeamColorField'
+import { DEFAULT_TEAM_COLORS } from '../lib/teamColors'
 import { ErrorState } from './Layout'
 import { teamWinProbability } from '../lib/ratings'
 import type { PoolPlayer } from '../types'
@@ -28,6 +30,8 @@ export function FlexibleDuelSetup({ season, rosterIds, teams, fixtures, hasFixtu
   const [settings, setSettings] = useState<DuelGenerationSettings>(saved?.settings ?? { maxPartnerMeetings: 2, maxOpponentMeetings: 2 })
   const [names, setNames] = useState<[string, string]>([orderedTeams[0]?.name ?? t('leagueDuel.squadA'), orderedTeams[1]?.name ?? t('leagueDuel.squadB')])
   const named = useRef(teams.length > 0)
+  const [colorDraft, setColors] = useState<[string, string] | null>(null)
+  const colors: [string, string] = colorDraft ?? [orderedTeams[0]?.color ?? DEFAULT_TEAM_COLORS[0], orderedTeams[1]?.color ?? DEFAULT_TEAM_COLORS[1]]
   useEffect(() => { if (!named.current && orderedTeams[0] && orderedTeams[1]) { named.current = true; setNames([orderedTeams[0].name, orderedTeams[1].name]) } }, [orderedTeams])
   const [catalog, setCatalog] = useState<DuelSearchCatalog | null>(null), [split, setSplit] = useState<DuelSplit | undefined>()
   const [options, setOptions] = useState<DuelScheduleOption[]>([]), [selectedId, setSelectedId] = useState<string>()
@@ -144,7 +148,7 @@ export function FlexibleDuelSetup({ season, rosterIds, teams, fixtures, hasFixtu
       const fresh = await fetchFlexibleDuelContext(league.id, season.id)
       if (fresh.key !== context.data.key) { setUnavailable(true); void context.refetch(); throw new Error(t('flexibleDuel.stale')) }
       const plan: FlexibleDuelPlan = { version: FLEXIBLE_DUEL_VERSION, inputKey, splitId: split.id, settings, squads: split.squads, option: selected, engine }
-      return saveFlexibleDuelPlan(season.id, plan, names, fresh.revision, fresh.fingerprint, hash, generate)
+      return saveFlexibleDuelPlan(season.id, plan, names, fresh.revision, fresh.fingerprint, hash, generate, colors)
     },
     onSuccess: async result => { setHash(result.hash); setNotice(result.count ? 'generated' : 'saved'); await Promise.all(['teams', 'teams-with-players', 'matches', 'seasons', 'assigned-pool-players'].map(key => client.invalidateQueries({ queryKey: [key] }))) },
     onError: () => { void context.refetch(); void client.invalidateQueries({ queryKey: ['seasons'] }) },
@@ -157,7 +161,7 @@ export function FlexibleDuelSetup({ season, rosterIds, teams, fixtures, hasFixtu
     <p className="text-sm text-gray-600">{t('flexibleDuel.rules')}</p>
     {hasFixtures ? <>
       <p>{t('leagueDuel.frozen')}</p>
-      <div className="grid gap-4 sm:grid-cols-2">{teams.map(team => <div key={team.id}><h3 className="font-bold">{team.name}</h3>{editable ? <LeagueDuelTeamNameForm team={team} disabled={persist.isPending} /> : null}<ul>{team.players.map(p => <li key={p.id}>{p.name}</li>)}</ul></div>)}</div>
+      <div className="grid gap-4 sm:grid-cols-2">{teams.map(team => <div key={team.id}><h3 className="font-bold" style={{ color: team.color }}>{team.name}</h3>{editable ? <LeagueDuelTeamNameForm team={team} disabled={persist.isPending} /> : null}<ul>{team.players.map(p => <li key={p.id}>{p.name}</li>)}</ul></div>)}</div>
       {saved ? <p>{t('flexibleDuel.savedLimits', { partner: saved.settings.maxPartnerMeetings ?? t('flexibleDuel.noLimit'), opponent: saved.settings.maxOpponentMeetings ?? t('flexibleDuel.noLimit') })}</p> : null}
       {editable && fixtures?.length ? <SeasonMatchDeletion season={season} fixtures={fixtures} busy={persist.isPending} onCleared={() => { stop(); setOptions([]); setHash(null) }} /> : null}
       <Link to={leaguePath('/matches')} className="text-green-800 underline">{t('leagueDuel.viewGames')}</Link>
@@ -176,7 +180,7 @@ export function FlexibleDuelSetup({ season, rosterIds, teams, fixtures, hasFixtu
         {context.isFetching ? <p role="status">{t('common.loading')}</p> : null}
         {context.error ? <ErrorState message={context.error.message} /> : null}
         {notice ? <p role="status" className="text-sm text-green-900">{t(`flexibleDuel.notice.${notice}`, { count: options.length })}</p> : null}
-        {split ? <div className="grid gap-4 sm:grid-cols-2">{split.squads.map((s, side) => <div key={side}><label className="text-sm font-bold">{t(side ? 'leagueDuel.nameB' : 'leagueDuel.nameA')}<input className="mt-1 block min-h-11 w-full rounded-lg border px-3" value={names[side]} maxLength={120} disabled={persist.isPending} onChange={e => { named.current = true; setNames(ns => side === 0 ? [e.target.value, ns[1]] : [ns[0], e.target.value]) }} /></label><ul className="mt-2 text-sm">{s.map(id => <li key={id}>{playerName(id)} <span className="text-gray-500">{pool.get(id) ? Math.round(pool.get(id)!.rating) : ''}</span></li>)}</ul></div>)}</div> : null}
+        {split ? <div className="grid gap-4 sm:grid-cols-2">{split.squads.map((s, side) => <div key={side}><label className="text-sm font-bold">{t(side ? 'leagueDuel.nameB' : 'leagueDuel.nameA')}<input className="mt-1 block min-h-11 w-full rounded-lg border px-3" value={names[side]} maxLength={120} disabled={persist.isPending} onChange={e => { named.current = true; setNames(ns => side === 0 ? [e.target.value, ns[1]] : [ns[0], e.target.value]) }} /></label><div className="mt-3"><TeamColorField value={colors[side]!} disabled={persist.isPending} onChange={color => { setColors(side === 0 ? [color, colors[1]] : [colors[0], color]); persist.reset() }} /></div><ul className="mt-2 text-sm">{s.map(id => <li key={id}>{playerName(id)} <span className="text-gray-500">{pool.get(id) ? Math.round(pool.get(id)!.rating) : ''}</span></li>)}</ul></div>)}</div> : null}
         <div className="grid gap-3 lg:grid-cols-3">{options.map(option => { const m = option.metrics, hardest = [...m.players].sort((a, b) => b.below40 - a.below40 || b.disadvantage - a.disadvantage)[0]!; return <label key={option.id} className={`rounded-lg border p-4 ${selected?.id === option.id ? 'border-green-600 bg-green-50' : 'border-gray-200'}`}>
           <span className="flex gap-2 font-bold"><input type="radio" name={`duel-${season.id}`} checked={selectedId === option.id} disabled={busy || persist.isPending || unavailable} onChange={() => { setSelectedId(option.id); persist.reset() }} />{t(`flexibleDuel.kind.${option.kind}`)}</span>
           <p className="mt-2 text-xs text-gray-600">{t(`flexibleDuel.${engine === 'cp-sat' ? 'fastKindHelp' : 'kindHelp'}.${option.kind}`)}</p>

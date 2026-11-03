@@ -204,10 +204,10 @@
     "squadB": "Đội B",
     "nameA": "Tên đội A",
     "nameB": "Tên đội B",
-    "renameTeam": "Đổi tên đội",
-    "renameTeamNamed": "Đổi tên {{name}}",
-    "teamRenamed": "Đã lưu tên đội.",
-    "renameHelp": "Bạn có thể đổi tên đội trong mùa giải đang diễn ra, kể cả sau khi tạo lịch. Thành viên, lịch đấu, kết quả và điểm xếp hạng được giữ nguyên.",
+    "renameTeam": "Đổi tên và màu đội",
+    "renameTeamNamed": "Đổi tên và màu của {{name}}",
+    "teamRenamed": "Đã lưu tên và màu đội.",
+    "renameHelp": "Bạn có thể đổi tên và màu đội trong mùa giải đang diễn ra, kể cả sau khi tạo lịch.",
     "frozen": "Thành viên, thứ hạng, nhóm trình độ và đội hình thi đấu đã được cố định cho mùa giải này.",
     "clearFixtures": "Xóa các trận chưa thi đấu",
     "clearHelp": "Xóa toàn bộ lịch chưa thi đấu để chia lại đội. Mùa giải, người chơi đã chọn, hai đội và điểm xếp hạng được giữ nguyên.",
@@ -1166,6 +1166,11 @@
     "title": "Đã xảy ra lỗi",
     "supabaseTitle": "Chưa cấu hình Supabase",
     "supabaseMessage": "Sao chép .env.example sang .env.local và thêm URL dự án cùng anon key. Sau đó chạy migration SQL trên Supabase."
+  },
+  "teamColors": {
+    "label": "Màu đội",
+    "blue": "Xanh dương",
+    "orange": "Cam"
   },
   "betHistory": {
     "won": "Bạn thắng",

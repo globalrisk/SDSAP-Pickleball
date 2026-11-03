@@ -1150,6 +1150,7 @@ export async function saveTeamWithPlayers(
   teamId: string,
   teamName: string,
   players: { id: string; poolPlayerId: string }[],
+  color?: string,
 ): Promise<void> {
   if (players.length !== 2) {
     throw new Error('A team must have exactly 2 players')
@@ -1166,6 +1167,7 @@ export async function saveTeamWithPlayers(
     p_teams: [{
       id: teamId,
       name: teamName.trim(),
+      ...(color ? { color } : {}),
       poolPlayerIds: players.map((player) => player.poolPlayerId),
     }],
   })

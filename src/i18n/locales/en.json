@@ -206,10 +206,10 @@
     "squadB": "Squad B",
     "nameA": "Squad A name",
     "nameB": "Squad B name",
-    "renameTeam": "Rename team",
-    "renameTeamNamed": "Rename {{name}}",
-    "teamRenamed": "Team name saved.",
-    "renameHelp": "You can rename teams during the active season, including after games are generated. Players, fixtures, results, and ratings stay the same.",
+    "renameTeam": "Edit team name & color",
+    "renameTeamNamed": "Edit {{name}} name and color",
+    "teamRenamed": "Team name and color saved.",
+    "renameHelp": "You can change team names and colors during the active season, including after games are generated.",
     "frozen": "Squad membership, ranks, tiers, and game lineups are frozen for this season.",
     "clearFixtures": "Clear unplayed fixtures",
     "clearHelp": "Remove all unplayed fixtures to rebuild the draft. The season, selected players, squads, and ratings are preserved.",
@@ -1170,6 +1170,11 @@
     "title": "Something went wrong",
     "supabaseTitle": "Supabase not configured",
     "supabaseMessage": "Copy .env.example to .env.local and add your project URL and anon key. Then run the SQL migration in Supabase."
+  },
+  "teamColors": {
+    "label": "Team color",
+    "blue": "Blue",
+    "orange": "Orange"
   },
   "betHistory": {
     "won": "You won",
