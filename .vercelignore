@@ -1,0 +1,7 @@
+.git
+.env*
+artifacts.local
+node_modules
+**/__pycache__
+**/*.pyc
+server/test_*.py

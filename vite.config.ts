@@ -7,6 +7,7 @@ export default defineConfig({
   server: {
     host: true,
     port: 5173,
+    proxy: { '/api/duel-solve': 'http://127.0.0.1:8001' },
   },
   preview: {
     host: true,

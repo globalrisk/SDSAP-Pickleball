@@ -11,7 +11,7 @@ A shared pickleball platform for multiple independent leagues. Players have one 
 - One shared player directory with league-specific membership and ratings
 - Administrators can add players from **Manage → Players** without assigning a league; these players are immediately available to Team Duel and can join a league later from that league's Setup page
 - **League setup** opens the selected season's overview. Its Season workspace groups **Players → Teams & fixtures → Prizes → Finish season**; **League members**, **Player accounts**, and **League settings** are separate administration sections. Desktop uses a sidebar and phones use a section selector. League membership persists across seasons; choose each season's participants separately before building teams.
-- Seasons support doubles round robin or **Team Duel**: two rated squads of 4–7, configurable partner/opponent meeting limits, three schedule previews, shared squad points, and individual rated games. See [setup and rollout notes](docs/league-team-duel.md).
+- Seasons support doubles round robin or **Team Duel**: two rated squads of 4–7, configurable partner/opponent meeting limits, CP-SAT Fast mode or exhaustive search, three schedule previews, shared squad points, and individual rated games. See [setup and rollout notes](docs/league-team-duel.md).
 - Multiple leagues can each have an active season at the same time
 - Administrator-only setup and result entry; public pages are read-only
 - Linked players can edit or clear their own league badge from **My Profile → Settings**, alongside their player name, or from their player profile. Badges allow up to 60 characters; administrators can edit any player's badge.

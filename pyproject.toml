@@ -1,0 +1,15 @@
+[project]
+name = "sdsap-duel-solver"
+version = "1.0.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "ortools==9.15.6755",
+  "absl-py==2.5.1",
+  "immutabledict==4.3.1",
+  "numpy==2.5.4",
+  "pandas==3.1.0",
+  "protobuf==6.33.6",
+  "python-dateutil==4.0.0",
+  "typing-extensions==4.16.0",
+  "tzdata==2026.6",
+]

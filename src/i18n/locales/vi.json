@@ -1540,9 +1540,40 @@
       "restarted": "Đã xem hết phương án mới. Chu kỳ lịch đấu được bắt đầu lại.",
       "cancelled": "Đã hủy tìm kiếm. Hãy tìm lại trước khi lưu hoặc tạo trận.",
       "saved": "Đã lưu hai đội, giới hạn và chính xác lịch đấu đã chọn.",
-      "generated": "Đã tạo các trận đã chọn."
+      "generated": "Đã tạo các trận đã chọn.",
+      "fastLimited": "Chưa tìm được lịch hợp lệ trong thời gian cho phép. Thử chia lại đội, đổi giới hạn hoặc dùng chế độ vét cạn. Điều này không chứng minh các điều kiện là bất khả thi.",
+      "fastInfeasible": "Không có lịch đáp ứng các giới hạn cho hai đội này. Hãy chia lại đội hoặc đổi giới hạn."
     },
     "seasonBalanceLimit": "Mọi phương án giữ xác suất thắng cả mùa trong khoảng 45%–55%, không tính đồng vô địch.",
-    "invalidLimits": "Chọn giới hạn số lần gặp phù hợp với danh sách người chơi trước khi tìm."
+    "invalidLimits": "Chọn giới hạn số lần gặp phù hợp với danh sách người chơi trước khi tìm.",
+    "mode": "Chế độ xếp lịch",
+    "fastMode": "Nhanh — CP-SAT",
+    "exactMode": "Vét cạn — cân bằng tốt nhất",
+    "fastHelp": "Chia đội ngẫu nhiên với tổng điểm gần nhau, rồi tìm tối đa ba lịch đấu trên máy chủ. Vẫn giữ số trận bằng nhau, giới hạn số lần gặp và xác suất thắng mùa 45%–55%. Kết quả là phương án tốt nhất tìm được trong thời gian cho phép; cách chia đội chưa được tối ưu toàn cục.",
+    "fastProgress": "Đang tìm {{profile}} · {{seconds}} giây",
+    "solverOptimal": "Đã chứng minh tối ưu các mục tiêu của bộ giải cho hai đội này.",
+    "solverFeasible": "Tốt nhất tìm được trong thời gian cho phép; chưa chứng minh tối ưu.",
+    "fastKindHelp": {
+      "balance": "Giảm trận lệch nhất, sau đó giảm số trận ngoài khoảng 40/60 và độ lệch trung bình.",
+      "variety": "Tăng số cặp đồng đội và đối thủ trong phạm vi thêm năm điểm phần trăm so với phương án cân bằng nhất tìm được.",
+      "experience": "Giảm độ khó cho người có lịch đấu khó nhất trong cùng phạm vi chất lượng trận.",
+      "alternative": "Một lịch khác; không cải thiện lịch của người chịu bất lợi nhất."
+    },
+    "fastErrors": {
+      "SOLVER_UNAUTHORIZED": "Đăng nhập lại trước khi tìm.",
+      "SOLVER_FORBIDDEN": "Chỉ quản trị viên được tìm lịch.",
+      "SOLVER_BUSY": "Một lượt tìm khác đang chạy. Hãy thử lại sau ít giây.",
+      "SOLVER_NOT_CONFIGURED": "Máy chủ chưa cấu hình bộ giải. Bạn có thể dùng chế độ vét cạn.",
+      "SOLVER_UNAVAILABLE": "Bộ giải máy chủ chưa sẵn sàng. Thử lại hoặc dùng chế độ vét cạn.",
+      "SOLVER_DATA_UNAVAILABLE": "Không tải được điểm hiện tại. Hãy thử lại.",
+      "DUEL_STALE_DRAFT": "Điểm hoặc danh sách người chơi đã đổi. Hãy tìm lại.",
+      "SOLVER_SEASON_HAS_MATCHES": "Mùa này đã có lịch đấu.",
+      "SOLVER_SEASON_UNAVAILABLE": "Chọn mùa Đấu đội đang hoạt động.",
+      "SOLVER_INVALID_ROSTER": "Kiểm tra danh sách người chơi của mùa.",
+      "SOLVER_INVALID_LIMITS": "Chọn giới hạn số lần gặp hợp lệ.",
+      "SOLVER_INVALID_REQUEST": "Yêu cầu tìm lịch không hợp lệ. Hãy tìm lại.",
+      "SOLVER_INVALID_RESULT": "Lịch trả về không vượt qua kiểm tra. Hãy thử tìm lịch khác.",
+      "SOLVER_FAILED": "Máy chủ không hoàn tất lượt tìm. Thử lại hoặc dùng chế độ vét cạn."
+    }
   }
 }

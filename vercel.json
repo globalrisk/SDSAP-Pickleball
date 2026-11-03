@@ -1,3 +1,13 @@
 {
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+  "functions": {
+    "api/duel-solve.py": {
+      "maxDuration": 60,
+      "excludeFiles": "{node_modules/**,dist/**,artifacts.local/**,src/**,supabase/**,docs/**,scripts/**,.git/**}"
+    }
+  },
+  "routes": [
+    { "handle": "filesystem" },
+    { "src": "/api/.*", "status": 404 },
+    { "src": "/.*", "dest": "/index.html" }
+  ]
 }

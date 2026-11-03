@@ -19,10 +19,12 @@ export interface DuelMetrics {
 }
 export interface DuelScheduleOption {
   id: string; kind: DuelOptionKind; games: LeagueDuelGame[]; metrics: DuelMetrics
+  solver?: { status: 'OPTIMAL' | 'FEASIBLE'; elapsedMs: number }
 }
 export interface FlexibleDuelPlan {
   version: number; inputKey: string; splitId: string; settings: DuelGenerationSettings
   squads: [string[], string[]]; option: DuelScheduleOption
+  engine?: 'cp-sat' | 'exhaustive'
 }
 export interface DuelSearchInput {
   pool: PoolPlayer[]; settings: DuelGenerationSettings; inputKey: string; partnerHistory: string[][]

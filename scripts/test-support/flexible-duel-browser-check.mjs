@@ -1,15 +1,22 @@
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { mkdir } from 'node:fs/promises'
+import { spawn } from 'node:child_process'
 import { createServer } from 'vite'
 import { startLocalSupabase } from './local-supabase.mjs'
 
 const require = createRequire(import.meta.url)
 const { chromium } = require(process.env.CODEX_BROWSER_PACKAGES ? `${process.env.CODEX_BROWSER_PACKAGES}/playwright` : 'playwright')
 const api = await startLocalSupabase()
+const engine = process.env.DUEL_SEARCH_ENGINE || 'exhaustive'
+let python, solverUrl
+if (engine === 'cp-sat') {
+  python = spawn(process.env.DUEL_CPSAT_PYTHON || 'python', ['scripts/test-support/duel-solver-server.py'], { env: { ...process.env, VITE_SUPABASE_URL: api.url, VITE_SUPABASE_ANON_KEY: 'local-anon-key' }, windowsHide: true, stdio: ['ignore', 'pipe', 'inherit'] })
+  solverUrl = await new Promise((resolve, reject) => { python.once('error', reject); python.stdout.once('data', chunk => resolve(JSON.parse(String(chunk).trim()).url)) })
+}
 process.env.VITE_SUPABASE_URL = api.url
 process.env.VITE_SUPABASE_ANON_KEY = 'local-anon-key'
-const vite = await createServer({ server: { host: '127.0.0.1', port: 5174, strictPort: true } })
+const vite = await createServer({ server: { host: '127.0.0.1', port: 5174, strictPort: true, proxy: solverUrl ? { '/api/duel-solve': solverUrl } : undefined } })
 let browser
 try {
   const { supabase } = await vite.ssrLoadModule('/src/lib/supabase.ts')
@@ -21,6 +28,12 @@ try {
   await duel.setSeasonFormat(seasonId, 'team_duel')
   await saveSeasonRoster(seasonId, players.slice(0, 8).map(p => p.id))
   await api.db.query('UPDATE public.league_players SET rating=1500,rating_deviation=90 WHERE league_id=$1', [leagueId])
+  if (engine === 'cp-sat') {
+    assert.equal((await fetch(solverUrl + '/api/duel-solve')).status, 200)
+    assert.equal((await fetch(solverUrl + '/api/duel-solve', { method: 'POST', body: '{}' })).status, 401)
+    const player = await api.addAccount({ email: 'solver-player@example.test' })
+    assert.equal((await fetch(solverUrl + '/api/duel-solve', { method: 'POST', body: '{}', headers: { Authorization: `Bearer ${player.token}` } })).status, 403)
+  }
   await vite.listen()
   browser = await chromium.launch({ headless: true, channel: process.env.DUEL_BROWSER_CHANNEL || 'chrome' })
   const page = await browser.newPage({ viewport: { width: 1280, height: 1000 } })
@@ -37,6 +50,7 @@ try {
   const setup = 'http://127.0.0.1:5174/leagues/duel-verification/setup?section=teams'
   await page.goto(setup)
   await page.getByRole('button', { name: 'EN', exact: true }).click()
+  await page.getByLabel('Scheduling mode', { exact: true }).selectOption(engine)
   const partner = page.getByLabel('Maximum games with the same partner', { exact: true })
   const opponent = page.getByLabel('Maximum games against the same opponent', { exact: true })
   await partner.waitFor()
@@ -70,7 +84,7 @@ try {
   await page.waitForFunction(() => document.querySelectorAll('input[type="radio"][name^="duel-"]:checked').length === 1)
   assert.deepEqual((await row()).duel_draft_plan, saved.duel_draft_plan)
   assert.equal(await names.nth(0).inputValue(), 'Local Alpha')
-  await page.getByRole('button', { name: 'Search squads and schedules', exact: true }).click()
+  await page.getByRole('button', { name: engine === 'cp-sat' ? 'Shuffle squads' : 'Search squads and schedules', exact: true }).click()
   await ready()
   await page.getByRole('button', { name: 'Refresh schedules', exact: true }).click()
   await ready()
@@ -105,15 +119,16 @@ try {
   await duel.clearUnplayedLeagueDuelFixtures(seasonId, fixtureIds)
   await saveSeasonRoster(seasonId, players.map(p => p.id))
   await page.goto(setup)
+  await page.getByLabel('Scheduling mode', { exact: true }).selectOption(engine)
   await page.getByRole('button', { name: 'Search squads and schedules', exact: true }).click()
   await page.getByRole('button', { name: 'Cancel search', exact: true }).click()
   await page.getByText('Search cancelled. Start again before saving or generating.', { exact: true }).waitFor()
   assert.equal(await page.getByRole('button', { name: /^Generate \d+ selected matches$/ }).isDisabled(), true)
-  await page.getByRole('button', { name: 'Search squads and schedules', exact: true }).click()
+  await page.getByRole('button', { name: engine === 'cp-sat' ? 'Shuffle squads' : 'Search squads and schedules', exact: true }).click()
   await page.goto('http://127.0.0.1:5174/leagues/duel-verification/matches')
   assert.equal((await api.db.query('SELECT count(*)::int n FROM public.matches WHERE season_id=$1', [seasonId])).rows[0].n, 0)
   assert.deepEqual(errors, [])
-  console.log('PASS browser: real exhaustive worker, three options, filters, shuffle/refresh, detail matrices, exact save/reload/generate, stale rejection, cancellation/navigation, English/Vietnamese, mobile layout')
+  console.log(`PASS browser (${engine}): real search, three options, filters, shuffle/refresh, detail matrices, exact save/reload/generate, stale rejection, cancellation/navigation, English/Vietnamese, mobile layout`)
 } catch (error) {
   const page = browser?.contexts()[0]?.pages()[0]
   if (page) console.error((await page.locator('body').innerText()).slice(0, 6000))
@@ -122,4 +137,5 @@ try {
   await browser?.close()
   await vite.close()
   await api.close()
+  python?.kill()
 }
