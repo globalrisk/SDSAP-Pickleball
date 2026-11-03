@@ -81,6 +81,8 @@ export function MatchCard({ match, showForm = true, betting }: MatchCardProps) {
         <WinProbability
           homeTeamName={match.home_team.name}
           awayTeamName={match.away_team.name}
+          homeTeamColor={match.home_team.color}
+          awayTeamColor={match.away_team.color}
           homeProbability={probability.home}
           homeRating={probability.homeRating}
           awayRating={probability.awayRating}
@@ -115,12 +117,16 @@ export function MatchCard({ match, showForm = true, betting }: MatchCardProps) {
 function WinProbability({
   homeTeamName,
   awayTeamName,
+  homeTeamColor,
+  awayTeamColor,
   homeProbability,
   homeRating,
   awayRating,
 }: {
   homeTeamName: string
   awayTeamName: string
+  homeTeamColor: string
+  awayTeamColor: string
   homeProbability: number
   homeRating: number
   awayRating: number
@@ -132,14 +138,16 @@ function WinProbability({
   return (
     <div className="mt-4 border-t border-green-100 pt-3">
       <div className="mb-1.5 flex items-center justify-between gap-3 text-xs">
-        <span className="min-w-0 truncate font-semibold text-green-800">
+        <span className="inline-flex min-w-0 items-center gap-1.5 font-semibold text-gray-900">
+          <span aria-hidden="true" className="size-2 shrink-0 rounded-full" style={{ backgroundColor: homeTeamColor }} />
           {homePercent}% <span className="font-normal text-gray-500">({Math.round(homeRating)})</span>
         </span>
         <span className="shrink-0 text-[11px] font-medium uppercase tracking-wide text-gray-400">
           {t('matches.winProbability')}
         </span>
-        <span className="min-w-0 truncate text-right font-semibold text-green-800">
+        <span className="inline-flex min-w-0 items-center justify-end gap-1.5 text-right font-semibold text-gray-900">
           {awayPercent}% <span className="font-normal text-gray-500">({Math.round(awayRating)})</span>
+          <span aria-hidden="true" className="size-2 shrink-0 rounded-full" style={{ backgroundColor: awayTeamColor }} />
         </span>
       </div>
       <div
@@ -153,10 +161,10 @@ function WinProbability({
         })}
       >
         <div
-          className="bg-green-600 transition-[width]"
-          style={{ width: `${homePercent}%` }}
+          className="transition-[width]"
+          style={{ width: `${homePercent}%`, backgroundColor: homeTeamColor }}
         />
-        <div className="flex-1 bg-emerald-300" />
+        <div className="flex-1" style={{ backgroundColor: awayTeamColor }} />
       </div>
       <p className="mt-1 text-center text-[10px] text-gray-400">
         {t('matches.averageRating')}

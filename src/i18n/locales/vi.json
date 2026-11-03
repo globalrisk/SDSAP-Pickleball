@@ -1167,6 +1167,17 @@
     "supabaseTitle": "Chưa cấu hình Supabase",
     "supabaseMessage": "Sao chép .env.example sang .env.local và thêm URL dự án cùng anon key. Sau đó chạy migration SQL trên Supabase."
   },
+  "betHistory": {
+    "won": "Bạn thắng",
+    "lost": "Bạn thua",
+    "refunded": "Đã hoàn điểm",
+    "cancelled": "Đã hủy · chưa có người nhận",
+    "void": "Đã vô hiệu · không mất điểm",
+    "unavailable": "Chưa có thông tin kết quả",
+    "backed": "Bạn chọn {{pair}} thắng",
+    "netChange": "Điểm thực nhận hoặc mất: {{amount}}",
+    "empty": "Chưa có lời mời nào kết thúc."
+  },
   "bets": {
     "title": "Trust Me Bro",
     "description": "Ủng hộ một cặp bằng điểm Pickle của giải này với Trust Me Bro. Người thi đấu được chọn cặp của mình; không thu phí.",
@@ -1201,6 +1212,7 @@
     "owed": "Điểm còn nợ",
     "walletHelp": "Điểm đang giữ không thể dùng cho lời mời khác. Sửa kết quả có thể tạo khoản nợ; giải thưởng và điểm thắng sau đó sẽ bù khoản nợ.",
     "create": "Tạo lời mời",
+    "creating": "Đang tạo lời mời…",
     "stakeHelp": "Chọn cặp và điểm tham gia hai bên theo bội số 1.000. Điểm của bạn được giữ ngay. Lời mời đã nhận không thể rút lại.",
     "noEligibleMatches": "Mùa này chưa có trận nào đang mở lời mời Trust Me Bro.",
     "match": "Trận đấu",

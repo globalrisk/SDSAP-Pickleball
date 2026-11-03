@@ -15,9 +15,10 @@ import { BetAcceptanceDetails, BetPairSummary, BetTerms } from './BetSlip'
 const inputClass = 'mt-1 min-h-11 w-full rounded-lg border border-green-200 bg-white px-3 py-2 text-base'
 const buttonClass = 'min-h-11 rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white hover:bg-green-800 disabled:opacity-50'
 
-export function MatchBetPanel({ match, playerId, wallet, pool, offers, view, onViewChange, eligible }: {
+export function MatchBetPanel({ match, playerId, wallet, pool, offers, view, onViewChange, onCreated, eligible }: {
   match: MatchWithTeams; playerId?: string; wallet?: PickleWallet; pool: PoolPlayer[]; offers: PickleBet[]
   view: 'offer' | 'offers'; onViewChange: (view: 'offer' | 'offers') => void; eligible: boolean
+  onCreated: () => void
 }) {
   const { t } = useTranslation()
   const confirm = useConfirm()
@@ -28,7 +29,6 @@ export function MatchBetPanel({ match, playerId, wallet, pool, offers, view, onV
   const [stake, setStake] = useState('1000')
   const [differentStake, setDifferentStake] = useState(false)
   const [opponentStake, setOpponentStake] = useState('1000')
-  const [created, setCreated] = useState(false)
   const requestId = useRef(crypto.randomUUID())
   const acceptIds = useRef(new Map<string, string>())
   const { homeIds, awayIds } = resolveMatchLineups(match)
@@ -50,7 +50,8 @@ export function MatchBetPanel({ match, playerId, wallet, pool, offers, view, onV
       await createBet(match.id, sideId, stake, otherStake, requestId.current)
     },
     onSuccess: async () => {
-      requestId.current = crypto.randomUUID(); setCreated(true); setSideId('')
+      requestId.current = crypto.randomUUID()
+      onCreated()
       await refresh()
     },
   })
@@ -77,14 +78,14 @@ export function MatchBetPanel({ match, playerId, wallet, pool, offers, view, onV
     if (pending || !eligible || bet.creatorId === playerId || bet.state !== 'open' || bet.matchId !== match.id || !canAcceptMatchOffer(match, bet.creatorSide, playerId) || !hasBetFunds(wallet?.available, bet.acceptorStake)) return
     if (await confirm(t('betSlip.reviewTerms'), { title: t('betSlip.reviewTitle'), confirmLabel: t('betSlip.acceptOffer'), details: <BetAcceptanceDetails bet={bet} /> })) acceptance.mutate(bet)
   }
-  function changeTerms() { requestId.current = crypto.randomUUID(); offer.reset(); setCreated(false) }
+  function changeTerms() { requestId.current = crypto.randomUUID(); offer.reset() }
   return <section id={`match-bets-${match.id}`} className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 sm:p-5" aria-label={t('matchBets.panel')}>
     <h3 className="font-bold text-green-950">{t('matchBets.panel')}</h3>
     <p className="mb-3 text-sm text-green-900">{t('bets.available')}: <strong>{wallet ? formatPicklePoints(wallet.available) : '—'}</strong></p>
     <div className="mb-4 flex flex-wrap gap-2" role="group" aria-label={t('matchBets.views')}>
       {(['offer', 'offers'] as const).map(tab => <button key={tab} type="button" disabled={pending} aria-pressed={view === tab} onClick={() => onViewChange(tab)} className={`min-h-11 rounded-lg px-3 py-2 text-sm font-semibold ${view === tab ? 'bg-green-700 text-white' : 'border border-green-200 bg-white text-green-800'}`}>{t(tab === 'offer' ? 'bets.create' : 'matchBets.offers', { count: offers.length })}</button>)}
     </div>
-    {created ? <p role="status" className="mb-3 text-sm font-semibold text-green-800">{t('bets.created')}</p> : null}
+    {offer.isPending ? <p role="status" className="mb-3 text-sm font-semibold text-green-800">{t('bets.creating')}</p> : null}
     {status !== 'open' ? <p className="text-sm text-amber-900">{t('matchBets.closed')}</p> : allowedSides.length === 1 ? <p className="mb-3 text-sm text-amber-900">{t('matchBets.ownSideOnly')}</p> : null}
     {view === 'offer' ? <form onSubmit={event => { event.preventDefault(); void reviewCreation() }}>
       <fieldset disabled={pending || !eligible || status !== 'open'}>

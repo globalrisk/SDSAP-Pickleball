@@ -1171,6 +1171,17 @@
     "supabaseTitle": "Supabase not configured",
     "supabaseMessage": "Copy .env.example to .env.local and add your project URL and anon key. Then run the SQL migration in Supabase."
   },
+  "betHistory": {
+    "won": "You won",
+    "lost": "You lost",
+    "refunded": "Refunded",
+    "cancelled": "Cancelled · no bet placed",
+    "void": "Voided · no points lost",
+    "unavailable": "Result unavailable",
+    "backed": "You backed {{pair}}",
+    "netChange": "Net points: {{amount}}",
+    "empty": "No finished bets yet."
+  },
   "bets": {
     "title": "Trust Me Bro",
     "description": "Back a pair with Pickle points from this league. Players can back their own pair; no fees.",
@@ -1206,6 +1217,7 @@
     "owed": "Points owed",
     "walletHelp": "Reserved stakes cannot be spent again. Corrections can create points owed; future prizes and winnings repay them.",
     "create": "Create an offer",
+    "creating": "Creating offer…",
     "stakeHelp": "Choose your pair and both stakes, in multiples of 1,000. Your stake is reserved immediately. Accepted offers cannot be withdrawn.",
     "noEligibleMatches": "No matches are open for Trust Me Bro offers in this season.",
     "match": "Match",

@@ -15,6 +15,8 @@ import { useConfirm } from '../lib/confirmation'
 import { ErrorState, PageHeader } from '../components/Layout'
 import { BetSettlementReview } from '../components/BetSettlementReview'
 import { BetOfferCard } from '../components/BetOfferCard'
+import { BetHistoryCard } from '../components/BetHistoryCard'
+import { summarizeBetHistory } from '../lib/betHistory'
 import { BetAcceptanceDetails } from '../components/BetSlip'
 
 const buttonClass = 'min-h-11 rounded-lg bg-green-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-50'
@@ -53,9 +55,15 @@ export function BetsPage() {
     }
   }
   const pendingStates = ['open','accepted','review']
-  const shown = (bets.data ?? []).filter(b => tab==='open' ? b.state==='open' && b.seasonId===selectedSeason?.id
+  const historySummaries = summarizeBetHistory(tab === 'history' ? history.data ?? [] : [])
+  const filtered = (bets.data ?? []).filter(b => tab==='open' ? b.state==='open' && b.seasonId===selectedSeason?.id
     : tab==='mine' ? (b.creatorId===playerId || b.acceptorId===playerId) && pendingStates.includes(b.state)
     : (b.creatorId===playerId || b.acceptorId===playerId) && !pendingStates.includes(b.state))
+  const shown = tab === 'history' ? filtered.toSorted((a, b) => {
+    const aDate = historySummaries.get(a.id)?.settledAt ?? a.createdAt
+    const bDate = historySummaries.get(b.id)?.settledAt ?? b.createdAt
+    return bDate.localeCompare(aDate)
+  }) : filtered
   if (!user) return <><PageHeader title={t('bets.title')} subtitle={t('bets.description')} /><p className="mb-3">{t('bets.loginHelp')}</p><div className="flex flex-wrap gap-3"><Link className={buttonClass+' inline-flex items-center'} to={leaguePath('/login')}>{t('auth.signIn')}</Link><Link className="inline-flex min-h-11 items-center rounded-xl border border-green-300 px-4 py-2 font-bold text-green-800 hover:bg-green-50" to={leaguePath('/signup')}>{t('auth.signUp')}</Link></div></>
   return <div>
     <PageHeader title={t('bets.title')} subtitle={t('bets.description')} />
@@ -65,12 +73,15 @@ export function BetsPage() {
       <p className="mb-4 text-xs text-gray-600">{t('bets.walletHelp')}</p>
     </> : null}
     {playerId && pool.isSuccess && !activeMember ? <p className="mb-4 text-sm text-amber-900">{t('bets.inactive')}</p> : null}
-    {canBet ? <section className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-green-200 bg-white p-4">
+    {canBet && tab !== 'history' ? <section className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-green-200 bg-white p-4">
       <div><h2 className="font-semibold text-green-950">{t('matchBets.startTitle')}</h2><p className="mt-1 text-sm text-gray-600">{t('matchBets.startHelp')}</p></div>
       <Link to={leaguePath('/matches?betting=open')} className={buttonClass+' inline-flex items-center justify-center'}>{t('bets.create')}</Link>
     </section> : null}
     <nav className="mb-4 flex flex-wrap gap-2" aria-label={t('bets.views')}>{(['open','mine','history'] as const).map(view=><button key={view} type="button" aria-pressed={tab===view} onClick={()=>setParams({tab:view})} className={`min-h-11 rounded-lg px-4 text-sm font-bold ${tab===view?'bg-green-700 text-white':'border border-green-200 bg-white text-green-800'}`}>{t(`bets.${view}`)}</button>)}</nav>
-    {bets.isLoading ? <p>{t('common.loading')}</p> : bets.error ? <ErrorState message={betErrorMessage(bets.error, t)}/> : <div className="grid items-start gap-4 md:grid-cols-2">{!shown.length ? <p className="text-sm text-gray-500">{t('bets.empty')}</p> : shown.map(b => <BetOfferCard
+    {bets.isLoading || (tab === 'history' && history.isLoading) ? <p role="status">{t('common.loading')}</p> : bets.error || (tab === 'history' && history.error) ? <ErrorState message={betErrorMessage(bets.error ?? history.error, t)}/> : <div className="grid items-start gap-3 md:grid-cols-2">{!shown.length ? <p className="text-sm text-gray-500">{t(tab === 'history' ? 'betHistory.empty' : 'bets.empty')}</p> : shown.map(b => tab === 'history' && playerId ? <BetHistoryCard
+      key={b.id} bet={b} playerId={playerId} summary={historySummaries.get(b.id)}
+      seasonName={b.seasonId === selectedSeason?.id ? selectedSeason.name : undefined}
+    /> : <BetOfferCard
       key={b.id} bet={b} playerId={playerId} wallet={wallet.data} pending={action.isPending}
       canReview={canReviewOffer(b)}
       context={b.seasonId === selectedSeason?.id ? selectedSeason.name : undefined}
@@ -79,7 +90,7 @@ export function BetsPage() {
       onCancel={() => action.mutate({ bet: b, cancel: true })}
     />)}</div>}
     {action.error ? <ErrorState message={betErrorMessage(action.error, t)}/> : null}
-    {tab==='history' && playerId ? <section className="mt-6"><h2 className="mb-3 font-bold text-green-950">{t('bets.transactions')}</h2>{history.isLoading?<p>{t('common.loading')}</p>:history.error?<ErrorState message={betErrorMessage(history.error, t)}/>:<ul className="space-y-2">{history.data?.map(item=><li key={item.id} className="flex flex-wrap justify-between gap-2 rounded-lg border border-green-100 bg-white p-3 text-sm"><div><p>{t(`bets.kinds.${item.kind}`)} · {item.seasonName}</p><p className="mt-1 text-xs text-gray-500">{new Date(item.createdAt).toLocaleString(i18n.language)}{item.revision ? ` · ${t('bets.revision',{number:item.revision})}`:''}{item.reason && item.reason!=='confirmed'?` · ${item.reason}`:''}</p></div><strong className="text-green-900">{formatSignedPicklePoints(item.amount)}</strong></li>)}</ul>}</section> : null}
-    {isAdmin && selectedSeason?.status==='active' ? <section className="mt-6"><h2 className="mb-3 text-lg font-bold text-green-950">{t('bets.adminReview')}</h2><p className="mb-3 text-sm text-gray-600">{t('bets.reviewHelp')}</p><div className="space-y-3">{(matches.data??[]).filter(m=>(m.status==='completed' || m.status==='forfeit') && bets.data?.some(b=>b.matchId===m.id && ['review','settled','refunded'].includes(b.state))).map(m=><BetSettlementReview key={m.id} match={m}/>)}</div></section> : null}
+    {tab==='history' && playerId && !!history.data?.length && !history.error ? <details className="mt-6 rounded-xl border border-green-200 bg-white p-4"><summary className="min-h-11 cursor-pointer content-center text-sm font-semibold text-green-800">{t('bets.transactions')}</summary><ul className="mt-3 space-y-2">{history.data.map(item=><li key={item.id} className="flex flex-wrap justify-between gap-2 rounded-lg border border-green-100 bg-white p-3 text-sm"><div><p>{t(`bets.kinds.${item.kind}`)} · {item.seasonName}</p><p className="mt-1 text-xs text-gray-500">{new Date(item.createdAt).toLocaleString(i18n.language)}{item.revision ? ` · ${t('bets.revision',{number:item.revision})}`:''}{item.reason && item.reason!=='confirmed'?` · ${item.reason}`:''}</p></div><strong className="text-green-900">{formatSignedPicklePoints(item.amount)}</strong></li>)}</ul></details> : null}
+    {isAdmin && tab !== 'history' && selectedSeason?.status==='active' ? <section className="mt-6"><h2 className="mb-3 text-lg font-bold text-green-950">{t('bets.adminReview')}</h2><p className="mb-3 text-sm text-gray-600">{t('bets.reviewHelp')}</p><div className="space-y-3">{(matches.data??[]).filter(m=>(m.status==='completed' || m.status==='forfeit') && bets.data?.some(b=>b.matchId===m.id && ['review','settled','refunded'].includes(b.state))).map(m=><BetSettlementReview key={m.id} match={m}/>)}</div></section> : null}
   </div>
 }
