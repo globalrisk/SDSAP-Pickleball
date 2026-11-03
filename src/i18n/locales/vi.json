@@ -1494,6 +1494,7 @@
     "cancel": "Hủy tìm kiếm",
     "exhaustiveHelp": "Tìm kiếm toàn bộ chạy trong trình duyệt này. Danh sách đông người có thể mất nhiều thời gian. Đóng trang sẽ hủy tìm kiếm chưa xong. Chỉ cho phép tạo trận khi tìm kiếm hoàn tất.",
     "phase": {
+      "bounds": "Chuẩn bị ràng buộc vòng đấu: {{done}} / {{total}} cách chia đội · {{seconds}} giây",
       "global": "Tìm mức cân bằng tốt nhất: đã xét {{done}} / {{total}} cách chia đội · {{seconds}} giây",
       "eligible": "Tìm các cách chia đội phù hợp: {{done}} / {{total}} · {{seconds}} giây",
       "options": "So sánh toàn bộ lịch đấu cho hai đội này · {{seconds}} giây"

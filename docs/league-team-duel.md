@@ -14,6 +14,8 @@ Every candidate satisfies the hard **55/45 season limit**: neither squad exceeds
 
 Search establishes the globally lowest possible worst-match favorite probability. Eligible squad splits stay within five percentage points of that optimum. **Shuffle squads** chooses an unseen eligible split, preferring changed teammates, restarting its cycle after exhaustion. **Refresh schedules** keeps squads and offers unseen schedules. Both preserve filters and typed names. Identical background refetches preserve previews; changed roster, ratings, history, or settings invalidate them.
 
+The exact search caches rating-independent round templates, eliminates incompatible rounds with bitsets as meeting limits are reached, skips provably impossible probability thresholds, and reuses split optima already proved during the global pass. These optimizations retain the same complete search space and ranking rules. Progress includes preparation of round constraints; large or permissive searches can still take time.
+
 For the selected squads, up to three distinct schedules appear, each within five percentage points of that split's optimum:
 
 - **Closest games** minimizes worst favorite probability, then games outside 40/60, then mean imbalance.
@@ -45,5 +47,7 @@ Dashboard and Matches forecast all frozen games using current ratings. Recorded 
 ## Verification
 
 Run `npm test`, `npm run test:database`, `npm run lint`, and `npm run build`. Flexible tests cover all roster sizes, an independent exhaustive reference for eight players, caps, distinct options/refresh, exact save/reload/generation, permissions, stale rollback, authoritative probability agreement, frozen plans, and populated legacy migration. Existing tests retain historical fixture/result-correction coverage.
+
+Run `npm run benchmark:duel` for a reproducible, offline twelve-player performance check. It verifies the complete eligible-split catalog and three ranked schedules against the original exhaustive search on anonymous ratings, then reports catalog and schedule timings. Timings depend on hardware; exact output equality is checked without a wall-clock test threshold.
 
 Run `node scripts/test-support/flexible-duel-browser-check.mjs` with Playwright and Chrome installed. Set `CODEX_BROWSER_PACKAGES` to a separate runtime's node_modules directory if necessary. It starts a disposable local database and Vite, uses the actual worker, and exercises previews, save/reload/generation, stale rejection, English/Vietnamese, and mobile layout. Screenshots go beneath ignored `artifacts.local/flexible-duel/`. It never contacts production.

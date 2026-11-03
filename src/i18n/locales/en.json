@@ -1500,6 +1500,7 @@
     "cancel": "Cancel search",
     "exhaustiveHelp": "Exhaustive search runs in this browser. Large rosters can take a long time. Closing this page cancels unfinished work. No options are generated until the search completes.",
     "phase": {
+      "bounds": "Preparing round constraints: {{done}} / {{total}} squad splits · {{seconds}} seconds",
       "global": "Finding the best match balance: {{done}} / {{total}} squad splits reviewed · {{seconds}} seconds",
       "eligible": "Finding eligible squad splits: {{done}} / {{total}} · {{seconds}} seconds",
       "options": "Comparing all schedules for these squads · {{seconds}} seconds"
