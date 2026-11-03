@@ -8,6 +8,30 @@ import { buildTierMatchedDuelSchedule, compareDuelPlayers } from './leagueDuelSc
 import { partnershipKey } from './balanceTeams'
 import { fetchSeasonRosterIds } from './seasonRosterApi'
 import { isSeasonForecastBalanced } from './seasonForecast'
+import { FLEXIBLE_DUEL_VERSION, type FlexibleDuelPlan } from './flexibleDuel'
+
+export async function fetchFlexibleDuelContext(leagueId: string, seasonId: string) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const context = await fetchLeagueDuelDraftContext(leagueId, seasonId)
+    const [pool, rosterIds] = await Promise.all([fetchPlayerPool(leagueId), fetchSeasonRosterIds(seasonId)])
+    const { data: after, error } = await supabase.rpc('league_duel_rating_snapshot', { p_league_id: leagueId })
+    if (error) throw error
+    if (after?.revision !== context.revision || after?.fingerprint !== context.fingerprint) continue
+    const selected = pool.filter(p => rosterIds.includes(p.id))
+    if (selected.length !== rosterIds.length) throw new Error('Every selected player must belong to this league.')
+    return { ...context, pool: selected, rosterIds, key: JSON.stringify([seasonId, [...rosterIds].sort(), context.revision, context.fingerprint, context.partnerHistory.map(s => [...s].sort())]) }
+  }
+  throw new Error('DUEL_STALE_DRAFT')
+}
+
+export async function saveFlexibleDuelPlan(seasonId: string, plan: FlexibleDuelPlan, names: [string, string], revision: number, fingerprint: string, expectedHash: string | null, generate: boolean): Promise<{ hash: string; count: number }> {
+  const { data, error } = await supabase.rpc(generate ? 'save_and_generate_league_duel_plan_atomic' : 'save_league_duel_plan_atomic', {
+    p_season_id: seasonId, p_plan: plan, p_names: names.map(n => n.trim()), p_expected_rating_revision: revision,
+    p_expected_rating_fingerprint: fingerprint, p_expected_plan_hash: expectedHash,
+  })
+  if (error) throw error
+  return data
+}
 
 export async function setSeasonFormat(seasonId: string, format: SeasonFormat): Promise<void> {
   const { error } = await supabase.rpc('set_season_format_atomic', { p_season_id: seasonId, p_format: format })
@@ -80,6 +104,16 @@ export async function saveLeagueDuelDraft(seasonId: string, draft: LeagueDuelDra
 export async function generateLeagueDuelSeasonMatches(seasonId: string): Promise<number> {
   const season = await supabase.from('seasons').select('league_id, duel_schedule_mode, duel_draft_priority').eq('id', seasonId).single()
   if (season.error) throw season.error
+  if (season.data.duel_schedule_mode === 'flexible') {
+    const stored = await supabase.from('seasons').select('duel_draft_plan,duel_draft_plan_hash').eq('id', seasonId).single()
+    if (stored.error) throw stored.error
+    const plan = stored.data.duel_draft_plan as FlexibleDuelPlan | null
+    if (!plan) throw new Error('DUEL_STALE_DRAFT: Select a new plan first.')
+    const [context, teams] = await Promise.all([fetchFlexibleDuelContext(season.data.league_id, seasonId), fetchTeamsWithPlayers(seasonId)])
+    if (plan.inputKey !== JSON.stringify([FLEXIBLE_DUEL_VERSION, context.key, plan.settings])) throw new Error('DUEL_STALE_DRAFT: Search and save a current plan first.')
+    const names = plan.squads.map(s => teams.find(t => t.players.some(p => p.pool_player_id === s[0]))?.name ?? '') as [string, string]
+    return (await saveFlexibleDuelPlan(seasonId, plan, names, context.revision, context.fingerprint, stored.data.duel_draft_plan_hash, true)).count
+  }
   if (season.data.duel_schedule_mode !== 'tier_matched') throw new Error('DUEL_STALE_DRAFT: Refresh and save a tier-matched draft first.')
   const snapshot = await supabase.rpc('league_duel_rating_snapshot', { p_league_id: season.data.league_id })
   if (snapshot.error) throw snapshot.error

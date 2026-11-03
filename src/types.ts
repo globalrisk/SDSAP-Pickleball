@@ -30,8 +30,10 @@ export interface Season {
   format?: SeasonFormat
   duel_draft_rating_revision?: number | null
   duel_draft_rating_fingerprint?: string | null
-  duel_schedule_mode?: 'tier_matched' | null
+  duel_schedule_mode?: 'tier_matched' | 'flexible' | null
   duel_draft_priority?: DuelDraftPriority | null
+  duel_draft_plan?: import('./lib/flexibleDuel').FlexibleDuelPlan | null
+  duel_draft_plan_hash?: string | null
 }
 
 export interface Team {

@@ -57,7 +57,15 @@ describe('tier migration over populated mirror history', () => {
       for (const file of (await readdir('supabase/migrations')).filter((file) => file >= migration && file.endsWith('.sql')).sort()) {
         await api.db.exec(await readFile(`supabase/migrations/${file}`, 'utf8'))
       }
-      expect(await storedData()).toEqual(before)
+      const after = await storedData()
+      // New nullable columns do not change any previously stored value.
+      for (const row of after.seasons as { data: Record<string, unknown> }[]) {
+        expect(row.data.duel_draft_plan).toBeNull()
+        expect(row.data.duel_draft_plan_hash).toBeNull()
+        delete row.data.duel_draft_plan
+        delete row.data.duel_draft_plan_hash
+      }
+      expect(after).toEqual(before)
       expect((await api.db.query('SELECT count(*) AS n FROM public.league_players WHERE badge IS NOT NULL')).rows[0]).toEqual({ n: 0 })
       expect((await state.client!.rpc('validate_league_duel_season', { p_season_id: seasonId })).error).toBeNull()
       const lineups = (games: typeof fixtures) => games.map((game) => [game.id, game.home_pool_player_ids, game.away_pool_player_ids]).sort((a, b) => String(a[0]).localeCompare(String(b[0])))
@@ -70,7 +78,7 @@ describe('tier migration over populated mirror history', () => {
       await saveLeagueDuelDraft(emptySeason, preview.drafts[0]!, ['Fresh A', 'Fresh B'], preview.revision, preview.fingerprint)
       expect(await generateLeagueDuelSeasonMatches(emptySeason)).toBe(21)
       expect((await api.db.query('SELECT * FROM public.season_roster WHERE season_id = $1 ORDER BY pool_player_id', [emptySeason])).rows).toEqual(originalRoster)
-      expect((await api.db.query('SELECT to_jsonb(s) - ARRAY[\'duel_schedule_mode\', \'duel_draft_priority\', \'duel_draft_rating_revision\', \'duel_draft_rating_fingerprint\'] AS data FROM public.seasons s WHERE id = $1', [emptySeason])).rows).toEqual(originalSeason)
+      expect((await api.db.query('SELECT to_jsonb(s) - ARRAY[\'duel_draft_plan\', \'duel_draft_plan_hash\', \'duel_schedule_mode\', \'duel_draft_priority\', \'duel_draft_rating_revision\', \'duel_draft_rating_fingerprint\'] AS data FROM public.seasons s WHERE id = $1', [emptySeason])).rows).toEqual(originalSeason)
       expect(await fetchMatches(seasonId, leagueId)).toEqual(frozenHistory)
     } finally { await api.close() }
   }, 30000)

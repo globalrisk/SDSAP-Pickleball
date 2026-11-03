@@ -1,0 +1,139 @@
+/// <reference types="node" />
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { startLocalSupabase } from '../../scripts/test-support/local-supabase.mjs'
+import { readFile } from 'node:fs/promises'
+import { findDuelSchedule, measureDuelSchedule, duelScheduleId, type FlexibleDuelPlan } from './flexibleDuel'
+import { teamWinProbability } from './ratings'
+const state = vi.hoisted(() => ({ client: null as SupabaseClient | null }))
+vi.mock('./supabase', () => ({ supabase: { from(table: string) { return state.client!.from(table) }, rpc(name: string, args: Record<string, unknown>) { return state.client!.rpc(name, args) } } }))
+import { clearUnplayedLeagueDuelFixtures, fetchFlexibleDuelContext, saveFlexibleDuelPlan, setSeasonFormat, renameLeagueDuelTeam, fetchLeagueDuelDraftPreview, saveLeagueDuelDraft, generateLeagueDuelSeasonMatches } from './leagueTeamDuelApi'
+import { fetchSeasons, fetchTeamsWithPlayers, fetchMatches, recordResult } from './api'
+import { saveSeasonRoster } from './seasonRosterApi'
+
+let api: Awaited<ReturnType<typeof startLocalSupabase>>
+beforeEach(async () => {
+  api = await startLocalSupabase()
+  state.client = createClient(api.url, 'local-anon-key', { global: { headers: { Authorization: `Bearer ${api.token}` } }, auth: { persistSession: false, autoRefreshToken: false } })
+}, 20000)
+afterEach(async () => { await api?.close() })
+
+async function prepare() {
+  const seed = api.seeded!
+  await setSeasonFormat(seed.seasonId, 'team_duel')
+  await saveSeasonRoster(seed.seasonId, seed.players.slice(0, 8).map(p => p.id))
+  await api.db.query('UPDATE public.league_players SET rating=1500,rating_deviation=90 WHERE league_id=$1', [seed.leagueId])
+  const context = await fetchFlexibleDuelContext(seed.leagueId, seed.seasonId)
+  const pool = context.pool.sort((a, b) => a.id.localeCompare(b.id)), squads = [pool.slice(0, 4), pool.slice(4)] as [typeof pool, typeof pool]
+  const settings = { maxPartnerMeetings: 2, maxOpponentMeetings: 2 }, games = findDuelSchedule(squads, settings, .500001)!
+  const plan: FlexibleDuelPlan = { version: 1, inputKey: JSON.stringify([1, context.key, settings]), splitId: 'test-split', settings, squads: squads.map(s => s.map(p => p.id)) as [string[], string[]], option: { id: duelScheduleId(games), kind: 'balance', games, metrics: measureDuelSchedule(squads, games) } }
+  return { ...seed, context, plan, squads }
+}
+
+describe('flexible plans through PostgreSQL and application APIs', () => {
+  it('saves, reloads, generates exactly the selected preview, freezes it, and clears explicitly', async () => {
+    const s = await prepare()
+    const untouched = (await api.db.query('SELECT to_jsonb(m) data FROM public.matches m WHERE season_id<>$1 ORDER BY id', [s.seasonId])).rows
+    const saved = await saveFlexibleDuelPlan(s.seasonId, s.plan, ['A', 'B'], s.context.revision, s.context.fingerprint, null, false)
+    expect(saved.hash).toHaveLength(32)
+    expect(saved.count).toBe(0)
+    let season = (await fetchSeasons(s.leagueId)).find(v => v.id === s.seasonId)!
+    expect(season.duel_schedule_mode).toBe('flexible')
+    expect(season.duel_draft_plan).toEqual(s.plan)
+    expect(await generateLeagueDuelSeasonMatches(s.seasonId)).toBe(6)
+    const fixtures = await fetchMatches(s.seasonId, s.leagueId)
+    expect(fixtures.map(m => ({ roundNumber: m.round_number, sequenceNumber: m.duel_sequence_number, homePoolPlayerIds: m.home_pool_player_ids, awayPoolPlayerIds: m.away_pool_player_ids }))).toEqual(s.plan.option.games)
+    const teams = await fetchTeamsWithPlayers(s.seasonId)
+    expect(teams.every(t => t.players.every(p => p.duel_tier === null))).toBe(true)
+    await renameLeagueDuelTeam(s.seasonId, teams[0]!.id, 'Renamed')
+    await expect(saveFlexibleDuelPlan(s.seasonId, s.plan, ['A', 'B'], s.context.revision, s.context.fingerprint, saved.hash, true)).rejects.toThrow('already has matches')
+    expect((await state.client!.from('seasons').update({ duel_draft_plan: null }).eq('id', s.seasonId)).error?.message).toContain('frozen')
+    const first = fixtures[0]!
+    expect((await state.client!.from('matches').update({ home_pool_player_ids: s.plan.squads[0].slice(1, 3) }).eq('id', first.id)).error?.message).toContain('frozen')
+    await clearUnplayedLeagueDuelFixtures(s.seasonId, fixtures.map(m => m.id))
+    season = (await fetchSeasons(s.leagueId)).find(v => v.id === s.seasonId)!
+    expect(season.duel_draft_plan).toBeNull(); expect(season.duel_draft_plan_hash).toBeNull()
+    expect((await api.db.query('SELECT to_jsonb(m) data FROM public.matches m WHERE season_id<>$1 ORDER BY id', [s.seasonId])).rows).toEqual(untouched)
+  }, 30000)
+  it('rejects stale snapshots and stale saved-plan hashes without partial changes', async () => {
+    const s = await prepare()
+    await expect(saveFlexibleDuelPlan(s.seasonId, s.plan, ['A', 'B'], -1, s.context.fingerprint, null, true)).rejects.toThrow('Ratings changed')
+    expect(await fetchTeamsWithPlayers(s.seasonId)).toHaveLength(0)
+    const saved = await saveFlexibleDuelPlan(s.seasonId, s.plan, ['A', 'B'], s.context.revision, s.context.fingerprint, null, false)
+    await expect(saveFlexibleDuelPlan(s.seasonId, s.plan, ['Wrong', 'Wrong'], s.context.revision, s.context.fingerprint, null, true)).rejects.toThrow('Saved draft changed')
+    expect((await fetchTeamsWithPlayers(s.seasonId)).map(t => t.name).sort()).toEqual(['A', 'B'])
+    expect((await fetchSeasons(s.leagueId)).find(v => v.id === s.seasonId)?.duel_draft_plan_hash).toBe(saved.hash)
+    expect(await fetchMatches(s.seasonId, s.leagueId)).toHaveLength(0)
+    await api.db.query('UPDATE public.league_players SET rating=rating+1 WHERE league_id=$1', [s.leagueId])
+    await expect(generateLeagueDuelSeasonMatches(s.seasonId)).rejects.toThrow('DUEL_STALE_DRAFT')
+  })
+  it('does not trust client metrics, caps, fixture membership or rounds', async () => {
+    const s = await prepare()
+    const invalid: FlexibleDuelPlan[] = []
+    const repeats = structuredClone(s.plan)
+    repeats.option.games = Array.from({ length: 3 }, (_, r) => s.plan.option.games.slice(0, 2).map((g, i) => ({ ...g, roundNumber: r + 1, sequenceNumber: r * 2 + i + 1 }))).flat()
+    invalid.push(repeats)
+    const duplicate = structuredClone(s.plan); duplicate.option.games[0]!.homePoolPlayerIds[1] = duplicate.option.games[0]!.homePoolPlayerIds[0]; invalid.push(duplicate)
+    const wrongRound = structuredClone(s.plan); wrongRound.option.games[0]!.roundNumber = 99; invalid.push(wrongRound)
+    const cap = structuredClone(s.plan); cap.settings.maxOpponentMeetings = 1; invalid.push(cap)
+    for (const plan of invalid) await expect(saveFlexibleDuelPlan(s.seasonId, plan, ['A', 'B'], s.context.revision, s.context.fingerprint, null, true)).rejects.toThrow()
+    expect(await fetchTeamsWithPlayers(s.seasonId)).toHaveLength(0)
+    expect(await fetchMatches(s.seasonId, s.leagueId)).toHaveLength(0)
+    await api.db.query('UPDATE public.league_players SET rating=CASE WHEN pool_player_id=ANY($2::uuid[]) THEN 2000 ELSE 1000 END WHERE league_id=$1', [s.leagueId, s.plan.squads[0]])
+    const fresh = await fetchFlexibleDuelContext(s.leagueId, s.seasonId)
+    await expect(saveFlexibleDuelPlan(s.seasonId, s.plan, ['A', 'B'], fresh.revision, fresh.fingerprint, null, true)).rejects.toThrow('DUEL_SEASON_BALANCE')
+    expect(await fetchTeamsWithPlayers(s.seasonId)).toHaveLength(0)
+  })
+  it('rechecks caps when an authenticated administrator bypasses the UI', async () => {
+    const s = await prepare()
+    const saved = await saveFlexibleDuelPlan(s.seasonId, s.plan, ['A', 'B'], s.context.revision, s.context.fingerprint, null, false)
+    const modified = structuredClone(s.plan); modified.settings.maxPartnerMeetings = 0
+    expect((await state.client!.from('seasons').update({ duel_draft_plan: modified }).eq('id', s.seasonId)).error).not.toBeNull()
+    expect((await fetchSeasons(s.leagueId)).find(v => v.id === s.seasonId)?.duel_draft_plan_hash).toBe(saved.hash)
+    const anon = createClient(api.url, 'local-anon-key', { auth: { persistSession: false, autoRefreshToken: false } })
+    expect((await anon.rpc('save_league_duel_plan_atomic', { p_season_id: s.seasonId, p_plan: s.plan, p_names: ['A', 'B'], p_expected_rating_revision: s.context.revision, p_expected_rating_fingerprint: s.context.fingerprint, p_expected_plan_hash: saved.hash })).error).not.toBeNull()
+  })
+  it('matches the application probability formula including rating uncertainty', async () => {
+    for (const [delta, rd] of [[0, 90], [400, 90], [-900, 160], [10, 300]]) {
+      const skill = (rating: number) => ({ rating, rd: rd!, volatility: 0 })
+      const expected = teamWinProbability([skill(1500 + delta!), skill(1500)], [skill(1500), skill(1500)])!
+      const result = await api.db.query('SELECT public.duel_standard_normal_cdf($1/sqrt(250000.0+4*$2*$2)) AS p', [delta, rd])
+      expect((result.rows[0] as { p: number }).p).toBeCloseTo(expected, 12)
+    }
+  })
+  it('generates odd-sized squads with byes and preserves the plan across result corrections', async () => {
+    const seed = api.seeded!
+    await setSeasonFormat(seed.seasonId, 'team_duel')
+    await saveSeasonRoster(seed.seasonId, seed.players.slice(0, 10).map(p => p.id))
+    await api.db.query('UPDATE public.league_players SET rating=1500,rating_deviation=90 WHERE league_id=$1', [seed.leagueId])
+    const context = await fetchFlexibleDuelContext(seed.leagueId, seed.seasonId)
+    const pool = context.pool.sort((a, b) => a.id.localeCompare(b.id)), squads = [pool.slice(0, 5), pool.slice(5)] as [typeof pool, typeof pool]
+    const settings = { maxPartnerMeetings: 1, maxOpponentMeetings: null }
+    const games = findDuelSchedule(squads, settings, .500001)!
+    const plan: FlexibleDuelPlan = { version: 1, inputKey: context.key, splitId: 'odd', settings, squads: squads.map(s => s.map(p => p.id)) as [string[], string[]], option: { id: duelScheduleId(games), kind: 'balance', games, metrics: measureDuelSchedule(squads, games) } }
+    const saved = await saveFlexibleDuelPlan(seed.seasonId, plan, ['A', 'B'], context.revision, context.fingerprint, null, true)
+    expect(saved.count).toBe(10)
+    const first = (await fetchMatches(seed.seasonId, seed.leagueId))[0]!
+    await recordResult(first.id, { winnerTeamId: first.home_team_id, homeScore: 11, awayScore: 5 })
+    await recordResult(first.id, { winnerTeamId: first.away_team_id, homeScore: 7, awayScore: 11 })
+    expect((await fetchSeasons(seed.leagueId)).find(s => s.id === seed.seasonId)?.duel_draft_plan).toEqual(plan)
+    expect((await fetchMatches(seed.seasonId, seed.leagueId)).find(m => m.id === first.id)?.winner_team_id).toBe(first.away_team_id)
+    await expect(clearUnplayedLeagueDuelFixtures(seed.seasonId, (await fetchMatches(seed.seasonId, seed.leagueId)).map(m => m.id))).rejects.toThrow()
+  }, 30000)
+  it('preserves populated legacy fixtures during migration', async () => {
+    await api.close()
+    const filename = '20261103060704_flexible_league_duel_plans.sql'
+    api = await startLocalSupabase({ beforeMigration: filename })
+    state.client = createClient(api.url, 'local-anon-key', { global: { headers: { Authorization: `Bearer ${api.token}` } }, auth: { persistSession: false, autoRefreshToken: false } })
+    const seed = api.seeded!
+    await setSeasonFormat(seed.seasonId, 'team_duel'); await saveSeasonRoster(seed.seasonId, seed.players.slice(0, 8).map(p => p.id))
+    const preview = await fetchLeagueDuelDraftPreview(seed.leagueId, seed.seasonId, [])
+    const draft = preview.drafts[0]!
+    await saveLeagueDuelDraft(seed.seasonId, draft, ['Legacy A', 'Legacy B'], preview.revision, preview.fingerprint)
+    await generateLeagueDuelSeasonMatches(seed.seasonId)
+    const before = (await api.db.query('SELECT to_jsonb(m) data FROM public.matches m ORDER BY id')).rows
+    await api.db.exec(await readFile(`supabase/migrations/${filename}`, 'utf8'))
+    expect((await api.db.query('SELECT to_jsonb(m) data FROM public.matches m ORDER BY id')).rows).toEqual(before)
+    await api.db.query('SELECT public.validate_league_duel_season($1)', [seed.seasonId])
+  }, 30000)
+})

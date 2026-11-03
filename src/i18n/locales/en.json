@@ -1486,5 +1486,68 @@
     "saved": "Badge saved.",
     "error": "Could not save the badge. Your text is kept. Try again.",
     "tooLong": "Use no more than 60 characters."
+  },
+  "flexibleDuel": {
+    "rules": "Choose repeat limits, shuffle squads, then compare schedules for the same squads. All players get equal games; partners and opponents do not have to meet everyone.",
+    "maxPartnerMeetings": "Maximum games with the same partner",
+    "maxOpponentMeetings": "Maximum games against the same opponent",
+    "noLimit": "No limit",
+    "limitHelp": "Limits count total games, not additional repeats. Opponents are counted individually. An opponent limit of one cannot provide enough encounters.",
+    "participation": "{{games}} games per player.",
+    "search": "Search squads and schedules",
+    "shuffle": "Shuffle squads",
+    "refreshSchedules": "Refresh schedules",
+    "cancel": "Cancel search",
+    "exhaustiveHelp": "Exhaustive search runs in this browser. Large rosters can take a long time. Closing this page cancels unfinished work. No options are generated until the search completes.",
+    "phase": {
+      "global": "Finding the best match balance: {{done}} / {{total}} squad splits reviewed · {{seconds}} seconds",
+      "eligible": "Finding eligible squad splits: {{done}} / {{total}} · {{seconds}} seconds",
+      "options": "Comparing all schedules for these squads · {{seconds}} seconds"
+    },
+    "kind": {
+      "balance": "Closest games",
+      "variety": "More variety",
+      "experience": "Player experience",
+      "alternative": "Alternative schedule"
+    },
+    "kindHelp": {
+      "balance": "Lowest worst-match favorite chance, then more games within 40/60.",
+      "variety": "More opponent and partner coverage within five percentage points of the best match quality.",
+      "experience": "Less concentrated disadvantage for the player with the hardest schedule.",
+      "alternative": "A distinct schedule; it does not improve the hardest player’s workload."
+    },
+    "matchMetrics": "Worst favorite: {{worst}}%. {{within}} / {{total}} games within 40/60. Average favorite: {{average}}%.",
+    "coverage": "{{covered}} / {{possible}} opponent pairs meet; {{partners}} teammate pairs play.",
+    "hardest": "Hardest schedule: {{name}} has {{games}} games below a 40% win chance.",
+    "actualCaps": "Actual maximum: {{partner}} games with one partner, {{opponent}} against one opponent.",
+    "details": "Inspect matches, counts, and player difficulty",
+    "game": "Game",
+    "round": "Round",
+    "sideA": "Squad A",
+    "sideB": "Squad B",
+    "chance": "A / B win chance",
+    "playerDetails": "Player experience",
+    "playerRow": "{{name}}: {{games}} games, {{wins}} expected wins, {{hard}} below 40%; {{partners}} partners, {{opponents}} opponents.",
+    "opponentMatrix": "Opponent meeting counts",
+    "partnerMatrix": "Partner meeting counts",
+    "missing": "Opponent pairs who never meet:",
+    "none": "None",
+    "rest": "Single-court order: {{consecutive}} back-to-back player appearances; maximum {{idle}} idle games between appearances.",
+    "generate": "Generate {{count}} selected matches",
+    "savedLimits": "Saved limits: partner {{partner}}; opponent {{opponent}}.",
+    "adminOnly": "An administrator can configure the schedule.",
+    "selectFirst": "Select a completed, current preview first.",
+    "stale": "Ratings or roster changed. Run a fresh search before saving.",
+    "workerError": "The search could not finish. Retry the search.",
+    "notice": {
+      "noValid": "No schedule satisfies these limits and the 55/45 season requirement. Try different limits or a different roster. No limits were changed.",
+      "fewer": "{{count}} distinct options are available in the quality range.",
+      "restarted": "All unseen options were exhausted. The schedule cycle has restarted.",
+      "cancelled": "Search cancelled. Start again before saving or generating.",
+      "saved": "The selected squads, limits, and exact schedule were saved.",
+      "generated": "The selected matches were generated."
+    },
+    "seasonBalanceLimit": "Every option keeps season win chances between 45% and 55%, excluding joint champions.",
+    "invalidLimits": "Choose repeat limits valid for this roster before searching."
   }
 }

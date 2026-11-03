@@ -13,10 +13,18 @@ import { seasonRosterQueryKey } from '../lib/seasonRosterApi'
 import { SeasonForecastSummary } from './SeasonForecastSummary'
 import { SeasonMatchDeletion } from './SeasonMatchDeletion'
 import type { DuelDraftPriority, MatchWithTeams, Season, TeamWithPlayers } from '../types'
+import { FlexibleDuelSetup } from './FlexibleDuelSetup'
 
 const buttonClass = 'min-h-11 rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white hover:bg-green-800 disabled:opacity-50'
 
-export function LeagueTeamDuelSetup({ season, rosterIds, teams, fixtures, hasFixtures, editable }: {
+export function LeagueTeamDuelSetup(props: {
+  season: Season; rosterIds: string[]; teams: TeamWithPlayers[]; fixtures: MatchWithTeams[] | undefined; hasFixtures: boolean; editable: boolean
+}) {
+  return props.season.duel_schedule_mode === 'flexible' || (!props.hasFixtures && props.editable)
+    ? <FlexibleDuelSetup key={props.season.id} {...props} /> : <LegacyLeagueTeamDuelSetup {...props} />
+}
+
+function LegacyLeagueTeamDuelSetup({ season, rosterIds, teams, fixtures, hasFixtures, editable }: {
   season: Season; rosterIds: string[]; teams: TeamWithPlayers[]; fixtures: MatchWithTeams[] | undefined; hasFixtures: boolean; editable: boolean
 }) {
   const { t } = useTranslation()

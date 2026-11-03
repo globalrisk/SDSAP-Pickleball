@@ -1480,5 +1480,68 @@
     "saved": "Đã lưu huy hiệu.",
     "error": "Không thể lưu huy hiệu. Nội dung đã nhập được giữ lại. Vui lòng thử lại.",
     "tooLong": "Nhập tối đa 60 ký tự."
+  },
+  "flexibleDuel": {
+    "rules": "Chọn giới hạn lặp, xáo trộn đội rồi so sánh các lịch đấu cho cùng hai đội. Mọi người chơi số trận bằng nhau; không bắt buộc ghép với hoặc gặp tất cả mọi người.",
+    "maxPartnerMeetings": "Số trận tối đa cùng một đồng đội",
+    "maxOpponentMeetings": "Số trận tối đa gặp cùng một đối thủ",
+    "noLimit": "Không giới hạn",
+    "limitHelp": "Giới hạn là tổng số trận, không phải số lần lặp thêm. Đếm riêng từng đối thủ. Giới hạn một trận với mỗi đối thủ không đủ số lượt đối đầu.",
+    "participation": "Mỗi người chơi {{games}} trận.",
+    "search": "Tìm đội và lịch đấu",
+    "shuffle": "Xáo trộn đội",
+    "refreshSchedules": "Đổi lịch đấu",
+    "cancel": "Hủy tìm kiếm",
+    "exhaustiveHelp": "Tìm kiếm toàn bộ chạy trong trình duyệt này. Danh sách đông người có thể mất nhiều thời gian. Đóng trang sẽ hủy tìm kiếm chưa xong. Chỉ cho phép tạo trận khi tìm kiếm hoàn tất.",
+    "phase": {
+      "global": "Tìm mức cân bằng tốt nhất: đã xét {{done}} / {{total}} cách chia đội · {{seconds}} giây",
+      "eligible": "Tìm các cách chia đội phù hợp: {{done}} / {{total}} · {{seconds}} giây",
+      "options": "So sánh toàn bộ lịch đấu cho hai đội này · {{seconds}} giây"
+    },
+    "kind": {
+      "balance": "Trận đấu cân bằng nhất",
+      "variety": "Đa dạng hơn",
+      "experience": "Trải nghiệm người chơi",
+      "alternative": "Lịch đấu khác"
+    },
+    "kindHelp": {
+      "balance": "Giảm tỷ lệ thắng cao nhất, sau đó tăng số trận trong khoảng 40/60.",
+      "variety": "Tăng số cặp đồng đội và đối thủ trong biên chất lượng năm điểm phần trăm.",
+      "experience": "Giảm bất lợi tập trung vào người có lịch khó nhất.",
+      "alternative": "Lịch khác biệt; không cải thiện lịch của người chịu nhiều bất lợi nhất."
+    },
+    "matchMetrics": "Tỷ lệ đội cửa trên cao nhất: {{worst}}%. {{within}} / {{total}} trận trong khoảng 40/60. Trung bình cửa trên: {{average}}%.",
+    "coverage": "{{covered}} / {{possible}} cặp đối thủ gặp nhau; {{partners}} cặp đồng đội thi đấu.",
+    "hardest": "Lịch khó nhất: {{name}} có {{games}} trận với tỷ lệ thắng dưới 40%.",
+    "actualCaps": "Mức lặp thực tế cao nhất: {{partner}} trận cùng đồng đội, {{opponent}} trận gặp đối thủ.",
+    "details": "Xem trận đấu, số lượt và độ khó",
+    "game": "Trận",
+    "round": "Vòng",
+    "sideA": "Đội A",
+    "sideB": "Đội B",
+    "chance": "Tỷ lệ thắng A / B",
+    "playerDetails": "Trải nghiệm từng người",
+    "playerRow": "{{name}}: {{games}} trận, kỳ vọng thắng {{wins}}, {{hard}} trận dưới 40%; {{partners}} đồng đội, {{opponents}} đối thủ.",
+    "opponentMatrix": "Số trận đối đầu",
+    "partnerMatrix": "Số trận cùng đồng đội",
+    "missing": "Các cặp đối thủ không gặp nhau:",
+    "none": "Không có",
+    "rest": "Thứ tự một sân: {{consecutive}} lượt người chơi hai trận liên tiếp; nghỉ tối đa {{idle}} trận giữa hai lần vào sân.",
+    "generate": "Tạo {{count}} trận đã chọn",
+    "savedLimits": "Giới hạn đã lưu: đồng đội {{partner}}; đối thủ {{opponent}}.",
+    "adminOnly": "Quản trị viên có thể cấu hình lịch đấu.",
+    "selectFirst": "Hãy chọn một bản xem trước đã hoàn tất và còn hiệu lực.",
+    "stale": "Điểm hoặc danh sách người chơi đã thay đổi. Hãy tìm lại trước khi lưu.",
+    "workerError": "Không thể hoàn tất tìm kiếm. Hãy thử lại.",
+    "notice": {
+      "noValid": "Không có lịch phù hợp với giới hạn và yêu cầu mùa giải 55/45. Hãy đổi giới hạn hoặc danh sách. Hệ thống không tự thay đổi giới hạn.",
+      "fewer": "Có {{count}} phương án khác biệt trong biên chất lượng.",
+      "restarted": "Đã xem hết phương án mới. Chu kỳ lịch đấu được bắt đầu lại.",
+      "cancelled": "Đã hủy tìm kiếm. Hãy tìm lại trước khi lưu hoặc tạo trận.",
+      "saved": "Đã lưu hai đội, giới hạn và chính xác lịch đấu đã chọn.",
+      "generated": "Đã tạo các trận đã chọn."
+    },
+    "seasonBalanceLimit": "Mọi phương án giữ xác suất thắng cả mùa trong khoảng 45%–55%, không tính đồng vô địch.",
+    "invalidLimits": "Chọn giới hạn số lần gặp phù hợp với danh sách người chơi trước khi tìm."
   }
 }
