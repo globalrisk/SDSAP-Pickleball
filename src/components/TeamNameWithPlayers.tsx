@@ -53,7 +53,7 @@ export function TeamNameWithPlayers({
       </div>
       {linkedPlayers.length > 0 && (
         <p
-          className={`mt-0.5 whitespace-normal text-xs text-gray-500 [overflow-wrap:anywhere] ${alignEnd ? 'sm:text-right' : 'pl-5'}`}
+          className={`mt-0.5 whitespace-normal text-xs text-gray-500 [overflow-wrap:anywhere] ${alignEnd ? 'sm:text-right' : stackPlayers ? '' : 'pl-5'}`}
         >
           {linkedPlayers.map((player, index) => (
             <span key={`${player.name}-${index}`} className={stackPlayers ? 'block' : undefined}>
