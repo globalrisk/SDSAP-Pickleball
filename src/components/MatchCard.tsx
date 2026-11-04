@@ -56,7 +56,7 @@ export function MatchCard({ match, showForm = true, betting }: MatchCardProps) {
         <StatusBadge status={match.status} />
       </div>
 
-      <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-stretch gap-2 sm:items-center sm:gap-3">
         <TeamLabel team={match.home_team} />
         <div className="shrink-0 self-center text-center">
           {isFinished ? (
@@ -64,11 +64,6 @@ export function MatchCard({ match, showForm = true, betting }: MatchCardProps) {
               <p className="text-2xl font-bold text-gray-900 sm:text-xl">
                 {match.home_score ?? '-'} : {match.away_score ?? '-'}
               </p>
-              {match.winner && (
-                <p className="mt-1 text-xs text-green-700">
-                  {t('matches.teamWins', { name: match.winner.name })}
-                </p>
-              )}
             </div>
           ) : (
             <p className="text-sm font-semibold text-gray-400">{t('common.vs')}</p>
@@ -76,6 +71,11 @@ export function MatchCard({ match, showForm = true, betting }: MatchCardProps) {
         </div>
         <TeamLabel team={match.away_team} alignEnd />
       </div>
+      {isFinished && match.winner && (
+        <p className="mt-2 text-center text-xs text-green-700 [overflow-wrap:anywhere]">
+          {t('matches.teamWins', { name: match.winner.name })}
+        </p>
+      )}
 
       {probability && (
         <WinProbability
@@ -137,12 +137,12 @@ function WinProbability({
 
   return (
     <div className="mt-4 border-t border-green-100 pt-3">
-      <div className="mb-1.5 flex items-center justify-between gap-3 text-xs">
+      <div className="mb-1.5 grid grid-cols-2 items-center gap-x-2 gap-y-1 text-xs sm:grid-cols-[1fr_auto_1fr] sm:gap-x-3">
         <span className="inline-flex min-w-0 items-center gap-1.5 font-semibold text-gray-900">
           <span aria-hidden="true" className="size-2 shrink-0 rounded-full" style={{ backgroundColor: homeTeamColor }} />
           {homePercent}% <span className="font-normal text-gray-500">({Math.round(homeRating)})</span>
         </span>
-        <span className="shrink-0 text-[11px] font-medium uppercase tracking-wide text-gray-400">
+        <span className="col-span-2 row-start-1 text-center text-[11px] font-medium uppercase tracking-wide text-gray-400 sm:col-span-1 sm:col-start-2">
           {t('matches.winProbability')}
         </span>
         <span className="inline-flex min-w-0 items-center justify-end gap-1.5 text-right font-semibold text-gray-900">
@@ -198,6 +198,7 @@ function TeamLabel({
           poolPlayerId: player.pool_player_id,
         }))}
         alignEnd={alignEnd}
+        stackPlayers
       />
     </div>
   )

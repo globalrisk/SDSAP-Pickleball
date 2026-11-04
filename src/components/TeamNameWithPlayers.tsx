@@ -29,6 +29,7 @@ export function TeamNameWithPlayers({
   playerNames,
   players,
   alignEnd = false,
+  stackPlayers = false,
 }: {
   name: string
   color: string
@@ -36,6 +37,7 @@ export function TeamNameWithPlayers({
   playerNames?: string[]
   players?: TeamPlayerLink[]
   alignEnd?: boolean
+  stackPlayers?: boolean
 }) {
   const linkedPlayers: TeamPlayerLink[] =
     players ?? (playerNames ?? []).map((playerName) => ({ name: playerName }))
@@ -54,8 +56,8 @@ export function TeamNameWithPlayers({
           className={`mt-0.5 whitespace-normal text-xs text-gray-500 [overflow-wrap:anywhere] ${alignEnd ? 'sm:text-right' : 'pl-5'}`}
         >
           {linkedPlayers.map((player, index) => (
-            <span key={`${player.name}-${index}`}>
-              {index > 0 ? ' · ' : null}
+            <span key={`${player.name}-${index}`} className={stackPlayers ? 'block' : undefined}>
+              {index > 0 && !stackPlayers ? ' · ' : null}
               <PlayerLabel player={player} />
             </span>
           ))}
