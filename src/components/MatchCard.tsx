@@ -48,12 +48,20 @@ export function MatchCard({ match, showForm = true, betting }: MatchCardProps) {
 
   return (
     <div className="rounded-xl border border-green-200 bg-white p-4 shadow-sm sm:p-5">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <span className="text-xs font-medium text-gray-500">
-          {recordedLabel ?? '\u00a0'}
-        </span>
-        {match.duel_sequence_number != null ? <span className="text-xs font-semibold text-green-800">{t('leagueDuel.gameLabel', { game: match.duel_sequence_number, round: match.round_number })}</span> : null}
-        <StatusBadge status={match.status} />
+      <div className="mb-4 space-y-1.5">
+        <div className="flex items-start justify-between gap-3">
+          {match.duel_sequence_number != null ? (
+            <span className="min-w-0 text-xs font-semibold text-green-800 [overflow-wrap:anywhere]">
+              {t('leagueDuel.gameLabel', { game: match.duel_sequence_number, round: match.round_number })}
+            </span>
+          ) : null}
+          <div className="ml-auto shrink-0">
+            <StatusBadge status={match.status} />
+          </div>
+        </div>
+        {recordedLabel && (
+          <p className="text-xs font-medium text-gray-500">{recordedLabel}</p>
+        )}
       </div>
 
       <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-stretch gap-2 sm:items-center sm:gap-3">
