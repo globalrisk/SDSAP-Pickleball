@@ -2,6 +2,8 @@ import {
   applyDoublesMatchToRatings,
   createInitialRatingsMap,
   TRUESKILL_DEFAULTS,
+  MIN_RATING_DEVIATION,
+  RATING_DEVIATION_FLOOR_STARTS_AT,
   type DoublesMatchPlayers,
 } from './ratings.ts'
 import { RatingInactivityTracker, ratingActivityDate } from './ratingInactivity.ts'
@@ -109,13 +111,34 @@ export function replayRatings({
     }
   }
 
+  let floorActivated = false
+  const activateFloor = (timestamp: string | null | undefined) => {
+    if (floorActivated || !timestamp || Date.parse(timestamp) < Date.parse(RATING_DEVIATION_FLOOR_STARTS_AT)
+      || !Number.isFinite(Date.parse(timestamp))) return
+    // Age under the old policy up to the transition, then change uncertainty only.
+    recordInactivity(RATING_DEVIATION_FLOOR_STARTS_AT)
+    for (const [playerId, skill] of ratings) {
+      if (skill.rd >= MIN_RATING_DEVIATION) continue
+      ratings.set(playerId, { ...skill, rd: MIN_RATING_DEVIATION })
+      historyRows.push({
+        pool_player_id: playerId, match_id: null, rating: skill.rating,
+        rating_deviation: MIN_RATING_DEVIATION, sequence: sequence++,
+        recorded_at: RATING_DEVIATION_FLOOR_STARTS_AT,
+      })
+    }
+    floorActivated = true
+  }
+
   for (const match of finishedMatches) {
     const doubles = toDoublesMatchPlayers(match)
     if (doubles) {
       const activityDate = ratingActivityDate(match)
+      activateFloor(activityDate)
       // The returning player gets elapsed uncertainty before the result is learned.
       recordInactivity(activityDate)
-      applyDoublesMatchToRatings(ratings, doubles)
+      const minimumDeviation = activityDate && Date.parse(activityDate) >= Date.parse(RATING_DEVIATION_FLOOR_STARTS_AT)
+        ? MIN_RATING_DEVIATION : 0
+      applyDoublesMatchToRatings(ratings, doubles, minimumDeviation)
       inactivity.recordPlayed([...doubles.winnerPoolIds, ...doubles.loserPoolIds], activityDate)
       for (const playerId of [...doubles.winnerPoolIds, ...doubles.loserPoolIds]) {
         const skill = ratings.get(playerId)!
@@ -130,6 +153,7 @@ export function replayRatings({
       }
     }
   }
+  activateFloor(asOf)
   if (asOf) recordInactivity(asOf)
 
   return {

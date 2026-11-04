@@ -19,6 +19,12 @@ export const TRUESKILL_SIGMA = 25 / 3
  */
 export const INITIAL_SIGMA = TRUESKILL_SIGMA * 0.55
 
+/** Minimum stored uncertainty in display points, keeping established ratings responsive. */
+export const MIN_RATING_DEVIATION = 100
+
+/** Earlier results retain the original rating policy when history is rebuilt. */
+export const RATING_DEVIATION_FLOOR_STARTS_AT = '2026-11-04T14:25:39.000Z'
+
 /** Dynamics factor for within-season sit-outs (TrueSkill tau ≈ sigma/100). */
 const TAU = TRUESKILL_SIGMA / 100
 
@@ -82,10 +88,10 @@ function toTrueSkill(rating: SkillRating): Rating {
   return new Rating(rating.rating / TRUESKILL_SCALE, rating.rd / TRUESKILL_SCALE)
 }
 
-function fromTrueSkill(rating: Rating): SkillRating {
+function fromTrueSkill(rating: Rating, minimumDeviation: number): SkillRating {
   return {
     rating: rating.mu * TRUESKILL_SCALE,
-    rd: rating.sigma * TRUESKILL_SCALE,
+    rd: Math.max(minimumDeviation, rating.sigma * TRUESKILL_SCALE),
     volatility: 0,
   }
 }
@@ -119,6 +125,7 @@ export function createInitialRatingsMap(
 export function applyDoublesMatchToRatings(
   ratings: Map<string, SkillRating>,
   match: DoublesMatchPlayers,
+  minimumDeviation = MIN_RATING_DEVIATION,
 ): void {
   const { winnerPoolIds, loserPoolIds } = match
   const participantIds = [...winnerPoolIds, ...loserPoolIds]
@@ -129,16 +136,21 @@ export function applyDoublesMatchToRatings(
     }
   }
 
-  const winners = winnerPoolIds.map((id) => toTrueSkill(ratings.get(id)!))
-  const losers = loserPoolIds.map((id) => toTrueSkill(ratings.get(id)!))
+  // Normalize legacy ratings before learning, as well as flooring the output.
+  const participantRating = (id: string) => {
+    const rating = ratings.get(id)!
+    return toTrueSkill({ ...rating, rd: Math.max(minimumDeviation, rating.rd) })
+  }
+  const winners = winnerPoolIds.map(participantRating)
+  const losers = loserPoolIds.map(participantRating)
 
   const [newWinners, newLosers] = ratingEnvironment.rate([winners, losers])
 
   winnerPoolIds.forEach((id, index) => {
-    ratings.set(id, fromTrueSkill(newWinners[index]!))
+    ratings.set(id, fromTrueSkill(newWinners[index]!, minimumDeviation))
   })
   loserPoolIds.forEach((id, index) => {
-    ratings.set(id, fromTrueSkill(newLosers[index]!))
+    ratings.set(id, fromTrueSkill(newLosers[index]!, minimumDeviation))
   })
 }
 

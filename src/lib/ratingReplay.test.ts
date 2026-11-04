@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { replayRatings, type FinishedMatchForRatings } from './ratingReplay'
 import { buildPreMatchRatings } from './historicalRatings'
-import { applyDoublesMatchToRatings, createInitialRatingsMap } from './ratings'
+import { applyDoublesMatchToRatings, createInitialRatingsMap, MIN_RATING_DEVIATION, RATING_DEVIATION_FLOOR_STARTS_AT } from './ratings'
 
 function match(overrides: Partial<FinishedMatchForRatings> = {}): FinishedMatchForRatings {
   return {
@@ -24,6 +24,31 @@ function match(overrides: Partial<FinishedMatchForRatings> = {}): FinishedMatchF
 
 describe('canonical rating replay', () => {
   const pool = ['a', 'b', 'c', 'd', 'e'].map((id) => ({ id, initial_rating: 1500 }))
+
+  it('preserves old rating points and history while raising current uncertainty only', () => {
+    const games = Array.from({ length: 200 }, (_, i) => match({
+      id: `old-${i}`, result_recorded_at: '2026-11-01T12:00:00Z',
+      winner_team_id: i % 2 ? 'home' : 'away',
+    }))
+    const input = { pool, finishedMatches: games, recordedAt: RATING_DEVIATION_FLOOR_STARTS_AT }
+    const old = replayRatings(input)
+    expect(old.playerRatings.find(p => p.id === 'a')!.rating_deviation).toBeLessThan(100)
+    const current = replayRatings({ ...input, asOf: RATING_DEVIATION_FLOOR_STARTS_AT })
+    expect(current.playerRatings.map(p => p.rating)).toEqual(old.playerRatings.map(p => p.rating))
+    expect(current.historyRows.slice(0, old.historyRows.length)).toEqual(old.historyRows)
+    expect(current.playerRatings.every(p => p.rating_deviation >= MIN_RATING_DEVIATION)).toBe(true)
+    expect(current.historyRows.slice(old.historyRows.length)).toHaveLength(4)
+    expect(replayRatings({ ...input, asOf: RATING_DEVIATION_FLOOR_STARTS_AT })).toEqual(current)
+
+    const next = match({ id: 'new', result_recorded_at: RATING_DEVIATION_FLOOR_STARTS_AT })
+    const withNewResult = replayRatings({ ...input, finishedMatches: [...games, next], asOf: RATING_DEVIATION_FLOOR_STARTS_AT })
+    expect(withNewResult.historyRows.slice(0, current.historyRows.length)).toEqual(current.historyRows)
+    const expected = new Map(current.playerRatings.map(p => [p.id, { rating: p.rating, rd: p.rating_deviation, volatility: 0 }]))
+    applyDoublesMatchToRatings(expected, { winnerPoolIds: ['a', 'b'], loserPoolIds: ['c', 'd'] })
+    expect(withNewResult.playerRatings.find(p => p.id === 'a')!.rating).toBe(expected.get('a')!.rating)
+    const beforeNew = buildPreMatchRatings(withNewResult.historyRows)
+    expect(beforeNew.get('new:a')!.rd).toBe(100)
+  })
 
   it('is deterministic for the same normalized match history', () => {
     const input = {

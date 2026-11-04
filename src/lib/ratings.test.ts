@@ -3,9 +3,36 @@ import {
   applyDoublesMatchToRatings,
   buildRankingRows,
   createInitialRatingsMap,
+  MIN_RATING_DEVIATION,
 } from './ratings'
 
 describe('TrueSkill rating model', () => {
+  it('uses the minimum uncertainty when learning from legacy ratings below the floor', () => {
+    const ids = ['a', 'b', 'c', 'd']
+    const legacy = new Map(ids.map(id => [id, { rating: 1500, rd: 30, volatility: 0 }]))
+    const minimum = new Map(ids.map(id => [id, { rating: 1500, rd: MIN_RATING_DEVIATION, volatility: 0 }]))
+    const match = { winnerPoolIds: ['a', 'b'] as [string, string], loserPoolIds: ['c', 'd'] as [string, string] }
+    applyDoublesMatchToRatings(legacy, match)
+    applyDoublesMatchToRatings(minimum, match)
+    expect(legacy).toEqual(minimum)
+    expect(legacy.get('a')!.rating - 1500).toBeCloseTo(14.85, 2)
+    expect([...legacy.values()].every(rating => rating.rd === MIN_RATING_DEVIATION)).toBe(true)
+  })
+
+  it('keeps ratings responsive after many results while retaining higher uncertainty', () => {
+    const ratings = createInitialRatingsMap(['a', 'b', 'c', 'd'].map(id => ({ id, initial_rating: 1500 })))
+    const match = { winnerPoolIds: ['a', 'b'] as [string, string], loserPoolIds: ['c', 'd'] as [string, string] }
+    applyDoublesMatchToRatings(ratings, match)
+    expect(ratings.get('a')!.rd).toBeGreaterThan(MIN_RATING_DEVIATION)
+    for (let i = 0; i < 500; i++) {
+      applyDoublesMatchToRatings(ratings, i % 2 ? match : { winnerPoolIds: match.loserPoolIds, loserPoolIds: match.winnerPoolIds })
+      expect([...ratings.values()].every(rating => rating.rd >= MIN_RATING_DEVIATION)).toBe(true)
+    }
+    const before = ratings.get('a')!.rating
+    applyDoublesMatchToRatings(ratings, match)
+    expect(ratings.get('a')!.rating - before).toBeGreaterThan(10)
+  })
+
   it('matches the closed-form update for a decisive result with no draw margin', () => {
     const ratings = createInitialRatingsMap(['a', 'b', 'c', 'd'].map((id) => ({ id, initial_rating: 1500 })))
     applyDoublesMatchToRatings(ratings, { winnerPoolIds: ['a', 'b'], loserPoolIds: ['c', 'd'] })

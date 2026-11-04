@@ -161,6 +161,14 @@ It prints a localhost URL and synthetic accounts; all test data is discarded on 
 
 The app and maintenance script use the same league-scoped TrueSkill replay. Seeded
 players start with 275 points of uncertainty; decisive matches use zero draw probability.
+From 4 November 2026 at 14:25:39 UTC, current uncertainty has a minimum of ±100
+points. A dated transition changes uncertainty only; existing rating points and
+historical match updates retain the original policy. Results recorded from that
+instant use the floor before and after learning. Historical corrections keep their
+original result date and policy. Higher uncertainty stays above the floor.
+After deploying, rebuild to apply the uncertainty transition to stored profiles;
+otherwise the next result save performs it. The transition is deterministic and
+does not recalculate earlier games with the new minimum.
 
 Absence increases uncertainty through variance growth rather than a flat season
 penalty: `RD = sqrt(previous RD² + 25² × additional idle weeks)`, capped at 500.
