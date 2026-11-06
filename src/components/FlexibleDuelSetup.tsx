@@ -36,6 +36,7 @@ export function FlexibleDuelSetup({ season, rosterIds, teams, fixtures, hasFixtu
   const [catalog, setCatalog] = useState<DuelSearchCatalog | null>(null), [split, setSplit] = useState<DuelSplit | undefined>()
   const [options, setOptions] = useState<DuelScheduleOption[]>([]), [selectedId, setSelectedId] = useState<string>()
   const [busy, setBusy] = useState(false), [unavailable, setUnavailable] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('')
+  const feedbackRef = useRef<HTMLDivElement>(null)
   const [progress, setProgress] = useState<DuelSearchProgress>(), [elapsed, setElapsed] = useState(0)
   const [hash, setHash] = useState(season.duel_draft_plan_hash ?? null)
   const worker = useRef<Worker | null>(null), requestId = useRef(0), activeKey = useRef(''), seenSplits = useRef<string[]>([]), seenOptions = useRef(new Map<string, string[]>())
@@ -84,10 +85,10 @@ export function FlexibleDuelSetup({ season, rosterIds, teams, fixtures, hasFixtu
         seenSplits.current = [chosen.id]; requestOptions(chosen); return
       }
       if (message.type === 'options' && message.inputKey === activeKey.current) {
-        const found = message.options!; setOptions(found); setSelectedId(found[0]?.id); setBusy(false); setUnavailable(false)
+        const found = message.options!; setOptions(found); setSelectedId(found[0]?.id); setBusy(false); setUnavailable(!found.length)
         const key = message.splitId!, seen = message.restarted ? [] : seenOptions.current.get(key) ?? []
         seenOptions.current.set(key, [...new Set([...seen, ...found.map(o => o.id)])])
-        setNotice(message.restarted ? 'restarted' : found.length < 3 ? 'fewer' : '')
+        setNotice(!found.length ? 'fastInfeasible' : message.restarted ? 'restarted' : found.length < 3 ? 'fewer' : '')
       }
     }
     return w
@@ -156,6 +157,15 @@ export function FlexibleDuelSetup({ season, rosterIds, teams, fixtures, hasFixtu
   useEffect(() => { setHash(season.duel_draft_plan_hash ?? null) }, [season.duel_draft_plan_hash])
   const pool = new Map((context.data?.pool ?? []).map(p => [p.id, p])), playerName = (id: string) => pool.get(id)?.name ?? teams.flatMap(t => t.players).find(p => p.pool_player_id === id)?.name ?? id
   const disabled = invalidLimits || busy || unavailable || context.isFetching || context.isError || !selected || persist.isPending || names.some(n => !n.trim())
+  const noScheduleNotice = ['noValid', 'fastInfeasible', 'fastLimited'].includes(notice) ? notice : ''
+  const feedbackError = persist.error?.message ?? error
+  useEffect(() => {
+    if (!noScheduleNotice && !feedbackError) return
+    // A finished search can leave a mobile user looking at the squad lists.
+    // Focus and reveal the explanation instead of leaving an empty options area.
+    feedbackRef.current?.focus({ preventScroll: true })
+    feedbackRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'center' })
+  }, [noScheduleNotice, feedbackError])
   return <section className="mb-8 space-y-4 rounded-xl border border-green-200 bg-white p-5">
     <h2 className="text-lg font-bold text-green-950">{t('leagueDuel.title')}</h2>
     <p className="text-sm text-gray-600">{t('flexibleDuel.rules')}</p>
@@ -183,7 +193,12 @@ export function FlexibleDuelSetup({ season, rosterIds, teams, fixtures, hasFixtu
         {busy ? <div role="status"><p>{engine === 'cp-sat' ? t('flexibleDuel.fastProgress', { profile: t(`flexibleDuel.kind.${fastProfile}`), seconds: elapsed }) : t(`flexibleDuel.phase.${progress?.phase ?? 'global'}`, { done: progress?.completed ?? 0, total: progress?.total ?? 0, seconds: elapsed })}</p><p className="text-xs">{t(engine === 'cp-sat' ? 'flexibleDuel.fastHelp' : 'flexibleDuel.exhaustiveHelp')}</p></div> : null}
         {context.isFetching ? <p role="status">{t('common.loading')}</p> : null}
         {context.error ? <ErrorState message={context.error.message} /> : null}
-        {notice ? <p role="status" className="text-sm text-green-900">{t(`flexibleDuel.notice.${notice}`, { count: options.length })}</p> : null}
+        {noScheduleNotice || feedbackError ? <div ref={feedbackRef} role="alert" tabIndex={-1} className={`scroll-mt-6 rounded-xl border p-4 text-sm focus:outline-none focus:ring-2 ${feedbackError ? 'border-red-300 bg-red-50 text-red-900 focus:ring-red-500' : 'border-amber-400 bg-amber-50 text-amber-950 focus:ring-amber-500'}`}>
+          <p className="font-bold">{t(feedbackError ? 'error.title' : noScheduleNotice === 'fastLimited' ? 'flexibleDuel.searchTimeLimitTitle' : 'flexibleDuel.noScheduleTitle')}</p>
+          <p className="mt-1">{feedbackError || t(`flexibleDuel.notice.${noScheduleNotice}`)}</p>
+          {!feedbackError ? <p className="mt-2 font-medium">{t('flexibleDuel.searchLimits', { partner: settings.maxPartnerMeetings ?? t('flexibleDuel.noLimit'), opponent: settings.maxOpponentMeetings ?? t('flexibleDuel.noLimit'), max: Math.round((settings.maxMatchProbability ?? .65) * 10000) / 100, min: Math.round((1 - (settings.maxMatchProbability ?? .65)) * 10000) / 100 })}</p> : null}
+        </div> : null}
+        {notice && !noScheduleNotice ? <p role="status" className="text-sm text-green-900">{t(`flexibleDuel.notice.${notice}`, { count: options.length })}</p> : null}
         {split ? <div className="grid gap-4 sm:grid-cols-2">{split.squads.map((s, side) => <div key={side}><label className="text-sm font-bold">{t(side ? 'leagueDuel.nameB' : 'leagueDuel.nameA')}<input className="mt-1 block min-h-11 w-full rounded-lg border px-3" value={names[side]} maxLength={120} disabled={persist.isPending} onChange={e => { named.current = true; setNames(ns => side === 0 ? [e.target.value, ns[1]] : [ns[0], e.target.value]) }} /></label><div className="mt-3"><TeamColorField value={colors[side]!} disabled={persist.isPending} onChange={color => { setColors(side === 0 ? [color, colors[1]] : [colors[0], color]); persist.reset() }} /></div><ul className="mt-2 text-sm">{s.map(id => <li key={id}>{playerName(id)} <span className="text-gray-500">{pool.get(id) ? Math.round(pool.get(id)!.rating) : ''}</span></li>)}</ul></div>)}</div> : null}
         <div className="grid gap-3 lg:grid-cols-3">{options.map(option => { const m = option.metrics, hardest = [...m.players].sort((a, b) => b.below40 - a.below40 || b.disadvantage - a.disadvantage)[0]!; return <label key={option.id} className={`rounded-lg border p-4 ${selected?.id === option.id ? 'border-green-600 bg-green-50' : 'border-gray-200'}`}>
           <span className="flex gap-2 font-bold"><input type="radio" name={`duel-${season.id}`} checked={selectedId === option.id} disabled={busy || persist.isPending || unavailable} onChange={() => { setSelectedId(option.id); persist.reset() }} />{t(`flexibleDuel.kind.${option.kind}`)}</span>
@@ -205,7 +220,7 @@ export function FlexibleDuelSetup({ season, rosterIds, teams, fixtures, hasFixtu
         <div className="flex flex-wrap gap-3"><button type="button" className={button} disabled={disabled} onClick={() => persist.mutate(false)}>{t('leagueDuel.saveDraft')}</button><button type="button" className={`${button} bg-green-700 text-white`} disabled={disabled} onClick={() => persist.mutate(true)}>{t('flexibleDuel.generate', { count: selected?.games.length ?? 0 })}</button></div>
       </>}
     </> : <p>{t('flexibleDuel.adminOnly')}</p>}
-    {error || persist.error ? <ErrorState message={persist.error?.message ?? error} /> : null}
+    {(hasFixtures || !editable || !validSize) && feedbackError ? <ErrorState message={feedbackError} /> : null}
     <Link to={leaguePath('/setup?section=season')} className="text-sm text-green-800 underline">{t('setup.seasonRosterManage')}</Link>
   </section>
 }

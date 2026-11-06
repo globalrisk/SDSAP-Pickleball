@@ -1594,6 +1594,9 @@
       "SOLVER_TIMEOUT": "Chưa tìm được lịch hợp lệ trong thời gian cho phép. Có thể vẫn tồn tại lịch phù hợp. Hãy thử lại hoặc điều chỉnh cài đặt."
     },
     "maxMatchProbability": "Xác suất thắng tối đa mỗi trận (%)",
-    "matchProbabilityHelp": "Giới hạn bắt buộc: mỗi trận phải nằm trong khoảng {{max}}/{{min}}. Cho phép từ 50–100%. Hệ thống không tự nới giới hạn."
+    "matchProbabilityHelp": "Giới hạn bắt buộc: mỗi trận phải nằm trong khoảng {{max}}/{{min}}. Cho phép từ 50–100%. Hệ thống không tự nới giới hạn.",
+    "noScheduleTitle": "Không có lịch đấu hợp lệ",
+    "searchTimeLimitTitle": "Đã hết thời gian tìm kiếm",
+    "searchLimits": "Giới hạn đang dùng: đồng đội {{partner}}; đối thủ {{opponent}}; xác suất mỗi trận {{max}}/{{min}}."
   }
 }

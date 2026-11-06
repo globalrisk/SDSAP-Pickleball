@@ -1600,6 +1600,9 @@
       "SOLVER_TIMEOUT": "No valid schedule was found within the search time. A valid schedule may still exist. Try again or adjust your settings."
     },
     "maxMatchProbability": "Maximum match win probability (%)",
-    "matchProbabilityHelp": "Hard limit: each match must stay within {{max}}/{{min}}. Allowed values: 50–100%. Limits are never relaxed automatically."
+    "matchProbabilityHelp": "Hard limit: each match must stay within {{max}}/{{min}}. Allowed values: 50–100%. Limits are never relaxed automatically.",
+    "noScheduleTitle": "No valid schedule",
+    "searchTimeLimitTitle": "Search time limit reached",
+    "searchLimits": "Limits used: partner {{partner}}; opponent {{opponent}}; match {{max}}/{{min}}."
   }
 }
