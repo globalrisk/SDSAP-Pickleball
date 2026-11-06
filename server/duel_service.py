@@ -162,7 +162,7 @@ def generate(context, cancelled, progress):
             break
         progress(profile)
         result = solve({"size": size, "settings": settings, "probabilities": probabilities, "seconds": seconds, "workers": 1,
-                        "seed": context["seed"] + index, "profile": profile, "warmMs": 350, "maxWorst": upper,
+                        "seed": context["seed"] + index, "profile": profile, "warmMs": 350, "maxWorst": upper, "presolve": False,
                         "excluded": excluded, "partnerHistory": history_weights}, cancelled)
         if not result["solution"]:
             if not results:

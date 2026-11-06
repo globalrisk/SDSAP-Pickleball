@@ -287,6 +287,9 @@ def solve(request, cancelled=None):
         solver.parameters.max_time_in_seconds = max(.001, deadline - time.perf_counter())
         solver.parameters.num_search_workers = request.get("workers", 1)
         solver.parameters.random_seed = int(request.get("seed", 1)) % 2_147_483_647
+        # Presolve can overrun a short wall-time limit before search begins.
+        # Interactive requests use structural hints and skip that unbounded work.
+        solver.parameters.cp_model_presolve = request.get("presolve", True)
         finished = threading.Event()
         def watch():
             while not finished.wait(.1):

@@ -18,7 +18,9 @@ export function chooseFastDuelSplit(input: DuelSearchInput, current?: DuelSplit,
   }
   choose(1, [0])
   const minimum = Math.min(...candidates.map(c => c.gap))
-  const eligible = candidates.filter(c => c.gap <= minimum + size * 50)
+  // A wide total-rating window can select squads with no 55/45 schedule.
+  // Keep shuffles close to the best total before spending the server budget.
+  const eligible = candidates.filter(c => c.gap <= minimum + size * 5)
   let available = eligible.filter(c => !seen.includes(c.id))
   if (!available.length) available = eligible.filter(c => c.id !== current?.id)
   if (!available.length) return current ?? eligible[0]

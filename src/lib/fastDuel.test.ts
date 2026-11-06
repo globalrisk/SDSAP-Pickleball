@@ -13,6 +13,17 @@ describe('Fast Team Duel client', () => {
     expect(next.squads[0]).toContain('p0')
     expect(data).toEqual(before)
   })
+  it('keeps mixed fourteen-player shuffles close to equal squad totals', () => {
+    const data = input()
+    const ratings = [1914, 1875, 1837, 1822, 1652, 1591, 1530, 1496, 1471, 1372, 1334, 1219, 977, 880]
+    data.pool = ratings.map((rating, i) => ({ ...data.pool[0]!, id: `p${i}`, rating }))
+    const total = (ids: string[]) => ids.reduce((sum, id) => sum + data.pool.find(p => p.id === id)!.rating, 0)
+    for (let i = 0; i < 20; i++) {
+      const split = chooseFastDuelSplit(data, undefined, [], () => i / 20)!
+      expect(new Set(split.squads.flat()).size).toBe(14)
+      expect(Math.abs(total(split.squads[0]) - total(split.squads[1]))).toBeLessThanOrEqual(36)
+    }
+  })
   it('recomputes metrics and rejects tampered, duplicated, or conflicting fixtures', () => {
     const data = input(), split = chooseFastDuelSplit(data, undefined, [], () => 0)!
     const squads = split.squads.map(side => side.map(id => data.pool.find(p => p.id === id)!)) as [typeof data.pool, typeof data.pool]

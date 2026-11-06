@@ -1,3 +1,5 @@
+import itertools
+import math
 import unittest
 
 from solver import balanced, forecast, solve
@@ -31,6 +33,18 @@ class SolverTests(unittest.TestCase):
         result = solve(self.request(settings={"maxPartnerMeetings": 2, "maxOpponentMeetings": 1}))
         self.assertEqual(result["status"], "INFEASIBLE")
         self.assertIsNone(result["solution"])
+
+    def test_interactive_mixed_roster_finishes_inside_stream_budget(self):
+        ratings = [1900, 1800, 1650, 1500, 1350, 1200, 900]
+        edges = list(itertools.combinations(ratings, 2))
+        probabilities = [.5 * (1 + math.erf((sum(h) - sum(a)) / math.sqrt(2 * 290000)))
+                         for h in edges for a in edges]
+        result = solve(self.request(size=7, probabilities=probabilities, seconds=.5,
+                                    warmMs=50, presolve=False, profile="balance"))
+        self.assertEqual(result["status"], "FEASIBLE")
+        self.assertEqual(len(result["solution"]["games"]), 21)
+        self.assertTrue(balanced(result["solution"]["forecast"]))
+        self.assertLess(result["elapsedMs"], 2000)
 
     def test_rejected_optimum_is_never_reported_as_valid_or_optimal(self):
         result = solve(self.request(probabilities=[.9] * 36, seconds=.3))
