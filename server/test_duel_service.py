@@ -118,6 +118,69 @@ class ServiceTests(unittest.TestCase):
                         counts[h, a] = counts.get((h, a), 0) + 1
             self.assertLessEqual(max(counts.values()), 2)
 
+    def shuffle_context(self):
+        body = self.reader.body(); body["searchMode"] = "shuffle"; body.pop("squads")
+        return load_context(body, "token", self.reader)
+
+    def test_shuffle_returns_only_squads_with_a_valid_schedule(self):
+        context = self.shuffle_context()
+        result = generate(context, threading.Event(), lambda _: None)
+        self.assertEqual(result["scope"], "roster")
+        self.assertEqual(result["totalSplits"], 35)
+        self.assertEqual(len(result["options"]), 3)
+        self.assertEqual(set(sum(result["squads"], [])), set(self.reader.ids))
+        for option in result["options"]:
+            self.assertTrue(all(set(g["homePoolPlayerIds"]) <= set(result["squads"][0]) and set(g["awayPoolPlayerIds"]) <= set(result["squads"][1]) for g in option["games"]))
+
+    def test_shuffle_skips_an_infeasible_split_and_finds_another(self):
+        from server.duel_solver import solve
+        first = True
+        def checked(request, cancelled):
+            nonlocal first
+            if first:
+                first = False
+                return {"solution": None, "status": "INFEASIBLE"}
+            return solve(request, cancelled)
+        with patch("server.duel_solver.solve", side_effect=checked):
+            result = generate(self.shuffle_context(), threading.Event(), lambda _: None)
+        self.assertEqual(len(result["provenInfeasibleSplitIds"]), 1)
+        self.assertTrue(result["options"])
+
+    def test_shuffle_requires_proof_for_every_possible_split(self):
+        context = self.shuffle_context()
+        with patch("server.duel_solver.solve", return_value={"solution": None, "status": "INFEASIBLE"}):
+            result = generate(context, threading.Event(), lambda _: None)
+        self.assertEqual(result["status"], "INFEASIBLE")
+        self.assertEqual(len(set(result["provenInfeasibleSplitIds"])), 35)
+        self.assertNotIn("squads", result)
+
+    def test_unknown_split_is_not_skipped_when_a_batch_is_resumed(self):
+        first = True
+        def unfinished(request, cancelled):
+            nonlocal first
+            status = "UNKNOWN" if first else "INFEASIBLE"
+            first = False
+            return {"solution": None, "status": status}
+        context = self.shuffle_context()
+        with patch("server.duel_solver.solve", side_effect=unfinished):
+            result = generate(context, threading.Event(), lambda _: None)
+        self.assertEqual(result["status"], "UNKNOWN")
+        self.assertEqual(len(result["provenInfeasibleSplitIds"]), 34)
+        context["skipSplitIds"] = result["provenInfeasibleSplitIds"]
+        context["attempt"] = 2
+        resumed = generate(context, threading.Event(), lambda _: None)
+        self.assertTrue(resumed["options"])
+        self.assertEqual(resumed["provenInfeasibleSplitIds"], [])
+
+    def test_shuffle_rejects_stale_proofs_if_ratings_change_during_search(self):
+        context = self.shuffle_context()
+        def changed(request, cancelled):
+            self.reader.snapshot = {"revision": 2, "fingerprint": "changed"}
+            return {"solution": None, "status": "INFEASIBLE"}
+        with patch("server.duel_solver.solve", side_effect=changed):
+            with self.assertRaisesRegex(ApiError, "DUEL_STALE_DRAFT"):
+                generate(context, threading.Event(), lambda _: None)
+
     def test_probability_approximation_agrees_with_known_values(self):
         self.assertAlmostEqual(normal_cdf(0), .500000015, places=12)
         self.assertAlmostEqual(normal_cdf(1), .8413447386, places=9)

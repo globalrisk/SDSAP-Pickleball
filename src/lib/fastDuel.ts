@@ -62,3 +62,28 @@ export function decodeFastDuelOptions(input: DuelSearchInput, split: DuelSplit, 
   for (const o of options) if (o.kind === 'experience') { const score = hardest(o); if (score[0]! > baseline[0]! || score[0] === baseline[0] && score[1]! >= baseline[1]! - 1e-12) o.kind = 'alternative' }
   return options
 }
+
+export function fastDuelSplitCount(size: number): number {
+  if (!Number.isInteger(size) || size < 4 || size > 7) throw new Error('SOLVER_INVALID_RESULT')
+  let count = 1
+  for (let i = 0; i < size - 1; i++) count = count * (2 * size - 1 - i) / (i + 1)
+  return Math.round(count)
+}
+
+/** Validate a canonical proof ID: every accepted ID denotes one unique roster split. */
+export function isFastDuelSplitId(input: DuelSearchInput, identity: unknown): identity is string {
+  if (typeof identity !== 'string') return false
+  const sides = identity.split('|').map(side => side.split(':')), size = input.pool.length / 2
+  if (sides.length !== 2 || sides.some(side => side.length !== size) || new Set(sides.flat()).size !== input.pool.length) return false
+  const ids = new Set(input.pool.map(p => p.id)), strongest = [...input.pool].sort(compareDuelPlayers)[0]?.id
+  return sides.flat().every(id => ids.has(id)) && sides[0]!.includes(strongest!) && identity === sides.map(side => [...side].sort().join(':')).join('|')
+}
+
+export function decodeFastDuelSplit(input: DuelSearchInput, raw: unknown): DuelSplit {
+  if (!Array.isArray(raw) || raw.length !== 2 || raw.some(side => !Array.isArray(side) || side.some(id => typeof id !== 'string'))) throw new Error('SOLVER_INVALID_RESULT')
+  const squads = raw as [string[], string[]], id = squads.map(side => [...side].sort().join(':')).join('|')
+  if (!isFastDuelSplitId(input, id)) throw new Error('SOLVER_INVALID_RESULT')
+  const pool = new Map(input.pool.map(p => [p.id, p]))
+  if (squads.some(side => side.join(':') !== [...side].sort((a, b) => compareDuelPlayers(pool.get(a)!, pool.get(b)!)).join(':'))) throw new Error('SOLVER_INVALID_RESULT')
+  return { id, squads, bestWorst: 1 }
+}

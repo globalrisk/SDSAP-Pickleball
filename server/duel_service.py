@@ -78,20 +78,27 @@ def load_context(body, token, reader=None):
     ids = [row["pool_player_id"] for row in roster]
     if len(ids) not in (8, 10, 12, 14):
         raise ApiError("SOLVER_INVALID_ROSTER")
-    squads = body.get("squads")
-    if not isinstance(squads, list) or len(squads) != 2 or any(not isinstance(s, list) or len(s) != len(ids) // 2 for s in squads):
-        raise ApiError("SOLVER_INVALID_ROSTER")
-    squads = [[identifier(p) for p in side] for side in squads]
-    if len(set(squads[0] + squads[1])) != len(ids) or set(squads[0] + squads[1]) != set(ids):
-        raise ApiError("DUEL_STALE_DRAFT", 409)
     by_id = {row["pool_player_id"]: row for row in pool}
     for player in ids:
         row = by_id.get(player)
         if not row or row["status"] != "active" or any(type(row.get(key)) not in (float, int) or not math.isfinite(row[key]) for key in ("rating", "rating_deviation")) or row["rating_deviation"] < 0:
             raise ApiError("SOLVER_INVALID_ROSTER")
     order = lambda p: (-by_id[p]["rating"], p)
-    if any(side != sorted(side, key=order) for side in squads) or min(ids, key=order) not in squads[0]:
-        raise ApiError("DUEL_STALE_DRAFT", 409)
+    mode = body.get("searchMode", "fixed")
+    if mode not in ("fixed", "shuffle"):
+        raise ApiError("SOLVER_INVALID_REQUEST")
+    if mode == "shuffle":
+        ordered = sorted(ids, key=order)
+        squads = [ordered[:len(ids) // 2], ordered[len(ids) // 2:]]
+    else:
+        squads = body.get("squads")
+        if not isinstance(squads, list) or len(squads) != 2 or any(not isinstance(side, list) or len(side) != len(ids) // 2 for side in squads):
+            raise ApiError("SOLVER_INVALID_ROSTER")
+        squads = [[identifier(p) for p in side] for side in squads]
+        if len(set(squads[0] + squads[1])) != len(ids) or set(squads[0] + squads[1]) != set(ids):
+            raise ApiError("DUEL_STALE_DRAFT", 409)
+        if any(side != sorted(side, key=order) for side in squads) or min(ids, key=order) not in squads[0]:
+            raise ApiError("DUEL_STALE_DRAFT", 409)
     size = len(ids) // 2
     settings = body.get("settings")
     if not isinstance(settings, dict) or not {"maxPartnerMeetings", "maxOpponentMeetings"} <= set(settings) or set(settings) - {"maxPartnerMeetings", "maxOpponentMeetings", "maxMatchProbability"}:
@@ -107,11 +114,21 @@ def load_context(body, token, reader=None):
     excluded = body.get("excludedIds", [])
     if not isinstance(excluded, list) or len(excluded) > 512 or any(not isinstance(s, str) or len(s) > 5000 for s in excluded):
         raise ApiError("SOLVER_INVALID_REQUEST")
+    search_lists = {}
+    for field in ("seenSplitIds", "skipSplitIds"):
+        values = body.get(field, [])
+        if not isinstance(values, list) or len(values) > 1716 or any(not isinstance(value, str) or len(value) > 1024 for value in values):
+            raise ApiError("SOLVER_INVALID_REQUEST")
+        search_lists[field] = values
+    attempt = body.get("attempt", 0)
+    if type(attempt) is not int or not 0 <= attempt <= 6 or mode == "shuffle" and excluded:
+        raise ApiError("SOLVER_INVALID_REQUEST")
     after = reader.rpc("league_duel_rating_snapshot", {"p_league_id": league_id})
     if after != snapshot:
         raise ApiError("DUEL_STALE_DRAFT", 409)
     return {"reader": reader, "seasonId": season_id, "leagueId": league_id, "snapshot": snapshot, "squads": squads, "pool": by_id,
-            "settings": settings, "excluded": excluded, "history": history, "seed": int.from_bytes(os.urandom(4), "little")}
+            "settings": settings, "excluded": excluded, "history": history, "seed": int.from_bytes(os.urandom(4), "little"),
+            "searchMode": mode, "attempt": attempt, **search_lists}
 
 
 def normal_cdf(z):
@@ -123,7 +140,9 @@ def normal_cdf(z):
     return .5 * (r if x >= 0 else 2-r)
 
 
-def generate(context, cancelled, progress):
+def generate(context, cancelled, progress, *, initial=None, deadline=None):
+    if context.get("searchMode") == "shuffle":
+        return search_squads(context, cancelled, progress)
     from itertools import combinations
     from server.duel_solver import solve
     squads, pool, settings = context["squads"], context["pool"], context["settings"]
@@ -155,7 +174,7 @@ def generate(context, cancelled, progress):
     previous = context["history"]
     history_weights = [[sum(1 for season in previous["seasonIds"] if any(set(pair["poolPlayerIds"]) == {side[a], side[b]} and season in pair["seasonIds"] for pair in previous["partnerships"])) for a, b in edges] for side in squads]
     results = []
-    deadline = time.perf_counter() + 24
+    deadline = deadline or time.perf_counter() + 24
     maximum = settings.get("maxMatchProbability", .65)
     upper = maximum
     for index, profile in enumerate(("balance", "variety", "experience")):
@@ -165,7 +184,7 @@ def generate(context, cancelled, progress):
         if seconds < .2:
             break
         progress(profile)
-        result = solve({"size": size, "settings": settings, "probabilities": probabilities, "seconds": seconds, "workers": 1,
+        result = initial if index == 0 and initial is not None else solve({"size": size, "settings": settings, "probabilities": probabilities, "seconds": seconds, "workers": 1,
                         "seed": context["seed"] + index, "profile": profile, "warmMs": 350, "maxWorst": upper, "presolve": False,
                         "excluded": excluded, "partnerHistory": history_weights}, cancelled)
         if not result["solution"]:
@@ -190,3 +209,112 @@ def generate(context, cancelled, progress):
     if {row["pool_player_id"] for row in roster} != set(squads[0] + squads[1]):
         raise ApiError("DUEL_STALE_DRAFT", 409)
     return {"options": results, "status": "FEASIBLE" if results else "UNKNOWN"}
+
+
+def split_id(squads):
+    return "|".join(":".join(sorted(side)) for side in squads)
+
+
+def search_squads(context, cancelled, progress):
+    """Search the whole roster in bounded batches; skip only prior proved splits."""
+    import itertools
+    import random
+    from server.duel_solver import solve
+    started = time.perf_counter()
+    search_deadline, overall_deadline = started + 20, started + 40
+    pool, settings = context["pool"], context["settings"]
+    ids = sorted(context["squads"][0] + context["squads"][1], key=lambda p: (-pool[p]["rating"], p))
+    size = len(ids) // 2
+    edges = list(itertools.combinations(range(size), 2))
+    seen, skipped = set(context.get("seenSplitIds", [])), set(context.get("skipSplitIds", []))
+    rng = random.Random(context["seed"])
+    candidates = []
+    for tail in itertools.combinations(ids[1:], size - 1):
+        home = [ids[0], *tail]
+        squads = [home, [p for p in ids if p not in home]]
+        identity = split_id(squads)
+        gap = abs(sum(pool[p]["rating"] for p in home) - sum(pool[p]["rating"] for p in squads[1]))
+        candidates.append((identity, squads, gap, rng.random()))
+    total = len(candidates)
+    identities = {c[0] for c in candidates}
+    if not skipped <= identities or not seen <= identities:
+        raise ApiError("SOLVER_INVALID_REQUEST")
+    minimum = min(c[2] for c in candidates)
+    # Prefer new, similarly rated squads. Larger gaps remain in the search:
+    # total ratings are a heuristic, never a condition-feasibility proof.
+    current = set(context["seenSplitIds"][-1].split("|")[0].split(":")) if context.get("seenSplitIds") else set()
+    def moved(candidate):
+        changed = len(set(candidate[1][0]) - current)
+        return min(changed, size - changed) if current else 0
+    candidates.sort(key=lambda c: (c[0] in seen, int((c[2] - minimum) / (size * 5)), -moved(c), c[3]))
+    probability_cache = {}
+    history = {frozenset(pair["poolPlayerIds"]): len(set(pair["seasonIds"]) & set(context["history"]["seasonIds"])) for pair in context["history"]["partnerships"]}
+    proved = []
+    last_progress = 0
+    def update(force=False):
+        nonlocal last_progress
+        now = time.perf_counter()
+        if force or now - last_progress > .15:
+            progress({"phase": "squads", "checked": len(skipped) + len(proved), "total": total})
+            last_progress = now
+    def finish(result):
+        if cancelled.is_set():
+            return None
+        if context["reader"].rpc("league_duel_rating_snapshot", {"p_league_id": context["leagueId"]}) != context["snapshot"]:
+            raise ApiError("DUEL_STALE_DRAFT", 409)
+        roster = context["reader"].request("/rest/v1/season_roster", {"season_id": "eq." + context["seasonId"], "select": "pool_player_id"})
+        if {row["pool_player_id"] for row in roster} != set(ids):
+            raise ApiError("DUEL_STALE_DRAFT", 409)
+        update(True)
+        return {**result, "scope": "roster", "provenInfeasibleSplitIds": proved, "totalSplits": total}
+    update(True)
+    for identity, squads, _, _ in candidates:
+        if cancelled.is_set():
+            return None
+        if identity in skipped:
+            continue
+        if time.perf_counter() >= search_deadline:
+            break
+        probabilities = []
+        partners = [[set() for _ in range(size)] for _ in range(2)]
+        opponents = [[set() for _ in range(size)] for _ in range(2)]
+        for h in edges:
+            for a in edges:
+                home, away = tuple(squads[0][i] for i in h), tuple(squads[1][i] for i in a)
+                key = (home, away)
+                if key not in probability_cache:
+                    hp, ap = [pool[p] for p in home], [pool[p] for p in away]
+                    delta = sum(p["rating"] for p in hp) - sum(p["rating"] for p in ap)
+                    variance = 250000 + sum(p["rating_deviation"] ** 2 for p in hp + ap)
+                    probability_cache[key] = normal_cdf(delta / math.sqrt(variance))
+                probability = probability_cache[key]
+                probabilities.append(probability)
+                if max(probability, 1 - probability) > settings.get("maxMatchProbability", .65) + 1e-12:
+                    continue
+                for side, pair, other in ((0, h, a), (1, a, h)):
+                    for player in pair:
+                        partners[side][player].update(set(pair) - {player})
+                        opponents[side][player].update(other)
+        required_partners = math.ceil((size - 1) / (settings["maxPartnerMeetings"] or size - 1))
+        required_opponents = math.ceil(2 * (size - 1) / (settings["maxOpponentMeetings"] or size - 1))
+        if any(len(choices) < required_partners for side in partners for choices in side) or any(len(choices) < required_opponents for side in opponents for choices in side):
+            proved.append(identity); update(); continue
+        seconds = min(.5 * 2 ** context.get("attempt", 0), 5, search_deadline - time.perf_counter())
+        if seconds <= .01:
+            break
+        result = solve({"size": size, "settings": settings, "probabilities": probabilities, "seconds": seconds, "workers": 1,
+                        "seed": context["seed"], "profile": "primary", "warmMs": 0, "maxWorst": settings.get("maxMatchProbability", .65),
+                        "presolve": False, "partnerHistory": [[history.get(frozenset(side[i] for i in edge), 0) for edge in edges] for side in squads]}, cancelled)
+        if result["solution"]:
+            fixed = {**context, "squads": squads, "searchMode": "fixed", "excluded": []}
+            schedules = generate(fixed, cancelled, progress, initial={**result, "status": "FEASIBLE", "optimal": False}, deadline=overall_deadline)
+            if schedules is None:
+                return None
+            return finish({**schedules, "squads": squads})
+        if result["status"] == "INFEASIBLE":
+            proved.append(identity)
+        update()
+    # Skipped proof records belong to the client's current snapshot. The client
+    # checks full, unique roster coverage before reporting a combined proof.
+    all_here = len(proved) == total
+    return finish({"options": [], "status": "INFEASIBLE" if all_here else "UNKNOWN"})

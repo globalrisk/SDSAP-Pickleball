@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
-import { mkdir } from 'node:fs/promises'
+import { mkdir, readFile } from 'node:fs/promises'
 import { spawn } from 'node:child_process'
 import { createServer } from 'vite'
 import { startLocalSupabase } from './local-supabase.mjs'
@@ -71,15 +71,25 @@ try {
   assert.equal(await page.getByRole('button', { name: 'Search squads and schedules', exact: true }).isDisabled(), true)
   await probability.fill('65')
   if (engine === 'cp-sat') {
+    const messages = JSON.parse(await readFile('src/i18n/locales/en.json', 'utf8')).flexibleDuel.notice
+    const ids = players.slice(0, 8).map(p => p.id).sort()
+    const splits = []
+    for (let a = 1; a < 6; a++) for (let b = a + 1; b < 7; b++) for (let c = b + 1; c < 8; c++) {
+      const home = [ids[0], ids[a], ids[b], ids[c]]
+      splits.push(home.join(':') + '|' + ids.filter(id => !home.includes(id)).join(':'))
+    }
     for (const [status, message] of [
-      ['INFEASIBLE', 'No valid schedule satisfies all your current limits for these squads. Try shuffling squads or adjusting the match probability, partner, or opponent limits.'],
-      ['UNKNOWN', 'No valid schedule was found within the search time. A valid schedule may still exist. Try again or adjust your settings.'],
+      ['INFEASIBLE', messages.noValid],
+      ['UNKNOWN', messages.rosterLimited],
     ]) {
-      await page.route('**/api/duel-solve', route => route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: JSON.stringify({ type: 'result', result: { options: [], status } }) + '\n' }))
-      await page.getByRole('button', { name: /^(Search squads and schedules|Shuffle squads)$/ }).click()
+      await page.route('**/api/duel-solve', route => route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: JSON.stringify({ type: 'result', result: { options: [], status, scope: 'roster', totalSplits: 35, provenInfeasibleSplitIds: status === 'INFEASIBLE' ? splits : [] } }) + '\n' }))
+      await page.getByRole('button', { name: /^(Search squads and schedules|Shuffle squads|Continue checking conditions)$/ }).click()
       await page.getByText(message, { exact: true }).waitFor()
       assert.equal(await page.getByRole('button', { name: 'Generate 0 selected matches', exact: true }).isDisabled(), true)
       await page.unroute('**/api/duel-solve')
+      await probability.fill('70')
+      await page.getByRole('button', { name: 'Search squads and schedules', exact: true }).waitFor()
+      await probability.fill('65')
     }
     await probability.fill('70')
     await page.getByRole('button', { name: 'Search squads and schedules', exact: true }).waitFor()

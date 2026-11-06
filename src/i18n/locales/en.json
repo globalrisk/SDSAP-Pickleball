@@ -1558,21 +1558,24 @@
     "stale": "Ratings or roster changed. Run a fresh search before saving.",
     "workerError": "The search could not finish. Retry the search.",
     "notice": {
-      "noValid": "No valid schedule satisfies all your current limits for this roster. Adjust the match probability, partner, or opponent limits, or change the roster. No limits were changed.",
+      "noValid": "All possible squad splits have been ruled out: no schedule satisfies every current condition for this roster. Adjust the match probability, partner, or opponent limits, or change the roster. No limits were changed.",
       "fewer": "{{count}} distinct options are available in the quality range.",
       "restarted": "All unseen options were exhausted. The schedule cycle has restarted.",
       "cancelled": "Search cancelled. Start again before saving or generating.",
       "saved": "The selected squads, limits, and exact schedule were saved.",
       "generated": "The selected matches were generated.",
       "fastLimited": "No valid schedule was found within the search time. A valid schedule may still exist. Try again or adjust your settings.",
-      "fastInfeasible": "No valid schedule satisfies all your current limits for these squads. Try shuffling squads or adjusting the match probability, partner, or opponent limits."
+      "fastInfeasible": "No valid schedule satisfies all your current limits for these squads. Try shuffling squads or adjusting the match probability, partner, or opponent limits.",
+      "conditionsMet": "Your conditions can be met. Found {{count}} valid schedule options for these squads.",
+      "rosterLimited": "The search has not yet determined whether your conditions can be met by any squad split. A valid split may still exist. Continue checking conditions or adjust your limits.",
+      "conditionsMetReused": "Your conditions can be met. No new valid squad split was found within this search; keeping a previously verified squad and schedule."
     },
     "seasonBalanceLimit": "Every option keeps season win chances between 45% and 55%, excluding joint champions.",
     "invalidLimits": "Choose valid repeat limits and a match probability from 50% to 100% before searching.",
     "mode": "Scheduling mode",
     "fastMode": "Fast — CP-SAT",
     "exactMode": "Exhaustive — best balance",
-    "fastHelp": "Chooses random squads with similar total ratings, then searches on the server for up to three schedules. Equal games, your match probability limit, repeat limits, and the 55/45 season requirement stay enforced. Results are best found within a time budget; squad selection is not globally optimized.",
+    "fastHelp": "Checks possible squad splits against all your conditions, then shows only squads with a verified valid schedule. Impossible splits are skipped automatically. A time limit leaves the check unfinished; Continue checking conditions resumes it without rechecking splits already proved impossible.",
     "fastProgress": "Searching {{profile}} · {{seconds}} seconds",
     "solverOptimal": "Solver objectives proved for these squads.",
     "solverFeasible": "Best found within the time budget; optimality not proved.",
@@ -1603,6 +1606,10 @@
     "matchProbabilityHelp": "Hard limit: each match must stay within {{max}}/{{min}}. Allowed values: 50–100%. Limits are never relaxed automatically.",
     "noScheduleTitle": "No valid schedule",
     "searchTimeLimitTitle": "Search time limit reached",
-    "searchLimits": "Limits used: partner {{partner}}; opponent {{opponent}}; match {{max}}/{{min}}."
+    "searchLimits": "Limits used: partner {{partner}}; opponent {{opponent}}; match {{max}}/{{min}}.",
+    "continueConditions": "Continue checking conditions",
+    "checkingConditions": "Checking conditions · {{checked}} / {{total}} squad splits ruled out · {{seconds}} seconds",
+    "conditionCoverage": "{{checked}} of {{total}} possible squad splits have been proved impossible.",
+    "conditionsImpossibleTitle": "Your conditions cannot be met"
   }
 }

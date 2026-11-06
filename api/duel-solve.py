@@ -49,7 +49,7 @@ class handler(BaseHTTPRequestHandler):
         events = queue.Queue()
         def run():
             try:
-                result = generate(context, cancelled, lambda profile: events.put({"type": "progress", "profile": profile}))
+                result = generate(context, cancelled, lambda profile: events.put({"type": "squadProgress", **profile} if isinstance(profile, dict) else {"type": "progress", "profile": profile}))
                 events.put({"type": "result", "result": result})
             except ApiError as error:
                 events.put({"type": "error", "error": error.code})
@@ -67,7 +67,7 @@ class handler(BaseHTTPRequestHandler):
         worker.start()
         started = time.monotonic()
         try:
-            while time.monotonic() - started < 28:
+            while time.monotonic() - started < 50:
                 try:
                     event = events.get(timeout=.5)
                 except queue.Empty:

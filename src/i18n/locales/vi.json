@@ -1552,21 +1552,24 @@
     "stale": "Điểm hoặc danh sách người chơi đã thay đổi. Hãy tìm lại trước khi lưu.",
     "workerError": "Không thể hoàn tất tìm kiếm. Hãy thử lại.",
     "notice": {
-      "noValid": "Không có lịch hợp lệ đáp ứng tất cả giới hạn hiện tại cho danh sách này. Hãy điều chỉnh giới hạn xác suất mỗi trận, số lần gặp hoặc danh sách người chơi. Hệ thống không tự thay đổi giới hạn.",
+      "noValid": "Đã loại trừ tất cả cách chia đội: không có lịch nào đáp ứng tất cả điều kiện hiện tại cho danh sách này. Hãy điều chỉnh giới hạn xác suất mỗi trận, số lần gặp hoặc danh sách người chơi. Hệ thống không tự thay đổi giới hạn.",
       "fewer": "Có {{count}} phương án khác biệt trong biên chất lượng.",
       "restarted": "Đã xem hết phương án mới. Chu kỳ lịch đấu được bắt đầu lại.",
       "cancelled": "Đã hủy tìm kiếm. Hãy tìm lại trước khi lưu hoặc tạo trận.",
       "saved": "Đã lưu hai đội, giới hạn và chính xác lịch đấu đã chọn.",
       "generated": "Đã tạo các trận đã chọn.",
       "fastLimited": "Chưa tìm được lịch hợp lệ trong thời gian cho phép. Có thể vẫn tồn tại lịch phù hợp. Hãy thử lại hoặc điều chỉnh cài đặt.",
-      "fastInfeasible": "Không có lịch hợp lệ đáp ứng tất cả giới hạn hiện tại cho hai đội này. Hãy chia lại đội hoặc điều chỉnh giới hạn xác suất mỗi trận, số lần cùng đồng đội hay gặp đối thủ."
+      "fastInfeasible": "Không có lịch hợp lệ đáp ứng tất cả giới hạn hiện tại cho hai đội này. Hãy chia lại đội hoặc điều chỉnh giới hạn xác suất mỗi trận, số lần cùng đồng đội hay gặp đối thủ.",
+      "conditionsMet": "Các điều kiện có thể được đáp ứng. Đã tìm được {{count}} phương án lịch đấu hợp lệ cho hai đội này.",
+      "rosterLimited": "Chưa xác định được liệu có cách chia đội nào đáp ứng tất cả điều kiện hay không. Có thể vẫn tồn tại phương án hợp lệ. Hãy tiếp tục kiểm tra điều kiện hoặc điều chỉnh giới hạn.",
+      "conditionsMetReused": "Các điều kiện có thể được đáp ứng. Lượt tìm này chưa có cách chia đội hợp lệ mới; tiếp tục hiển thị đội và lịch đấu đã được kiểm tra trước đó."
     },
     "seasonBalanceLimit": "Mọi phương án giữ xác suất thắng cả mùa trong khoảng 45%–55%, không tính đồng vô địch.",
     "invalidLimits": "Chọn giới hạn số lần gặp hợp lệ và xác suất mỗi trận từ 50% đến 100% trước khi tìm.",
     "mode": "Chế độ xếp lịch",
     "fastMode": "Nhanh — CP-SAT",
     "exactMode": "Vét cạn — cân bằng tốt nhất",
-    "fastHelp": "Chia đội ngẫu nhiên với tổng điểm gần nhau, rồi tìm tối đa ba lịch đấu trên máy chủ. Vẫn giữ số trận bằng nhau, giới hạn xác suất mỗi trận, giới hạn số lần gặp và xác suất thắng mùa 45%–55%. Kết quả là phương án tốt nhất tìm được trong thời gian cho phép; cách chia đội chưa được tối ưu toàn cục.",
+    "fastHelp": "Kiểm tra các cách chia đội theo tất cả điều kiện, rồi chỉ hiển thị đội đã có lịch đấu hợp lệ. Tự bỏ qua các cách chia bất khả thi. Nếu hết thời gian, kết quả vẫn chưa được kết luận; Tiếp tục kiểm tra điều kiện sẽ tìm tiếp mà không kiểm tra lại các cách chia đã được chứng minh bất khả thi.",
     "fastProgress": "Đang tìm {{profile}} · {{seconds}} giây",
     "solverOptimal": "Đã chứng minh tối ưu các mục tiêu của bộ giải cho hai đội này.",
     "solverFeasible": "Tốt nhất tìm được trong thời gian cho phép; chưa chứng minh tối ưu.",
@@ -1597,6 +1600,10 @@
     "matchProbabilityHelp": "Giới hạn bắt buộc: mỗi trận phải nằm trong khoảng {{max}}/{{min}}. Cho phép từ 50–100%. Hệ thống không tự nới giới hạn.",
     "noScheduleTitle": "Không có lịch đấu hợp lệ",
     "searchTimeLimitTitle": "Đã hết thời gian tìm kiếm",
-    "searchLimits": "Giới hạn đang dùng: đồng đội {{partner}}; đối thủ {{opponent}}; xác suất mỗi trận {{max}}/{{min}}."
+    "searchLimits": "Giới hạn đang dùng: đồng đội {{partner}}; đối thủ {{opponent}}; xác suất mỗi trận {{max}}/{{min}}.",
+    "continueConditions": "Tiếp tục kiểm tra điều kiện",
+    "checkingConditions": "Đang kiểm tra điều kiện · Đã loại {{checked}} / {{total}} cách chia đội · {{seconds}} giây",
+    "conditionCoverage": "Đã chứng minh {{checked}} trong {{total}} cách chia đội là bất khả thi.",
+    "conditionsImpossibleTitle": "Không thể đáp ứng các điều kiện"
   }
 }

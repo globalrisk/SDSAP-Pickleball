@@ -14,7 +14,7 @@ import { DEFAULT_TEAM_COLORS } from '../lib/teamColors'
 import { ErrorState } from './Layout'
 import { teamWinProbability } from '../lib/ratings'
 import type { PoolPlayer } from '../types'
-import { chooseFastDuelSplit } from '../lib/fastDuel'
+import { createDuelFeasibilityState, findFeasibleDuelSquads } from '../lib/fastDuelSearch'
 import { requestFastDuel } from '../lib/fastDuelApi'
 
 const button = 'min-h-11 rounded-lg border border-green-300 px-4 py-2 font-semibold text-green-900 disabled:opacity-50'
@@ -25,6 +25,8 @@ export function FlexibleDuelSetup({ season, rosterIds, teams, fixtures, hasFixtu
   const saved = season.duel_draft_plan
   const [engine, setEngine] = useState<'cp-sat' | 'exhaustive'>(saved ? saved.engine ?? 'exhaustive' : 'cp-sat')
   const [fastProfile, setFastProfile] = useState('balance')
+  const [squadProgress, setSquadProgress] = useState<{ checked: number; total: number }>()
+  const feasibility = useRef(createDuelFeasibilityState())
   const abort = useRef<AbortController | null>(null), activeEngine = useRef(engine)
   const orderedTeams = saved ? saved.squads.map(s => teams.find(team => team.players.some(p => p.pool_player_id === s[0]))) : teams
   const [settings, setSettings] = useState<DuelGenerationSettings>({ maxPartnerMeetings: 2, maxOpponentMeetings: 3, ...saved?.settings, maxMatchProbability: saved?.settings.maxMatchProbability ?? .65 })
@@ -55,8 +57,10 @@ export function FlexibleDuelSetup({ season, rosterIds, teams, fixtures, hasFixtu
   useEffect(() => () => { worker.current?.terminate(); abort.current?.abort() }, [])
   useEffect(() => {
     if (!inputKey || activeKey.current === inputKey && activeEngine.current === engine) return
-    stop(); activeKey.current = inputKey; activeEngine.current = engine; seenSplits.current = []; seenOptions.current.clear(); setCatalog(null); setOptions([]); setSplit(undefined); setSelectedId(undefined); setNotice(''); setUnavailable(false)
+    stop(); feasibility.current = createDuelFeasibilityState(); setSquadProgress(undefined); activeKey.current = inputKey; activeEngine.current = engine; seenSplits.current = []; seenOptions.current.clear(); setCatalog(null); setOptions([]); setSplit(undefined); setSelectedId(undefined); setNotice(''); setUnavailable(false)
     if (saved?.inputKey === inputKey && saved.version === FLEXIBLE_DUEL_VERSION && (saved.engine ?? 'exhaustive') === engine && hasUniqueDuelMatchups(saved.option.games)) {
+      feasibility.current.known = { options: [saved.option], status: 'FEASIBLE', split: { id: saved.splitId, squads: saved.squads, bestWorst: saved.option.metrics.worstFavorite } }
+      seenSplits.current = [saved.splitId]
       setSplit({ id: saved.splitId, squads: saved.squads, bestWorst: saved.option.metrics.worstFavorite }); setOptions([saved.option]); setSelectedId(saved.option.id); seenOptions.current.set(saved.splitId, [saved.option.id])
     }
   // Snapshot changes invalidate results; background fetches of identical data do not.
@@ -100,28 +104,38 @@ export function FlexibleDuelSetup({ season, rosterIds, teams, fixtures, hasFixtu
     if (cached) { setCatalog(cached); const chosen = selectNextDuelSplit(cached, split, seenSplits.current); if (chosen) { seenSplits.current.push(chosen.id); requestOptions(chosen) } else { setBusy(false); setNotice('noValid') }; return }
     setProgress({ phase: 'global', completed: 0, total: 0, nodes: 0 }); w.postMessage({ type: 'search', requestId: ++requestId.current, input })
   }
-  async function fastSearch(chosen: DuelSplit, refresh = false) {
+  async function fastSearch(chosen?: DuelSplit, refresh = false) {
     if (!input || !context.data) return
     stop(); const controller = new AbortController(); abort.current = controller
     const id = ++requestId.current
-    persist.reset(); setBusy(true); setUnavailable(true); setError(''); setNotice(''); setFastProfile('balance'); setSplit(chosen)
+    persist.reset(); setBusy(true); setUnavailable(true); setError(''); setNotice(''); setFastProfile(chosen ? 'balance' : 'squads')
     try {
       const fresh = await fetchFlexibleDuelContext(league.id, season.id)
       if (id !== requestId.current) return
       if (fresh.key !== context.data.key) { void context.refetch(); throw new Error('DUEL_STALE_DRAFT') }
-      const run = (excluded: string[]) => requestFastDuel(input, chosen, { leagueId: league.id, seasonId: season.id, revision: fresh.revision, fingerprint: fresh.fingerprint }, excluded, controller.signal, profile => { if (id === requestId.current) setFastProfile(profile) })
-      let result = await run(refresh ? seenOptions.current.get(chosen.id) ?? [] : [])
+      const requestContext = { leagueId: league.id, seasonId: season.id, revision: fresh.revision, fingerprint: fresh.fingerprint }
+      const onProfile = (profile: string) => { if (id === requestId.current) setFastProfile(profile) }
+      const run = (excluded: string[]) => requestFastDuel(input, chosen, requestContext, excluded, controller.signal, onProfile)
+      let result = chosen ? await run(refresh ? seenOptions.current.get(chosen.id) ?? [] : [])
+        : await findFeasibleDuelSquads(input, requestContext, seenSplits.current, feasibility.current, controller.signal, onProfile,
+          (checked, total) => { if (id === requestId.current) { setSquadProgress({ checked, total }); setFastProfile('squads') } })
       let restarted = false
-      if (!result.options.length && result.status === 'INFEASIBLE' && refresh) {
+      if (chosen && !result.options.length && result.status === 'INFEASIBLE' && refresh) {
         restarted = true
         result = await run(optionsRef.current.map(o => o.id))
         if (!result.options.length && result.status === 'INFEASIBLE') result = await run([])
       }
       if (id !== requestId.current) return
       setOptions(result.options); setSelectedId(result.options[0]?.id); setBusy(false); setUnavailable(!result.options.length)
-      const previous = restarted ? [] : seenOptions.current.get(chosen.id) ?? []
-      seenOptions.current.set(chosen.id, [...new Set([...previous, ...result.options.map(o => o.id)])])
-      setNotice(!result.options.length ? result.status === 'INFEASIBLE' ? 'fastInfeasible' : 'fastLimited' : restarted ? 'restarted' : result.options.length < 3 ? 'fewer' : '')
+      const verified = result.options.length ? result.split ?? chosen : undefined
+      setSplit(verified ?? chosen)
+      if (verified) {
+        const previous = restarted ? [] : seenOptions.current.get(verified.id) ?? []
+        seenOptions.current.set(verified.id, [...new Set([...previous, ...result.options.map(o => o.id)])])
+        seenSplits.current = [...new Set([...seenSplits.current, verified.id])].slice(-1716)
+      }
+      setNotice(!result.options.length ? result.status === 'INFEASIBLE' ? chosen ? 'fastInfeasible' : 'noValid' : chosen ? 'fastLimited' : 'rosterLimited'
+        : !chosen ? result.reused ? 'conditionsMetReused' : 'conditionsMet' : restarted ? 'restarted' : result.options.length < 3 ? 'fewer' : '')
     } catch (error) {
       if (id !== requestId.current || controller.signal.aborted) return
       const code = error instanceof Error ? error.message : 'SOLVER_FAILED'
@@ -132,10 +146,7 @@ export function FlexibleDuelSetup({ season, rosterIds, teams, fixtures, hasFixtu
   function shuffle() {
     if (engine === 'cp-sat') {
       if (!input) return
-      const chosen = chooseFastDuelSplit(input, split, seenSplits.current)
-      if (!chosen) return
-      if (seenSplits.current.includes(chosen.id)) seenSplits.current = [split?.id ?? '']
-      seenSplits.current.push(chosen.id); void fastSearch(chosen); return
+      void fastSearch(); return
     }
     if (!catalog) { search(); return }
     getWorker(); const chosen = selectNextDuelSplit(catalog, split, seenSplits.current)
@@ -157,7 +168,7 @@ export function FlexibleDuelSetup({ season, rosterIds, teams, fixtures, hasFixtu
   useEffect(() => { setHash(season.duel_draft_plan_hash ?? null) }, [season.duel_draft_plan_hash])
   const pool = new Map((context.data?.pool ?? []).map(p => [p.id, p])), playerName = (id: string) => pool.get(id)?.name ?? teams.flatMap(t => t.players).find(p => p.pool_player_id === id)?.name ?? id
   const disabled = invalidLimits || busy || unavailable || context.isFetching || context.isError || !selected || persist.isPending || names.some(n => !n.trim())
-  const noScheduleNotice = ['noValid', 'fastInfeasible', 'fastLimited'].includes(notice) ? notice : ''
+  const noScheduleNotice = ['noValid', 'fastInfeasible', 'fastLimited', 'rosterLimited'].includes(notice) ? notice : ''
   const feedbackError = persist.error?.message ?? error
   useEffect(() => {
     if (!noScheduleNotice && !feedbackError) return
@@ -189,13 +200,14 @@ export function FlexibleDuelSetup({ season, rosterIds, teams, fixtures, hasFixtu
         <p className="text-xs text-gray-600">{t('flexibleDuel.limitHelp')}</p>
         {invalidLimits ? <p role="alert" className="text-sm text-red-800">{t('flexibleDuel.invalidLimits')}</p> : null}
         <p className="text-xs">{t('flexibleDuel.participation', { games: size - 1 })} {t('flexibleDuel.seasonBalanceLimit')}</p>
-        <div className="flex flex-wrap gap-3"><button type="button" className={button} disabled={invalidLimits || !context.data || context.isFetching || busy || persist.isPending} onClick={shuffle}>{t((engine === 'cp-sat' ? split : catalog) ? 'flexibleDuel.shuffle' : 'flexibleDuel.search')}</button><button type="button" className={button} disabled={!split || engine === 'exhaustive' && !catalog || busy || persist.isPending} onClick={() => { if (engine === 'exhaustive') getWorker(); requestOptions(split!, true) }}>{t('flexibleDuel.refreshSchedules')}</button>{busy ? <button type="button" className={button} onClick={() => { stop(); setUnavailable(true); setNotice('cancelled') }}>{t('flexibleDuel.cancel')}</button> : null}</div>
-        {busy ? <div role="status"><p>{engine === 'cp-sat' ? t('flexibleDuel.fastProgress', { profile: t(`flexibleDuel.kind.${fastProfile}`), seconds: elapsed }) : t(`flexibleDuel.phase.${progress?.phase ?? 'global'}`, { done: progress?.completed ?? 0, total: progress?.total ?? 0, seconds: elapsed })}</p><p className="text-xs">{t(engine === 'cp-sat' ? 'flexibleDuel.fastHelp' : 'flexibleDuel.exhaustiveHelp')}</p></div> : null}
+        <div className="flex flex-wrap gap-3"><button type="button" className={button} disabled={invalidLimits || !context.data || context.isFetching || busy || persist.isPending} onClick={shuffle}>{t(engine === 'cp-sat' && !split && feasibility.current.attempt > 0 && notice === 'rosterLimited' ? 'flexibleDuel.continueConditions' : (engine === 'cp-sat' ? split : catalog) ? 'flexibleDuel.shuffle' : 'flexibleDuel.search')}</button><button type="button" className={button} disabled={!split || engine === 'exhaustive' && !catalog || busy || persist.isPending} onClick={() => { if (engine === 'exhaustive') getWorker(); requestOptions(split!, true) }}>{t('flexibleDuel.refreshSchedules')}</button>{busy ? <button type="button" className={button} onClick={() => { stop(); setUnavailable(true); setNotice('cancelled') }}>{t('flexibleDuel.cancel')}</button> : null}</div>
+        {busy ? <div role="status"><p>{engine === 'cp-sat' ? fastProfile === 'squads' ? t('flexibleDuel.checkingConditions', { checked: squadProgress?.checked ?? 0, total: squadProgress?.total ?? '…', seconds: elapsed }) : t('flexibleDuel.fastProgress', { profile: t(`flexibleDuel.kind.${fastProfile}`), seconds: elapsed }) : t(`flexibleDuel.phase.${progress?.phase ?? 'global'}`, { done: progress?.completed ?? 0, total: progress?.total ?? 0, seconds: elapsed })}</p><p className="text-xs">{t(engine === 'cp-sat' ? 'flexibleDuel.fastHelp' : 'flexibleDuel.exhaustiveHelp')}</p></div> : null}
         {context.isFetching ? <p role="status">{t('common.loading')}</p> : null}
         {context.error ? <ErrorState message={context.error.message} /> : null}
         {noScheduleNotice || feedbackError ? <div ref={feedbackRef} role="alert" tabIndex={-1} className={`scroll-mt-6 rounded-xl border p-4 text-sm focus:outline-none focus:ring-2 ${feedbackError ? 'border-red-300 bg-red-50 text-red-900 focus:ring-red-500' : 'border-amber-400 bg-amber-50 text-amber-950 focus:ring-amber-500'}`}>
-          <p className="font-bold">{t(feedbackError ? 'error.title' : noScheduleNotice === 'fastLimited' ? 'flexibleDuel.searchTimeLimitTitle' : 'flexibleDuel.noScheduleTitle')}</p>
+          <p className="font-bold">{t(feedbackError ? 'error.title' : ['fastLimited', 'rosterLimited'].includes(noScheduleNotice) ? 'flexibleDuel.searchTimeLimitTitle' : noScheduleNotice === 'noValid' ? 'flexibleDuel.conditionsImpossibleTitle' : 'flexibleDuel.noScheduleTitle')}</p>
           <p className="mt-1">{feedbackError || t(`flexibleDuel.notice.${noScheduleNotice}`)}</p>
+          {noScheduleNotice === 'rosterLimited' && squadProgress ? <p className="mt-2">{t('flexibleDuel.conditionCoverage', squadProgress)}</p> : null}
           {!feedbackError ? <p className="mt-2 font-medium">{t('flexibleDuel.searchLimits', { partner: settings.maxPartnerMeetings ?? t('flexibleDuel.noLimit'), opponent: settings.maxOpponentMeetings ?? t('flexibleDuel.noLimit'), max: Math.round((settings.maxMatchProbability ?? .65) * 10000) / 100, min: Math.round((1 - (settings.maxMatchProbability ?? .65)) * 10000) / 100 })}</p> : null}
         </div> : null}
         {notice && !noScheduleNotice ? <p role="status" className="text-sm text-green-900">{t(`flexibleDuel.notice.${notice}`, { count: options.length })}</p> : null}

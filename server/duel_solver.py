@@ -146,42 +146,47 @@ def solve(request, cancelled=None):
         for r in range(rounds - 1):
             model.add(first_games[r] <= first_games[r + 1])
     scale = 1_000_000
-    outside = sum(x for (_, g), x in variables.items() if costs[g] > .6 + EPS)
-    mean_cost = sum(round(costs[g] * scale) * x for (_, g), x in variables.items())
     history_weights = request.get("partnerHistory", [[0] * len(edges), [0] * len(edges)])
-    history = sum(history_weights[side][e] * used for side in range(2) for e, used in enumerate(partner_used[side]))
-    covered = sum(used for row in opponent_used for used in row)
-    used_partners = sum(used for side in partner_used for used in side)
-    repeats = []
-    for i, count in enumerate(opponent_counts):
-        repeat = model.new_int_var(0, opponent_cap * (opponent_cap - 1) // 2, f"repeats_{i}")
-        model.add_element(count, [n * (n - 1) // 2 for n in range(opponent_cap + 1)], repeat)
-        repeats.append(repeat)
-    hard = []
-    disadvantages = []
-    for player in range(2 * size):
-        side, index = divmod(player, size)
-        hard_games, penalties = [], []
-        for (r, g), x in variables.items():
-            pair = edges[g // len(edges)] if side == 0 else edges[g % len(edges)]
-            if index not in pair:
-                continue
-            probability = probabilities[g] if side == 0 else 1 - probabilities[g]
-            if probability < .4:
-                hard_games.append(x)
-            penalties.append(round(max(0, .5 - probability) * scale) * x)
-        hard.append(sum(hard_games))
-        disadvantages.append(sum(penalties))
-    max_hard = model.new_int_var(0, size - 1, "max_hard")
-    max_disadvantage = model.new_int_var(0, (size - 1) * scale, "max_disadvantage")
-    model.add_max_equality(max_hard, hard)
-    model.add_max_equality(max_disadvantage, disadvantages)
-    objectives = {
-        "primary": [worst],
-        "balance": [worst, outside, mean_cost, history],
-        "variety": [-covered, -used_partners, sum(repeats), worst, mean_cost, history],
-        "experience": [max_hard, max_disadvantage, worst, mean_cost, history],
-    }[profile]
+    if profile == "primary":
+        # A roster-wide feasibility pass needs the bottleneck only. Building
+        # every unused profile's auxiliary model for every split is expensive.
+        objectives = [worst]
+    else:
+        outside = sum(x for (_, g), x in variables.items() if costs[g] > .6 + EPS)
+        mean_cost = sum(round(costs[g] * scale) * x for (_, g), x in variables.items())
+        history = sum(history_weights[side][e] * used for side in range(2) for e, used in enumerate(partner_used[side]))
+        covered = sum(used for row in opponent_used for used in row)
+        used_partners = sum(used for side in partner_used for used in side)
+        repeats = []
+        for i, count in enumerate(opponent_counts):
+            repeat = model.new_int_var(0, opponent_cap * (opponent_cap - 1) // 2, f"repeats_{i}")
+            model.add_element(count, [n * (n - 1) // 2 for n in range(opponent_cap + 1)], repeat)
+            repeats.append(repeat)
+        hard = []
+        disadvantages = []
+        for player in range(2 * size):
+            side, index = divmod(player, size)
+            hard_games, penalties = [], []
+            for (r, g), x in variables.items():
+                pair = edges[g // len(edges)] if side == 0 else edges[g % len(edges)]
+                if index not in pair:
+                    continue
+                probability = probabilities[g] if side == 0 else 1 - probabilities[g]
+                if probability < .4:
+                    hard_games.append(x)
+                penalties.append(round(max(0, .5 - probability) * scale) * x)
+            hard.append(sum(hard_games))
+            disadvantages.append(sum(penalties))
+        max_hard = model.new_int_var(0, size - 1, "max_hard")
+        max_disadvantage = model.new_int_var(0, (size - 1) * scale, "max_disadvantage")
+        model.add_max_equality(max_hard, hard)
+        model.add_max_equality(max_disadvantage, disadvantages)
+        objectives = {
+            "primary": [worst],
+            "balance": [worst, outside, mean_cost, history],
+            "variety": [-covered, -used_partners, sum(repeats), worst, mean_cost, history],
+            "experience": [max_hard, max_disadvantage, worst, mean_cost, history],
+        }[profile]
     model.minimize(objectives[0])
     build_ms = (time.perf_counter() - started) * 1000
     best = None
