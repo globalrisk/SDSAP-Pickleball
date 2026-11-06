@@ -1505,7 +1505,7 @@
     "tooLong": "Use no more than 60 characters."
   },
   "flexibleDuel": {
-    "rules": "Choose repeat limits, shuffle squads, then compare schedules for the same squads. All players get equal games; partners and opponents do not have to meet everyone.",
+    "rules": "Choose repeat limits, shuffle squads, then compare schedules for the same squads. All players get equal games; partners and opponents do not have to meet everyone. The same four players can play together only once per season.",
     "maxPartnerMeetings": "Maximum games with the same partner",
     "maxOpponentMeetings": "Maximum games against the same opponent",
     "noLimit": "No limit",

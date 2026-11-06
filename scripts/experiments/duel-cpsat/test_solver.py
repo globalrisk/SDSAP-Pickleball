@@ -1,6 +1,8 @@
 import itertools
+import json
 import math
 import unittest
+from unittest.mock import patch
 
 from solver import balanced, forecast, solve
 
@@ -27,7 +29,26 @@ class SolverTests(unittest.TestCase):
         self.assertEqual(result["status"], "OPTIMAL")
         self.assertTrue(result["optimal"])
         self.assertEqual(len(result["solution"]["games"]), 6)
+        self.assertEqual(len({tuple(sorted(g["home"])) + tuple(p + 4 for p in sorted(g["away"])) for g in result["solution"]["games"]}), 6)
         self.assertTrue(balanced(result["solution"]["forecast"]))
+
+    def test_exact_matchups_cannot_repeat_even_with_permissive_meeting_caps(self):
+        probabilities = [.9] * 36
+        probabilities[0] = probabilities[35] = .5
+        # Previously, repeating these two games in all three rounds was feasible.
+        result = solve(self.request(probabilities=probabilities, maxWorst=.65,
+                                    settings={"maxPartnerMeetings": 3, "maxOpponentMeetings": 3}))
+        self.assertEqual(result["status"], "INFEASIBLE")
+        self.assertIsNone(result["solution"])
+
+    def test_duplicate_structural_seed_is_never_returned_after_time_limit(self):
+        games = [{"round": r, "home": pair, "away": pair} for r in (1, 2, 3)
+                 for pair in ([0, 1], [2, 3])]
+        with patch("server.duel_solver.Path.read_text", return_value=json.dumps({"4": games})):
+            result = solve(self.request(seconds=.1, warmMs=1000,
+                                        settings={"maxPartnerMeetings": 3, "maxOpponentMeetings": 3}))
+        self.assertIsNone(result["solution"])
+        self.assertEqual(result["status"], "UNKNOWN")
 
     def test_impossible_cap_is_proven_infeasible(self):
         result = solve(self.request(settings={"maxPartnerMeetings": 2, "maxOpponentMeetings": 1}))

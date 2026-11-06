@@ -39,6 +39,9 @@ describe('Fast Team Duel client', () => {
     expect(() => decodeFastDuelOptions(data, split, [raw, raw])).toThrow('INVALID_RESULT')
     const invalid = structuredClone(raw); invalid.games[0]!.homePoolPlayerIds[0] = 'outside'
     expect(() => decodeFastDuelOptions(data, split, [invalid])).toThrow('INVALID_RESULT')
+    const repeat = structuredClone(raw)
+    repeat.games = Array.from({ length: 3 }, (_, r) => games.slice(0, 2).map((g, i) => ({ ...g, roundNumber: r + 1, sequenceNumber: r * 2 + i + 1 }))).flat()
+    expect(() => decodeFastDuelOptions({ ...data, settings: { maxPartnerMeetings: 3, maxOpponentMeetings: 3 } }, split, [repeat])).toThrow('INVALID_RESULT')
     const conflict = structuredClone(raw); conflict.games[1]!.roundNumber = 2
     expect(() => decodeFastDuelOptions(data, split, [conflict])).toThrow('INVALID_RESULT')
   })

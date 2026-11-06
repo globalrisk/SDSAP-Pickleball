@@ -1,5 +1,5 @@
 import { compareDuelPlayers, type LeagueDuelGame } from './leagueDuelSchedule'
-import { duelMatchProbabilityLimit, duelScheduleId, measureDuelSchedule, orderDuelGames, validateDuelSettings, type DuelScheduleOption, type DuelSearchInput, type DuelSplit } from './flexibleDuel'
+import { duelMatchProbabilityLimit, duelScheduleId, hasUniqueDuelMatchups, measureDuelSchedule, orderDuelGames, validateDuelSettings, type DuelScheduleOption, type DuelSearchInput, type DuelSplit } from './flexibleDuel'
 import { isSeasonForecastBalanced } from './seasonForecast'
 
 export function chooseFastDuelSplit(input: DuelSearchInput, current?: DuelSplit, seen: string[] = [], random = Math.random): DuelSplit | undefined {
@@ -48,7 +48,7 @@ export function decodeFastDuelOptions(input: DuelSearchInput, split: DuelSplit, 
       sequence.add(g.sequenceNumber)
       appearances.set(g.roundNumber, [...appearances.get(g.roundNumber) ?? [], ...g.homePoolPlayerIds, ...g.awayPoolPlayerIds])
     }
-    if (appearances.size !== rounds || [...appearances.values()].some(ids => ids.length !== Math.floor(size / 2) * 4 || new Set(ids).size !== ids.length)) throw new Error('SOLVER_INVALID_RESULT')
+    if (!hasUniqueDuelMatchups(games) || appearances.size !== rounds || [...appearances.values()].some(ids => ids.length !== Math.floor(size / 2) * 4 || new Set(ids).size !== ids.length)) throw new Error('SOLVER_INVALID_RESULT')
     const ordered = orderDuelGames(games), metrics = measureDuelSchedule(squads, ordered)
     if (metrics.worstFavorite > duelMatchProbabilityLimit(input.settings) + 1e-12 || metrics.players.some(p => p.games !== size - 1) || metrics.maxPartnerMeetings > (input.settings.maxPartnerMeetings ?? size - 1)
       || metrics.maxOpponentMeetings > (input.settings.maxOpponentMeetings ?? size - 1) || !isSeasonForecastBalanced(metrics.forecast)

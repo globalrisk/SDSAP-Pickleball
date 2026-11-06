@@ -22,6 +22,8 @@ The following exhaustive-search quality guarantees apply to **Exhaustive** mode;
 
 In **Setup → Teams & fixtures**, choose maximum total games with the same partner and maximum total games against the same individual opponent. Both default to **2**. Limits count all meetings, rather than additional repeats, within this season. Each accepts an integer from one through games per player, or **No limit**. Opponent limit one is disabled because equal participation requires more encounters. Impossible combinations produce an explanation without relaxing limits.
 
+The same four players may appear together in only one fixture per season, regardless of player order, squad side or partnership assignment. This hard rule applies in both search modes, structural warm starts, client validation, plan saves and a unique database index on actual Team Duel fixtures. Individual partners or opponents may still meet up to the configured limits in different four-player groups.
+
 New drafts have no tiers and no compulsory partner or opponent coverage. Squads of `n` give everyone `n − 1` games, with `n(n − 1)/2` fixtures total. Rounds never double-book players. Even squads have `n − 1` rounds; odd squads have `n` rounds and one bye per player.
 
 **Search squads and schedules** exhaustively checks every unique squad split and permitted complete-round schedule. The strongest player anchors A; ratings descending, then player IDs, determine squad ranks. Search runs in a browser worker with progress and no time cutoff. Cancel or leaving the page terminates unfinished work. Large rosters and permissive limits can take a long time. Partial results cannot be saved.

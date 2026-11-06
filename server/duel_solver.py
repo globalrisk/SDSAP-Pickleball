@@ -128,7 +128,7 @@ def solve(request, cancelled=None):
         model.add(sum(opponent_used[q][p] for q in range(size)) >= math.ceil(2 * (size - 1) / opponent_cap))
     counts = []
     for g, xs in enumerate(by_game):
-        count = model.new_int_var(0, min(partner_cap, opponent_cap), f"count_{g}")
+        count = model.new_int_var(0, 1, f"count_{g}")
         model.add(count == sum(xs))
         counts.append(count)
     excluded = {tuple(row) for row in request.get("excluded", [])}
@@ -240,7 +240,7 @@ def solve(request, cancelled=None):
         for game in games:
             g = edge_indices[tuple(game["home"])] * len(edges) + edge_indices[tuple(game["away"])]
             count_vector[g] += 1; ps.append(probabilities[g])
-        if not games or tuple(count_vector) in excluded or max(max(p, 1 - p) for p in ps) > upper + EPS:
+        if not games or max(count_vector) > 1 or tuple(count_vector) in excluded or max(max(p, 1 - p) for p in ps) > upper + EPS:
             continue
         # Recipes meet 2/2. Stricter partner caps need a separate check.
         pc = [[0] * len(edges), [0] * len(edges)]

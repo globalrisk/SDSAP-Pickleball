@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { useLeague } from '../context/LeagueContext'
 import { fetchFlexibleDuelContext, saveFlexibleDuelPlan } from '../lib/leagueTeamDuelApi'
-import { FLEXIBLE_DUEL_VERSION, selectNextDuelSplit, validateDuelSettings, type DuelGenerationSettings, type DuelScheduleOption, type DuelSearchCatalog, type DuelSearchInput, type DuelSearchProgress, type DuelSplit, type FlexibleDuelPlan } from '../lib/flexibleDuel'
+import { FLEXIBLE_DUEL_VERSION, hasUniqueDuelMatchups, selectNextDuelSplit, validateDuelSettings, type DuelGenerationSettings, type DuelScheduleOption, type DuelSearchCatalog, type DuelSearchInput, type DuelSearchProgress, type DuelSplit, type FlexibleDuelPlan } from '../lib/flexibleDuel'
 import type { MatchWithTeams, Season, TeamWithPlayers } from '../types'
 import { SeasonForecastSummary } from './SeasonForecastSummary'
 import { SeasonMatchDeletion } from './SeasonMatchDeletion'
@@ -56,7 +56,7 @@ export function FlexibleDuelSetup({ season, rosterIds, teams, fixtures, hasFixtu
   useEffect(() => {
     if (!inputKey || activeKey.current === inputKey && activeEngine.current === engine) return
     stop(); activeKey.current = inputKey; activeEngine.current = engine; seenSplits.current = []; seenOptions.current.clear(); setCatalog(null); setOptions([]); setSplit(undefined); setSelectedId(undefined); setNotice(''); setUnavailable(false)
-    if (saved?.inputKey === inputKey && saved.version === FLEXIBLE_DUEL_VERSION && (saved.engine ?? 'exhaustive') === engine) {
+    if (saved?.inputKey === inputKey && saved.version === FLEXIBLE_DUEL_VERSION && (saved.engine ?? 'exhaustive') === engine && hasUniqueDuelMatchups(saved.option.games)) {
       setSplit({ id: saved.splitId, squads: saved.squads, bestWorst: saved.option.metrics.worstFavorite }); setOptions([saved.option]); setSelectedId(saved.option.id); seenOptions.current.set(saved.splitId, [saved.option.id])
     }
   // Snapshot changes invalidate results; background fetches of identical data do not.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { duelScheduleId, findDuelSchedule, measureDuelSchedule, orderDuelGames, searchDuelOptions, searchDuelSplits, selectNextDuelSplit, validateDuelSettings, type DuelSearchInput, type DuelGenerationSettings, type DuelSearchCatalog } from './flexibleDuel'
+import { duelScheduleId, hasUniqueDuelMatchups, findDuelSchedule, measureDuelSchedule, orderDuelGames, searchDuelOptions, searchDuelSplits, selectNextDuelSplit, validateDuelSettings, type DuelSearchInput, type DuelGenerationSettings, type DuelSearchCatalog } from './flexibleDuel'
 import { teamWinProbability } from './ratings'
 import { forecastSeason, isSeasonForecastBalanced } from './seasonForecast'
 import type { PoolPlayer } from '../types'
@@ -24,6 +24,8 @@ function referenceCatalog(pool: PoolPlayer[], settings: DuelGenerationSettings):
       const rs = [rounds[i]!, rounds[j]!, rounds[k]!], partner = new Map<string, number>(), opponents = Array(16).fill(0)
       rs.forEach(r => r.h.forEach((h, m) => { const a = r.a[m]!; for (const [s, pair] of [[0, h], [1, a]] as const) { const key = s + ':' + [...pair].sort().join(); partner.set(key, (partner.get(key) ?? 0) + 1) }; for (const x of h) for (const y of a) opponents[x * 4 + y]++ }))
       if ([...partner.values()].some(n => n > (settings.maxPartnerMeetings ?? 3)) || opponents.some(n => n > (settings.maxOpponentMeetings ?? 3))) continue
+      const foursomes = rs.flatMap(r => r.h.map((h, index) => [...h.map(i => home[i]!.id), ...r.a[index]!.map(i => away[i]!.id)].sort().join(':')))
+      if (new Set(foursomes).size !== foursomes.length) continue
       const probabilities = rs.flatMap(r => r.ps)
       if (Math.max(...probabilities.map(p => Math.max(p, 1 - p))) <= (settings.maxMatchProbability ?? .65) + 1e-12 && isSeasonForecastBalanced(forecastSeason(probabilities))) best = Math.min(best, Math.max(...probabilities.map(p => Math.max(p, 1 - p))))
     }
@@ -36,6 +38,17 @@ function referenceCatalog(pool: PoolPlayer[], settings: DuelGenerationSettings):
 }
 
 describe('flexible exhaustive scheduling', () => {
+  it('recognizes a repeated four-player group after changing sides, partners or ordering', () => {
+    const game = { roundNumber: 1, sequenceNumber: 1, homePoolPlayerIds: ['a', 'b'] as [string, string], awayPoolPlayerIds: ['c', 'd'] as [string, string] }
+    expect(hasUniqueDuelMatchups([game])).toBe(true)
+    expect(hasUniqueDuelMatchups([game, { ...game, homePoolPlayerIds: ['d', 'c'], awayPoolPlayerIds: ['b', 'a'] }])).toBe(false)
+    expect(hasUniqueDuelMatchups([game, { ...game, homePoolPlayerIds: ['a', 'c'], awayPoolPlayerIds: ['b', 'd'] }])).toBe(false)
+  })
+  it('never repeats a matchup even when individual meeting caps are disabled', () => {
+    const data = input(); data.settings = { maxPartnerMeetings: null, maxOpponentMeetings: null }
+    const catalog = searchDuelSplits(data)
+    for (const option of searchDuelOptions(data, catalog.splits[0]!)) expect(hasUniqueDuelMatchups(option.games)).toBe(true)
+  })
   it('rejects impossible or fractional caps instead of relaxing them', () => {
     expect(() => validateDuelSettings(6, { maxPartnerMeetings: 2, maxOpponentMeetings: 1 })).toThrow('IMPOSSIBLE')
     expect(() => validateDuelSettings(6, { maxPartnerMeetings: 1.5, maxOpponentMeetings: 2 })).toThrow('RANGE')
@@ -50,6 +63,7 @@ describe('flexible exhaustive scheduling', () => {
     expect(m.maxPartnerMeetings).toBeLessThanOrEqual(settings.maxPartnerMeetings)
     if (settings.maxOpponentMeetings !== null) expect(m.maxOpponentMeetings).toBeLessThanOrEqual(settings.maxOpponentMeetings)
     expect(ordered).toHaveLength(size * (size - 1) / 2)
+    expect(hasUniqueDuelMatchups(ordered)).toBe(true)
     for (const r of new Set(ordered.map(g => g.roundNumber))) {
       const ids = ordered.filter(g => g.roundNumber === r).flatMap(g => [...g.homePoolPlayerIds, ...g.awayPoolPlayerIds])
       expect(new Set(ids).size).toBe(ids.length)

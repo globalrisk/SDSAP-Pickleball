@@ -141,10 +141,11 @@ function enumerate(
   // Each bit represents a complete round still compatible with the prefix.
   // When a meeting reaches its cap, remove all rounds containing it at once.
   const edgeCount = edges.length, opponentOffset = 2 * edgeCount, byeOffset = opponentOffset + size * size
-  const featureCount = byeOffset + (size % 2 ? 2 * size : 0), words = Math.ceil(rounds.length / 32)
+  const matchupOffset = byeOffset + (size % 2 ? 2 * size : 0)
+  const featureCount = matchupOffset + edges.length ** 2, words = Math.ceil(rounds.length / 32)
   const masks = Array.from({ length: featureCount }, () => new Uint32Array(words))
   const features = rounds.map((r, index) => {
-    const ids = [...r.home, ...r.away.map(e => edgeCount + e), ...r.links.map(link => opponentOffset + link)]
+    const ids = [...r.home, ...r.away.map(e => edgeCount + e), ...r.links.map(link => opponentOffset + link), ...r.cells.map(cell => matchupOffset + cell)]
     if (r.homeBye >= 0) ids.push(byeOffset + r.homeBye, byeOffset + size + r.awayBye)
     for (const id of ids) masks[id]![index >>> 5] |= 1 << (index & 31)
     return ids
@@ -182,8 +183,8 @@ function enumerate(
       const found = possible && dfs(depth + 1)
       chosen.pop()
       for (const id of ids) counts[id] = counts[id]! - 1
-      // Keeping this bit in the child permits repeated rounds when caps allow;
-      // clearing it afterwards visits each round multiset exactly once.
+      // Matchup features block any later round containing the same four players.
+      // Clearing this bit visits each permitted round combination exactly once.
       candidates[word] &= ~bit
       if (found) return true
     }
@@ -247,6 +248,11 @@ export function searchDuelSplits(input: DuelSearchInput, progress: Progress = ()
   }
   eligible.sort((a, b) => a.bestWorst - b.bestWorst || a.id.localeCompare(b.id))
   return { globalBest, splits: eligible }
+}
+
+/** The same four people count as a repeat regardless of side, partners, or order. */
+export function hasUniqueDuelMatchups(games: readonly LeagueDuelGame[]): boolean {
+  return new Set(games.map(g => [...g.homePoolPlayerIds, ...g.awayPoolPlayerIds].sort().join(':'))).size === games.length
 }
 
 export function duelScheduleId(games: readonly LeagueDuelGame[]): string {

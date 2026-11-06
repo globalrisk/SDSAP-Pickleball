@@ -1499,7 +1499,7 @@
     "tooLong": "Nhập tối đa 60 ký tự."
   },
   "flexibleDuel": {
-    "rules": "Chọn giới hạn lặp, xáo trộn đội rồi so sánh các lịch đấu cho cùng hai đội. Mọi người chơi số trận bằng nhau; không bắt buộc ghép với hoặc gặp tất cả mọi người.",
+    "rules": "Chọn giới hạn lặp, xáo trộn đội rồi so sánh các lịch đấu cho cùng hai đội. Mọi người chơi số trận bằng nhau; không bắt buộc ghép với hoặc gặp tất cả mọi người. Mỗi nhóm bốn người chỉ được cùng tham gia một trận trong mỗi mùa giải.",
     "maxPartnerMeetings": "Số trận tối đa cùng một đồng đội",
     "maxOpponentMeetings": "Số trận tối đa gặp cùng một đối thủ",
     "noLimit": "Không giới hạn",

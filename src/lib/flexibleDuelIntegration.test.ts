@@ -147,6 +147,31 @@ describe('flexible plans through PostgreSQL and application APIs', () => {
     expect(saved.count).toBe(6)
     expect((await fetchSeasons(s.leagueId)).find(season => season.id === s.seasonId)!.duel_draft_plan!.settings.maxMatchProbability).toBe(1)
   }, 30000)
+  it('rejects duplicate four-player games in raw RPCs and the database index', async () => {
+    const s = await prepare()
+    const repeated = structuredClone(s.plan)
+    repeated.settings.maxPartnerMeetings = 3; repeated.settings.maxOpponentMeetings = 3
+    repeated.option.games = Array.from({ length: 3 }, (_, r) => s.plan.option.games.slice(0, 2).map((g, i) => ({ ...g, roundNumber: r + 1, sequenceNumber: r * 2 + i + 1 }))).flat()
+    await expect(saveFlexibleDuelPlan(s.seasonId, repeated, ['A', 'B'], s.context.revision, s.context.fingerprint, null, true)).rejects.toThrow('DUEL_DUPLICATE_MATCH')
+    const response = await state.client!.rpc('save_and_generate_league_duel_plan_atomic', { p_season_id: s.seasonId, p_plan: repeated, p_names: ['A', 'B'], p_expected_rating_revision: s.context.revision, p_expected_rating_fingerprint: s.context.fingerprint, p_expected_plan_hash: null })
+    expect(response.error?.message).toContain('DUEL_DUPLICATE_MATCH')
+    expect(await fetchTeamsWithPlayers(s.seasonId)).toHaveLength(0)
+    expect(await fetchMatches(s.seasonId, s.leagueId)).toHaveLength(0)
+    await saveFlexibleDuelPlan(s.seasonId, s.plan, ['A', 'B'], s.context.revision, s.context.fingerprint, null, true)
+    const matches = await fetchMatches(s.seasonId, s.leagueId)
+    // Isolate the unique index from application triggers in the disposable database.
+    await api.db.exec('ALTER TABLE public.matches DISABLE TRIGGER USER')
+    try {
+      await expect(api.db.query(`INSERT INTO public.matches(season_id,home_team_id,away_team_id,round_number,duel_sequence_number,home_pool_player_ids,away_pool_player_ids,status)
+        SELECT season_id,away_team_id,home_team_id,round_number+100,duel_sequence_number+100,away_pool_player_ids,home_pool_player_ids,'scheduled'
+        FROM public.matches WHERE id=$1`, [matches[0]!.id])).rejects.toThrow('matches_unique_four_players_per_season')
+      await expect(api.db.query(`INSERT INTO public.matches(season_id,home_team_id,away_team_id,round_number,duel_sequence_number,home_pool_player_ids,away_pool_player_ids,status)
+        SELECT season_id,home_team_id,away_team_id,round_number+100,duel_sequence_number+100,
+        ARRAY[home_pool_player_ids[1],away_pool_player_ids[1]],ARRAY[home_pool_player_ids[2],away_pool_player_ids[2]],'scheduled'
+        FROM public.matches WHERE id=$1`, [matches[0]!.id])).rejects.toThrow('matches_unique_four_players_per_season')
+    } finally { await api.db.exec('ALTER TABLE public.matches ENABLE TRIGGER USER') }
+    expect(await fetchMatches(s.seasonId, s.leagueId)).toHaveLength(6)
+  }, 30000)
   it('rechecks caps when an authenticated administrator bypasses the UI', async () => {
     const s = await prepare()
     const saved = await saveFlexibleDuelPlan(s.seasonId, s.plan, ['A', 'B'], s.context.revision, s.context.fingerprint, null, false)

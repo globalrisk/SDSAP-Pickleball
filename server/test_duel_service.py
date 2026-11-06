@@ -110,6 +110,7 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(len(result["options"]), 3)
         for option in result["options"]:
             self.assertEqual(len(option["games"]), 21)
+            self.assertEqual(len({tuple(sorted(g["homePoolPlayerIds"] + g["awayPoolPlayerIds"])) for g in option["games"]}), 21)
             counts = {}
             for game in option["games"]:
                 for h in game["homePoolPlayerIds"]:
