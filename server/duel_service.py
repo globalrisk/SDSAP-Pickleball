@@ -267,17 +267,10 @@ def search_squads(context, cancelled, progress):
             raise ApiError("DUEL_STALE_DRAFT", 409)
         update(True)
         return {**result, "scope": "roster", "provenInfeasibleSplitIds": proved, "totalSplits": total}
-    update(True)
-    for identity, squads, _, _ in candidates:
-        if cancelled.is_set():
-            return None
-        if identity in skipped:
-            continue
-        if time.perf_counter() >= search_deadline:
-            break
+    from server.duel_prefilter import impossible_split
+
+    def probabilities_for(squads):
         probabilities = []
-        partners = [[set() for _ in range(size)] for _ in range(2)]
-        opponents = [[set() for _ in range(size)] for _ in range(2)]
         for h in edges:
             for a in edges:
                 home, away = tuple(squads[0][i] for i in h), tuple(squads[1][i] for i in a)
@@ -287,18 +280,37 @@ def search_squads(context, cancelled, progress):
                     delta = sum(p["rating"] for p in hp) - sum(p["rating"] for p in ap)
                     variance = 250000 + sum(p["rating_deviation"] ** 2 for p in hp + ap)
                     probability_cache[key] = normal_cdf(delta / math.sqrt(variance))
-                probability = probability_cache[key]
-                probabilities.append(probability)
-                if max(probability, 1 - probability) > settings.get("maxMatchProbability", .65) + 1e-12:
-                    continue
-                for side, pair, other in ((0, h, a), (1, a, h)):
-                    for player in pair:
-                        partners[side][player].update(set(pair) - {player})
-                        opponents[side][player].update(other)
-        required_partners = math.ceil((size - 1) / (settings["maxPartnerMeetings"] or size - 1))
-        required_opponents = math.ceil(2 * (size - 1) / (settings["maxOpponentMeetings"] or size - 1))
-        if any(len(choices) < required_partners for side in partners for choices in side) or any(len(choices) < required_opponents for side in opponents for choices in side):
-            proved.append(identity); update(); continue
+                probabilities.append(probability_cache[key])
+        return probabilities
+
+    update(True)
+    pending = []
+    # Filter across the roster before spending time solving any one split.
+    # Bound this pass so unusual inputs still leave time for CP-SAT.
+    prefilter_deadline = min(search_deadline, started + 5)
+    for index, (identity, squads, _, _) in enumerate(candidates):
+        if cancelled.is_set():
+            return None
+        if identity in skipped:
+            continue
+        if time.perf_counter() >= prefilter_deadline:
+            pending.extend((c[0], c[1], None) for c in candidates[index:] if c[0] not in skipped)
+            break
+        probabilities = probabilities_for(squads)
+        if impossible_split(size, settings, probabilities):
+            proved.append(identity); update()
+        else:
+            pending.append((identity, squads, probabilities))
+    update(True)
+    for identity, squads, probabilities in pending:
+        if cancelled.is_set():
+            return None
+        if time.perf_counter() >= search_deadline:
+            break
+        if probabilities is None:
+            probabilities = probabilities_for(squads)
+            if impossible_split(size, settings, probabilities):
+                proved.append(identity); update(); continue
         seconds = min(.5 * 2 ** context.get("attempt", 0), 5, search_deadline - time.perf_counter())
         if seconds <= .01:
             break
