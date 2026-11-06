@@ -31,6 +31,10 @@ describe('Fast Team Duel client', () => {
     const raw = { kind: 'balance', games, solver: { status: 'FEASIBLE', elapsedMs: 100 } }
     const options = decodeFastDuelOptions(data, split, [raw])
     expect(options[0]!.metrics.worstFavorite).toBeCloseTo(.5)
+    const mismatched = structuredClone(data)
+    mismatched.pool.find(p => p.id === games[0]!.homePoolPlayerIds[0])!.rating = 2500
+    mismatched.pool.find(p => p.id === split.squads[1].find(id => !games[0]!.awayPoolPlayerIds.includes(id)))!.rating = 2500
+    expect(() => decodeFastDuelOptions({ ...mismatched, settings: { ...data.settings, maxMatchProbability: .6 } }, split, [raw])).toThrow('INVALID_RESULT')
     expect(options[0]!.metrics.players.every(p => p.games === 3)).toBe(true)
     expect(() => decodeFastDuelOptions(data, split, [raw, raw])).toThrow('INVALID_RESULT')
     const invalid = structuredClone(raw); invalid.games[0]!.homePoolPlayerIds[0] = 'outside'

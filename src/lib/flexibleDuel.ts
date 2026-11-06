@@ -5,7 +5,11 @@ import { compareDuelPlayers, validateLeagueDuelPool, type LeagueDuelGame } from 
 
 export const FLEXIBLE_DUEL_VERSION = 1
 const EPS = 1e-12
-export interface DuelGenerationSettings { maxPartnerMeetings: number | null; maxOpponentMeetings: number | null }
+export const DEFAULT_MAX_MATCH_PROBABILITY = .65
+export interface DuelGenerationSettings { maxPartnerMeetings: number | null; maxOpponentMeetings: number | null; maxMatchProbability?: number }
+export function duelMatchProbabilityLimit(settings: DuelGenerationSettings): number {
+  return settings.maxMatchProbability ?? DEFAULT_MAX_MATCH_PROBABILITY
+}
 export type DuelOptionKind = 'balance' | 'variety' | 'experience' | 'alternative'
 export interface DuelPlayerExperience {
   id: string; games: number; expectedWins: number; below40: number; disadvantage: number
@@ -45,6 +49,8 @@ export function validateDuelSettings(size: number, settings: DuelGenerationSetti
     if (value !== null && (!Number.isInteger(value) || value < 1 || value > size - 1)) throw new Error('DUEL_LIMIT_RANGE')
   }
   if (settings.maxOpponentMeetings !== null && size * settings.maxOpponentMeetings < 2 * (size - 1)) throw new Error('DUEL_OPPONENT_LIMIT_IMPOSSIBLE')
+  const limit = duelMatchProbabilityLimit(settings)
+  if (!Number.isFinite(limit) || limit < .5 || limit > 1) throw new Error('DUEL_MATCH_LIMIT_RANGE')
 }
 
 const structures = new Map<number, { edges: Pair[]; templates: RoundTemplate[]; permutations: number[][] }>()
@@ -77,6 +83,7 @@ function structure(size: number) {
 }
 
 function prepare(squads: [PoolPlayer[], PoolPlayer[]], upper: number, settings: DuelGenerationSettings): Prepared {
+  upper = Math.min(upper, duelMatchProbabilityLimit(settings))
   const size = squads[0].length, { edges, templates } = structure(size), edgeCount = edges.length
   const skills = squads.map(s => edges.map(e => e.map(i => ({ rating: s[i]!.rating, rd: s[i]!.rating_deviation, volatility: 0 }))))
   const probabilities = skills[0]!.flatMap(h => skills[1]!.map(a => teamWinProbability(h, a)!))
@@ -206,14 +213,14 @@ export function searchDuelSplits(input: DuelSearchInput, progress: Progress = ()
   let boundUpdate = 0
   progress({ phase: 'bounds', completed: 0, total: splits.length, nodes: 0 })
   const bounds = new Map(splits.map((s, i) => {
-    const lower = prepare(s, Infinity, input.settings).lower
+    const lower = prepare(s, duelMatchProbabilityLimit(input.settings), input.settings).lower
     if (Date.now() - boundUpdate >= 200 || i + 1 === splits.length) {
       boundUpdate = Date.now(); progress({ phase: 'bounds', completed: i + 1, total: splits.length, nodes: 0 })
     }
     return [s, lower] as const
   }))
   splits.sort((a, b) => bounds.get(a)! - bounds.get(b)!)
-  let globalBest = Infinity, nodes = 0, last = 0, completed = 0
+  let globalBest = duelMatchProbabilityLimit(input.settings) + EPS * 2, nodes = 0, last = 0, completed = 0
   let phase: DuelSearchProgress['phase'] = 'global'
   const solved = new Map<[PoolPlayer[], PoolPlayer[]], number>()
   const tick = () => { nodes++; if ((nodes & 1023) === 0 && Date.now() - last >= 200) { last = Date.now(); progress({ phase, completed, total: splits.length, nodes }) } }
@@ -223,7 +230,7 @@ export function searchDuelSplits(input: DuelSearchInput, progress: Progress = ()
     if (best !== null) { globalBest = Math.min(globalBest, best); solved.set(squads, best) }
     completed++; progress({ phase, completed, total: splits.length, nodes })
   }
-  if (!Number.isFinite(globalBest)) return { globalBest: null, splits: [] }
+  if (!solved.size) return { globalBest: null, splits: [] }
   phase = 'eligible'; completed = 0
   const eligible: DuelSplit[] = []
   for (const squads of splits) {

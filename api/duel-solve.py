@@ -76,6 +76,8 @@ class handler(BaseHTTPRequestHandler):
                 self.wfile.flush()
                 if event["type"] in ("result", "error"):
                     return
+            self.wfile.write((json.dumps({"type": "error", "error": "SOLVER_TIMEOUT"}) + "\n").encode())
+            self.wfile.flush()
         except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
             pass
         finally:

@@ -1,5 +1,5 @@
 import { compareDuelPlayers, type LeagueDuelGame } from './leagueDuelSchedule'
-import { duelScheduleId, measureDuelSchedule, orderDuelGames, validateDuelSettings, type DuelScheduleOption, type DuelSearchInput, type DuelSplit } from './flexibleDuel'
+import { duelMatchProbabilityLimit, duelScheduleId, measureDuelSchedule, orderDuelGames, validateDuelSettings, type DuelScheduleOption, type DuelSearchInput, type DuelSplit } from './flexibleDuel'
 import { isSeasonForecastBalanced } from './seasonForecast'
 
 export function chooseFastDuelSplit(input: DuelSearchInput, current?: DuelSplit, seen: string[] = [], random = Math.random): DuelSplit | undefined {
@@ -34,6 +34,7 @@ export function chooseFastDuelSplit(input: DuelSearchInput, current?: DuelSplit,
 /** Recompute every metric and validate received lineups before enabling Save. */
 export function decodeFastDuelOptions(input: DuelSearchInput, split: DuelSplit, raw: unknown): DuelScheduleOption[] {
   if (!Array.isArray(raw) || raw.length > 3) throw new Error('SOLVER_INVALID_RESULT')
+  if (raw.length) validateDuelSettings(input.pool.length / 2, input.settings)
   const byId = new Map(input.pool.map(p => [p.id, p])), squads = split.squads.map(side => side.map(id => byId.get(id)!)) as [typeof input.pool, typeof input.pool]
   const size = squads[0].length, count = size * (size - 1) / 2, rounds = size - 1 + size % 2
   const options = raw.map((value: { kind?: unknown; games?: unknown; solver?: { status?: unknown; elapsedMs?: unknown } }) => {
@@ -49,7 +50,7 @@ export function decodeFastDuelOptions(input: DuelSearchInput, split: DuelSplit, 
     }
     if (appearances.size !== rounds || [...appearances.values()].some(ids => ids.length !== Math.floor(size / 2) * 4 || new Set(ids).size !== ids.length)) throw new Error('SOLVER_INVALID_RESULT')
     const ordered = orderDuelGames(games), metrics = measureDuelSchedule(squads, ordered)
-    if (metrics.players.some(p => p.games !== size - 1) || metrics.maxPartnerMeetings > (input.settings.maxPartnerMeetings ?? size - 1)
+    if (metrics.worstFavorite > duelMatchProbabilityLimit(input.settings) + 1e-12 || metrics.players.some(p => p.games !== size - 1) || metrics.maxPartnerMeetings > (input.settings.maxPartnerMeetings ?? size - 1)
       || metrics.maxOpponentMeetings > (input.settings.maxOpponentMeetings ?? size - 1) || !isSeasonForecastBalanced(metrics.forecast)
       || !['OPTIMAL', 'FEASIBLE'].includes(String(value.solver?.status)) || !Number.isFinite(value.solver?.elapsedMs)) throw new Error('SOLVER_INVALID_RESULT')
     return { id: duelScheduleId(ordered), kind: value.kind, games: ordered, metrics, solver: value.solver } as DuelScheduleOption

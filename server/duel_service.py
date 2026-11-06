@@ -94,9 +94,12 @@ def load_context(body, token, reader=None):
         raise ApiError("DUEL_STALE_DRAFT", 409)
     size = len(ids) // 2
     settings = body.get("settings")
-    if not isinstance(settings, dict) or set(settings) != {"maxPartnerMeetings", "maxOpponentMeetings"}:
+    if not isinstance(settings, dict) or not {"maxPartnerMeetings", "maxOpponentMeetings"} <= set(settings) or set(settings) - {"maxPartnerMeetings", "maxOpponentMeetings", "maxMatchProbability"}:
         raise ApiError("SOLVER_INVALID_LIMITS")
-    for cap in settings.values():
+    max_probability = settings.get("maxMatchProbability", .65)
+    if type(max_probability) not in (float, int) or not math.isfinite(max_probability) or not .5 <= max_probability <= 1:
+        raise ApiError("SOLVER_INVALID_LIMITS")
+    for cap in (settings["maxPartnerMeetings"], settings["maxOpponentMeetings"]):
         if cap is not None and (type(cap) is not int or not 1 <= cap < size):
             raise ApiError("SOLVER_INVALID_LIMITS")
     if settings["maxOpponentMeetings"] is not None and size * settings["maxOpponentMeetings"] < 2 * (size - 1):
@@ -153,7 +156,8 @@ def generate(context, cancelled, progress):
     history_weights = [[sum(1 for season in previous["seasonIds"] if any(set(pair["poolPlayerIds"]) == {side[a], side[b]} and season in pair["seasonIds"] for pair in previous["partnerships"])) for a, b in edges] for side in squads]
     results = []
     deadline = time.perf_counter() + 24
-    upper = 1
+    maximum = settings.get("maxMatchProbability", .65)
+    upper = maximum
     for index, profile in enumerate(("balance", "variety", "experience")):
         if cancelled.is_set():
             return None
@@ -177,7 +181,7 @@ def generate(context, cancelled, progress):
         results.append({"id": identity, "kind": profile, "games": games, "solver": {"status": result["status"], "elapsedMs": result["elapsedMs"]}})
         excluded.append(excluded_vector(identity))
         if profile == "balance":
-            upper = min(1, result["solution"]["worstFavorite"] + .05)
+            upper = min(maximum, result["solution"]["worstFavorite"] + .05)
     if cancelled.is_set():
         return None
     if context["reader"].rpc("league_duel_rating_snapshot", {"p_league_id": context["leagueId"]}) != context["snapshot"]:

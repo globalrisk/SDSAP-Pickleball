@@ -25,7 +25,7 @@ function referenceCatalog(pool: PoolPlayer[], settings: DuelGenerationSettings):
       rs.forEach(r => r.h.forEach((h, m) => { const a = r.a[m]!; for (const [s, pair] of [[0, h], [1, a]] as const) { const key = s + ':' + [...pair].sort().join(); partner.set(key, (partner.get(key) ?? 0) + 1) }; for (const x of h) for (const y of a) opponents[x * 4 + y]++ }))
       if ([...partner.values()].some(n => n > (settings.maxPartnerMeetings ?? 3)) || opponents.some(n => n > (settings.maxOpponentMeetings ?? 3))) continue
       const probabilities = rs.flatMap(r => r.ps)
-      if (isSeasonForecastBalanced(forecastSeason(probabilities))) best = Math.min(best, Math.max(...probabilities.map(p => Math.max(p, 1 - p))))
+      if (Math.max(...probabilities.map(p => Math.max(p, 1 - p))) <= (settings.maxMatchProbability ?? .65) + 1e-12 && isSeasonForecastBalanced(forecastSeason(probabilities))) best = Math.min(best, Math.max(...probabilities.map(p => Math.max(p, 1 - p))))
     }
     if (Number.isFinite(best)) { const squads = [home, away].map(side => side.map(p => p.id)) as [string[], string[]]; candidates.push({ id: squads.map(side => [...side].sort().join(':')).join('|'), squads, bestWorst: best }) }
   }
@@ -57,6 +57,18 @@ describe('flexible exhaustive scheduling', () => {
     expect(duelScheduleId(ordered)).toBe(duelScheduleId(games))
     expect(isSeasonForecastBalanced(m.forecast)).toBe(true)
   }, 30000)
+  it('treats the selected match ceiling as a hard constraint in every exhaustive option', () => {
+    const data = input()
+    data.pool.forEach((p, i) => { p.rating += (i - 4) * 80 })
+    data.settings.maxMatchProbability = .6
+    const catalog = searchDuelSplits(data)
+    for (const split of catalog.splits) for (const option of searchDuelOptions(data, split)) {
+      expect(option.metrics.worstFavorite).toBeLessThanOrEqual(.6 + 1e-12)
+    }
+    const squads = [data.pool.slice(0, 4), data.pool.slice(4)] as [PoolPlayer[], PoolPlayer[]]
+    expect(findDuelSchedule(squads, { ...data.settings, maxMatchProbability: .5 }, 1)).toBeNull()
+    for (const limit of [NaN, .49, 1.01]) expect(() => validateDuelSettings(4, { ...data.settings, maxMatchProbability: limit })).toThrow('MATCH_LIMIT_RANGE')
+  })
   it('returns distinct honest options and refreshes without modifying inputs', () => {
     const data = input(), before = structuredClone(data), catalog = searchDuelSplits(data), split = catalog.splits[0]!
     const options = searchDuelOptions(data, split)
@@ -103,7 +115,7 @@ describe('flexible exhaustive scheduling', () => {
     const values = [[1905.84172597372,84.125761416524],[1857.4704527064,91.1037414911747],[1706.18410636561,160.197121214598],[1625.53986668777,86.6431445866471],[1617.79715237867,84.4374781289292],[1533.53734938142,85.2371195056015],[1529.98547656904,84.5174979256574],[1485.91255273442,94.2850791944359],[1341.42522086899,85.404911777654],[1320.28050380348,88.6315643045044],[1281.76551658724,87.3890373826563],[951.462826151532,95.4049852844325]]
     const ps = pool(12).map((p, i) => ({ ...p, rating: values[i]![0]!, rating_deviation: values[i]![1]! }))
     const squads = [[0,2,4,6,8,11], [1,3,5,7,9,10]].map(indices => indices.map(i => ps[i]!)) as [PoolPlayer[], PoolPlayer[]]
-    const settings = { maxPartnerMeetings: 2, maxOpponentMeetings: 2 }, optimum = .6757622225238966
+    const settings = { maxPartnerMeetings: 2, maxOpponentMeetings: 2, maxMatchProbability: 1 }, optimum = .6757622225238966
     expect(findDuelSchedule(squads, settings, optimum - 1e-8)).toBeNull()
     const games = findDuelSchedule(squads, settings, optimum)!
     expect(games).not.toBeNull()

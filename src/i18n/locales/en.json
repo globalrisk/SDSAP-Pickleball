@@ -1558,21 +1558,21 @@
     "stale": "Ratings or roster changed. Run a fresh search before saving.",
     "workerError": "The search could not finish. Retry the search.",
     "notice": {
-      "noValid": "No schedule satisfies these limits and the 55/45 season requirement. Try different limits or a different roster. No limits were changed.",
+      "noValid": "No valid schedule satisfies all your current limits for this roster. Adjust the match probability, partner, or opponent limits, or change the roster. No limits were changed.",
       "fewer": "{{count}} distinct options are available in the quality range.",
       "restarted": "All unseen options were exhausted. The schedule cycle has restarted.",
       "cancelled": "Search cancelled. Start again before saving or generating.",
       "saved": "The selected squads, limits, and exact schedule were saved.",
       "generated": "The selected matches were generated.",
-      "fastLimited": "No valid schedule was found within the time budget. Shuffle squads, change limits, or try exhaustive mode. This does not prove the rules impossible.",
-      "fastInfeasible": "No schedule satisfies these limits for these squads. Shuffle squads or change the limits."
+      "fastLimited": "No valid schedule was found within the search time. A valid schedule may still exist. Try again or adjust your settings.",
+      "fastInfeasible": "No valid schedule satisfies all your current limits for these squads. Try shuffling squads or adjusting the match probability, partner, or opponent limits."
     },
     "seasonBalanceLimit": "Every option keeps season win chances between 45% and 55%, excluding joint champions.",
-    "invalidLimits": "Choose repeat limits valid for this roster before searching.",
+    "invalidLimits": "Choose valid repeat limits and a match probability from 50% to 100% before searching.",
     "mode": "Scheduling mode",
     "fastMode": "Fast — CP-SAT",
     "exactMode": "Exhaustive — best balance",
-    "fastHelp": "Chooses random squads with similar total ratings, then searches on the server for up to three schedules. Equal games, repeat limits, and the 55/45 season requirement stay enforced. Results are best found within a time budget; squad selection is not globally optimized.",
+    "fastHelp": "Chooses random squads with similar total ratings, then searches on the server for up to three schedules. Equal games, your match probability limit, repeat limits, and the 55/45 season requirement stay enforced. Results are best found within a time budget; squad selection is not globally optimized.",
     "fastProgress": "Searching {{profile}} · {{seconds}} seconds",
     "solverOptimal": "Solver objectives proved for these squads.",
     "solverFeasible": "Best found within the time budget; optimality not proved.",
@@ -1593,10 +1593,13 @@
       "SOLVER_SEASON_HAS_MATCHES": "This season already has fixtures.",
       "SOLVER_SEASON_UNAVAILABLE": "Select an active Team Duel season.",
       "SOLVER_INVALID_ROSTER": "Check the selected season players.",
-      "SOLVER_INVALID_LIMITS": "Choose valid repeat limits.",
+      "SOLVER_INVALID_LIMITS": "Choose valid repeat limits and a match probability from 50% to 100%.",
       "SOLVER_INVALID_REQUEST": "The search request is invalid. Start a fresh search.",
       "SOLVER_INVALID_RESULT": "The returned schedule failed validation. Try another search.",
-      "SOLVER_FAILED": "The server search could not finish. Retry or use exhaustive mode."
-    }
+      "SOLVER_FAILED": "The server search could not finish. Retry or use exhaustive mode.",
+      "SOLVER_TIMEOUT": "No valid schedule was found within the search time. A valid schedule may still exist. Try again or adjust your settings."
+    },
+    "maxMatchProbability": "Maximum match win probability (%)",
+    "matchProbabilityHelp": "Hard limit: each match must stay within {{max}}/{{min}}. Allowed values: 50–100%. Limits are never relaxed automatically."
   }
 }

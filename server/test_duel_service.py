@@ -1,6 +1,7 @@
 import threading
 import unittest
 import uuid
+from unittest.mock import patch
 
 from server.duel_service import ApiError, generate, load_context, normal_cdf
 
@@ -78,6 +79,25 @@ class ServiceTests(unittest.TestCase):
         refreshed = generate(context, threading.Event(), lambda _: None)
         self.assertTrue(all(o["id"] not in identities for o in refreshed["options"]))
         self.assertEqual(len(refreshed["options"]), 3)
+
+    def test_match_probability_is_validated_and_never_relaxed_for_other_profiles(self):
+        for value in (None, True, "65", .49, 1.01, float("nan"), float("inf")):
+            body = self.reader.body(); body["settings"]["maxMatchProbability"] = value
+            with self.assertRaisesRegex(ApiError, "SOLVER_INVALID_LIMITS"):
+                load_context(body, "token", self.reader)
+        for limit in (.6, .65, .7):
+            body = self.reader.body(); body["settings"]["maxMatchProbability"] = limit
+            context = load_context(body, "token", self.reader)
+            from server.duel_solver import solve
+            seen = []
+            def checked(request, cancelled):
+                seen.append(request["maxWorst"])
+                self.assertLessEqual(request["maxWorst"], limit)
+                return solve(request, cancelled)
+            with patch("server.duel_solver.solve", side_effect=checked):
+                result = generate(context, threading.Event(), lambda _: None)
+            self.assertEqual(len(result["options"]), 3)
+            self.assertEqual(len(seen), 3)
 
     def test_cancelled_search_returns_no_preview(self):
         event = threading.Event(); event.set()

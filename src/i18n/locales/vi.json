@@ -1552,21 +1552,21 @@
     "stale": "Điểm hoặc danh sách người chơi đã thay đổi. Hãy tìm lại trước khi lưu.",
     "workerError": "Không thể hoàn tất tìm kiếm. Hãy thử lại.",
     "notice": {
-      "noValid": "Không có lịch phù hợp với giới hạn và yêu cầu mùa giải 55/45. Hãy đổi giới hạn hoặc danh sách. Hệ thống không tự thay đổi giới hạn.",
+      "noValid": "Không có lịch hợp lệ đáp ứng tất cả giới hạn hiện tại cho danh sách này. Hãy điều chỉnh giới hạn xác suất mỗi trận, số lần gặp hoặc danh sách người chơi. Hệ thống không tự thay đổi giới hạn.",
       "fewer": "Có {{count}} phương án khác biệt trong biên chất lượng.",
       "restarted": "Đã xem hết phương án mới. Chu kỳ lịch đấu được bắt đầu lại.",
       "cancelled": "Đã hủy tìm kiếm. Hãy tìm lại trước khi lưu hoặc tạo trận.",
       "saved": "Đã lưu hai đội, giới hạn và chính xác lịch đấu đã chọn.",
       "generated": "Đã tạo các trận đã chọn.",
-      "fastLimited": "Chưa tìm được lịch hợp lệ trong thời gian cho phép. Thử chia lại đội, đổi giới hạn hoặc dùng chế độ vét cạn. Điều này không chứng minh các điều kiện là bất khả thi.",
-      "fastInfeasible": "Không có lịch đáp ứng các giới hạn cho hai đội này. Hãy chia lại đội hoặc đổi giới hạn."
+      "fastLimited": "Chưa tìm được lịch hợp lệ trong thời gian cho phép. Có thể vẫn tồn tại lịch phù hợp. Hãy thử lại hoặc điều chỉnh cài đặt.",
+      "fastInfeasible": "Không có lịch hợp lệ đáp ứng tất cả giới hạn hiện tại cho hai đội này. Hãy chia lại đội hoặc điều chỉnh giới hạn xác suất mỗi trận, số lần cùng đồng đội hay gặp đối thủ."
     },
     "seasonBalanceLimit": "Mọi phương án giữ xác suất thắng cả mùa trong khoảng 45%–55%, không tính đồng vô địch.",
-    "invalidLimits": "Chọn giới hạn số lần gặp phù hợp với danh sách người chơi trước khi tìm.",
+    "invalidLimits": "Chọn giới hạn số lần gặp hợp lệ và xác suất mỗi trận từ 50% đến 100% trước khi tìm.",
     "mode": "Chế độ xếp lịch",
     "fastMode": "Nhanh — CP-SAT",
     "exactMode": "Vét cạn — cân bằng tốt nhất",
-    "fastHelp": "Chia đội ngẫu nhiên với tổng điểm gần nhau, rồi tìm tối đa ba lịch đấu trên máy chủ. Vẫn giữ số trận bằng nhau, giới hạn số lần gặp và xác suất thắng mùa 45%–55%. Kết quả là phương án tốt nhất tìm được trong thời gian cho phép; cách chia đội chưa được tối ưu toàn cục.",
+    "fastHelp": "Chia đội ngẫu nhiên với tổng điểm gần nhau, rồi tìm tối đa ba lịch đấu trên máy chủ. Vẫn giữ số trận bằng nhau, giới hạn xác suất mỗi trận, giới hạn số lần gặp và xác suất thắng mùa 45%–55%. Kết quả là phương án tốt nhất tìm được trong thời gian cho phép; cách chia đội chưa được tối ưu toàn cục.",
     "fastProgress": "Đang tìm {{profile}} · {{seconds}} giây",
     "solverOptimal": "Đã chứng minh tối ưu các mục tiêu của bộ giải cho hai đội này.",
     "solverFeasible": "Tốt nhất tìm được trong thời gian cho phép; chưa chứng minh tối ưu.",
@@ -1587,10 +1587,13 @@
       "SOLVER_SEASON_HAS_MATCHES": "Mùa này đã có lịch đấu.",
       "SOLVER_SEASON_UNAVAILABLE": "Chọn mùa Đấu đội đang hoạt động.",
       "SOLVER_INVALID_ROSTER": "Kiểm tra danh sách người chơi của mùa.",
-      "SOLVER_INVALID_LIMITS": "Chọn giới hạn số lần gặp hợp lệ.",
+      "SOLVER_INVALID_LIMITS": "Chọn giới hạn số lần gặp hợp lệ và xác suất mỗi trận từ 50% đến 100%.",
       "SOLVER_INVALID_REQUEST": "Yêu cầu tìm lịch không hợp lệ. Hãy tìm lại.",
       "SOLVER_INVALID_RESULT": "Lịch trả về không vượt qua kiểm tra. Hãy thử tìm lịch khác.",
-      "SOLVER_FAILED": "Máy chủ không hoàn tất lượt tìm. Thử lại hoặc dùng chế độ vét cạn."
-    }
+      "SOLVER_FAILED": "Máy chủ không hoàn tất lượt tìm. Thử lại hoặc dùng chế độ vét cạn.",
+      "SOLVER_TIMEOUT": "Chưa tìm được lịch hợp lệ trong thời gian cho phép. Có thể vẫn tồn tại lịch phù hợp. Hãy thử lại hoặc điều chỉnh cài đặt."
+    },
+    "maxMatchProbability": "Xác suất thắng tối đa mỗi trận (%)",
+    "matchProbabilityHelp": "Giới hạn bắt buộc: mỗi trận phải nằm trong khoảng {{max}}/{{min}}. Cho phép từ 50–100%. Hệ thống không tự nới giới hạn."
   }
 }

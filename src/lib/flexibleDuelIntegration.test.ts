@@ -113,10 +113,40 @@ describe('flexible plans through PostgreSQL and application APIs', () => {
     expect(await fetchTeamsWithPlayers(s.seasonId)).toHaveLength(0)
     expect(await fetchMatches(s.seasonId, s.leagueId)).toHaveLength(0)
     await api.db.query('UPDATE public.league_players SET rating=CASE WHEN pool_player_id=ANY($2::uuid[]) THEN 2000 ELSE 1000 END WHERE league_id=$1', [s.leagueId, s.plan.squads[0]])
+    s.plan.settings.maxMatchProbability = 1 // Isolate the season guard from the per-match guard.
     const fresh = await fetchFlexibleDuelContext(s.leagueId, s.seasonId)
     await expect(saveFlexibleDuelPlan(s.seasonId, s.plan, ['A', 'B'], fresh.revision, fresh.fingerprint, null, true)).rejects.toThrow('DUEL_SEASON_BALANCE')
     expect(await fetchTeamsWithPlayers(s.seasonId)).toHaveLength(0)
   })
+  it('enforces the chosen match ceiling in PostgreSQL without trusting client metrics', async () => {
+    const s = await prepare()
+    for (const side of s.plan.squads) for (const [i, id] of side.entries()) {
+      await api.db.query('UPDATE public.league_players SET rating=$1 WHERE league_id=$2 AND pool_player_id=$3', [2100 - i * 400, s.leagueId, id])
+    }
+    const fresh = await fetchFlexibleDuelContext(s.leagueId, s.seasonId)
+    s.plan.settings.maxPartnerMeetings = 3
+    s.plan.settings.maxOpponentMeetings = 3
+    // Equal squad totals, with deliberately mismatched doubles and forged metrics.
+    for (const g of s.plan.option.games) {
+      const indices = g.homePoolPlayerIds.map(id => s.plan.squads[0].indexOf(id))
+      g.awayPoolPlayerIds = indices.map(i => s.plan.squads[1][3-i]!) as [string, string]
+    }
+    s.plan.option.metrics.worstFavorite = .5
+    for (const limit of [undefined, .6, .65, .7]) {
+      s.plan.settings.maxMatchProbability = limit
+      await expect(saveFlexibleDuelPlan(s.seasonId, s.plan, ['A', 'B'], fresh.revision, fresh.fingerprint, null, true)).rejects.toThrow('DUEL_MATCH_BALANCE')
+      expect(await fetchTeamsWithPlayers(s.seasonId)).toHaveLength(0)
+      expect(await fetchMatches(s.seasonId, s.leagueId)).toHaveLength(0)
+    }
+    for (const limit of [.49, 1.01]) {
+      s.plan.settings.maxMatchProbability = limit
+      await expect(saveFlexibleDuelPlan(s.seasonId, s.plan, ['A', 'B'], fresh.revision, fresh.fingerprint, null, true)).rejects.toThrow('DUEL_MATCH_LIMIT_RANGE')
+    }
+    s.plan.settings.maxMatchProbability = 1
+    const saved = await saveFlexibleDuelPlan(s.seasonId, s.plan, ['A', 'B'], fresh.revision, fresh.fingerprint, null, true)
+    expect(saved.count).toBe(6)
+    expect((await fetchSeasons(s.leagueId)).find(season => season.id === s.seasonId)!.duel_draft_plan!.settings.maxMatchProbability).toBe(1)
+  }, 30000)
   it('rechecks caps when an authenticated administrator bypasses the UI', async () => {
     const s = await prepare()
     const saved = await saveFlexibleDuelPlan(s.seasonId, s.plan, ['A', 'B'], s.context.revision, s.context.fingerprint, null, false)

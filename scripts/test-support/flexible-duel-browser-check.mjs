@@ -35,7 +35,7 @@ try {
     assert.equal((await fetch(solverUrl + '/api/duel-solve', { method: 'POST', body: '{}', headers: { Authorization: `Bearer ${player.token}` } })).status, 403)
   }
   await vite.listen()
-  browser = await chromium.launch({ headless: true, channel: process.env.DUEL_BROWSER_CHANNEL || 'chrome' })
+  browser = await chromium.launch({ headless: true, executablePath: process.env.DUEL_BROWSER_EXECUTABLE, channel: process.env.DUEL_BROWSER_EXECUTABLE ? undefined : process.env.DUEL_BROWSER_CHANNEL || 'chrome' })
   const page = await browser.newPage({ viewport: { width: 1280, height: 1000 } })
   page.setDefaultTimeout(30000)
   const errors = []
@@ -55,7 +55,8 @@ try {
   const opponent = page.getByLabel('Maximum games against the same opponent', { exact: true })
   await partner.waitFor()
   assert.equal(await partner.inputValue(), '2')
-  assert.equal(await opponent.inputValue(), '2')
+  assert.equal(await opponent.inputValue(), '3')
+  await opponent.selectOption('2')
   assert.equal(await opponent.locator('option[value="1"]').evaluate(o => o.disabled), true)
   const radios = page.locator('input[type="radio"][name^="duel-"]')
   const save = page.getByRole('button', { name: 'Save selected squads', exact: true })
@@ -64,6 +65,33 @@ try {
     await page.waitForFunction(() => document.querySelectorAll('input[type="radio"][name^="duel-"]:not(:disabled)').length === 3)
     assert.equal(await page.getByLabel('Season win chances', { exact: true }).count(), 3)
   }
+  const probability = page.getByLabel('Maximum match win probability (%)', { exact: true })
+  assert.equal(await probability.inputValue(), '65')
+  await probability.fill('49')
+  assert.equal(await page.getByRole('button', { name: 'Search squads and schedules', exact: true }).isDisabled(), true)
+  await probability.fill('65')
+  if (engine === 'cp-sat') {
+    for (const [status, message] of [
+      ['INFEASIBLE', 'No valid schedule satisfies all your current limits for these squads. Try shuffling squads or adjusting the match probability, partner, or opponent limits.'],
+      ['UNKNOWN', 'No valid schedule was found within the search time. A valid schedule may still exist. Try again or adjust your settings.'],
+    ]) {
+      await page.route('**/api/duel-solve', route => route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: JSON.stringify({ type: 'result', result: { options: [], status } }) + '\n' }))
+      await page.getByRole('button', { name: /^(Search squads and schedules|Shuffle squads)$/ }).click()
+      await page.getByText(message, { exact: true }).waitFor()
+      assert.equal(await page.getByRole('button', { name: 'Generate 0 selected matches', exact: true }).isDisabled(), true)
+      await page.unroute('**/api/duel-solve')
+    }
+    await probability.fill('70')
+    await page.getByRole('button', { name: 'Search squads and schedules', exact: true }).waitFor()
+    await probability.fill('65')
+  }
+  await page.getByRole('button', { name: 'Search squads and schedules', exact: true }).click()
+  await ready()
+  // Editing the hard ceiling invalidates previews and generation immediately.
+  await probability.fill('60')
+  await page.getByRole('button', { name: 'Generate 0 selected matches', exact: true }).waitFor()
+  assert.equal(await page.getByRole('button', { name: 'Generate 0 selected matches', exact: true }).isDisabled(), true)
+  await probability.fill('65')
   await page.getByRole('button', { name: 'Search squads and schedules', exact: true }).click()
   await ready()
   const names = page.getByRole('textbox', { name: /^Squad [AB] name$/ })
@@ -79,10 +107,13 @@ try {
   const row = () => api.db.query('SELECT duel_draft_plan,duel_draft_plan_hash FROM public.seasons WHERE id=$1', [seasonId]).then(r => r.rows[0])
   const saved = await row()
   assert.equal(saved.duel_draft_plan.option.kind, 'variety')
+  assert.equal(saved.duel_draft_plan.settings.maxMatchProbability, .65)
+  assert.ok(saved.duel_draft_plan.option.metrics.worstFavorite <= .65 + 1e-12)
   await page.reload()
   await generate.waitFor()
   await page.waitForFunction(() => document.querySelectorAll('input[type="radio"][name^="duel-"]:checked').length === 1)
   assert.deepEqual((await row()).duel_draft_plan, saved.duel_draft_plan)
+  assert.equal(await probability.inputValue(), '65')
   assert.equal(await names.nth(0).inputValue(), 'Local Alpha')
   await page.getByRole('button', { name: engine === 'cp-sat' ? 'Shuffle squads' : 'Search squads and schedules', exact: true }).click()
   await ready()

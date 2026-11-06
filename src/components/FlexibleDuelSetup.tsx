@@ -27,7 +27,7 @@ export function FlexibleDuelSetup({ season, rosterIds, teams, fixtures, hasFixtu
   const [fastProfile, setFastProfile] = useState('balance')
   const abort = useRef<AbortController | null>(null), activeEngine = useRef(engine)
   const orderedTeams = saved ? saved.squads.map(s => teams.find(team => team.players.some(p => p.pool_player_id === s[0]))) : teams
-  const [settings, setSettings] = useState<DuelGenerationSettings>(saved?.settings ?? { maxPartnerMeetings: 2, maxOpponentMeetings: 2 })
+  const [settings, setSettings] = useState<DuelGenerationSettings>({ maxPartnerMeetings: 2, maxOpponentMeetings: 3, ...saved?.settings, maxMatchProbability: saved?.settings.maxMatchProbability ?? .65 })
   const [names, setNames] = useState<[string, string]>([orderedTeams[0]?.name ?? t('leagueDuel.squadA'), orderedTeams[1]?.name ?? t('leagueDuel.squadB')])
   const named = useRef(teams.length > 0)
   const [colorDraft, setColors] = useState<[string, string] | null>(null)
@@ -155,14 +155,14 @@ export function FlexibleDuelSetup({ season, rosterIds, teams, fixtures, hasFixtu
   })
   useEffect(() => { setHash(season.duel_draft_plan_hash ?? null) }, [season.duel_draft_plan_hash])
   const pool = new Map((context.data?.pool ?? []).map(p => [p.id, p])), playerName = (id: string) => pool.get(id)?.name ?? teams.flatMap(t => t.players).find(p => p.pool_player_id === id)?.name ?? id
-  const disabled = busy || unavailable || context.isFetching || context.isError || !selected || persist.isPending || names.some(n => !n.trim())
+  const disabled = invalidLimits || busy || unavailable || context.isFetching || context.isError || !selected || persist.isPending || names.some(n => !n.trim())
   return <section className="mb-8 space-y-4 rounded-xl border border-green-200 bg-white p-5">
     <h2 className="text-lg font-bold text-green-950">{t('leagueDuel.title')}</h2>
     <p className="text-sm text-gray-600">{t('flexibleDuel.rules')}</p>
     {hasFixtures ? <>
       <p>{t('leagueDuel.frozen')}</p>
       <div className="grid gap-4 sm:grid-cols-2">{teams.map(team => <div key={team.id}><h3 className="font-bold" style={{ color: team.color }}>{team.name}</h3>{editable ? <LeagueDuelTeamNameForm team={team} disabled={persist.isPending} /> : null}<ul>{team.players.map(p => <li key={p.id}>{p.name}</li>)}</ul></div>)}</div>
-      {saved ? <p>{t('flexibleDuel.savedLimits', { partner: saved.settings.maxPartnerMeetings ?? t('flexibleDuel.noLimit'), opponent: saved.settings.maxOpponentMeetings ?? t('flexibleDuel.noLimit') })}</p> : null}
+      {saved ? <><p>{t('flexibleDuel.savedLimits', { partner: saved.settings.maxPartnerMeetings ?? t('flexibleDuel.noLimit'), opponent: saved.settings.maxOpponentMeetings ?? t('flexibleDuel.noLimit') })}</p>{saved.settings.maxMatchProbability !== undefined ? <p>{t('flexibleDuel.matchProbabilityHelp', { max: Math.round(saved.settings.maxMatchProbability * 10000) / 100, min: Math.round((1 - saved.settings.maxMatchProbability) * 10000) / 100 })}</p> : null}</> : null}
       {editable && fixtures?.length ? <SeasonMatchDeletion season={season} fixtures={fixtures} busy={persist.isPending} onCleared={() => { stop(); setOptions([]); setHash(null) }} /> : null}
       <Link to={leaguePath('/matches')} className="text-green-800 underline">{t('leagueDuel.viewGames')}</Link>
     </> : editable ? <>
@@ -172,6 +172,10 @@ export function FlexibleDuelSetup({ season, rosterIds, teams, fixtures, hasFixtu
         <div className="grid gap-4 sm:grid-cols-2">{(['maxPartnerMeetings', 'maxOpponentMeetings'] as const).map(field => <label key={field} className="text-sm font-semibold">{t(`flexibleDuel.${field}`)}<select aria-label={t(`flexibleDuel.${field}`)} className="mt-1 block min-h-11 w-full rounded-lg border px-3" value={settings[field] ?? 'none'} disabled={persist.isPending} onChange={e => setSettings(s => ({ ...s, [field]: e.target.value === 'none' ? null : Number(e.target.value) }))}>
           {settings[field] !== null && settings[field]! > size - 1 ? <option value={settings[field]!} disabled>{settings[field]}</option> : null}{Array.from({ length: size - 1 }, (_, i) => i + 1).map(n => <option key={n} value={n} disabled={field === 'maxOpponentMeetings' && n * size < 2 * (size - 1)}>{n}</option>)}<option value="none">{t('flexibleDuel.noLimit')}</option>
         </select></label>)}</div>
+        <label className="block text-sm font-semibold">{t('flexibleDuel.maxMatchProbability')}
+          <input type="number" min={50} max={100} step={1} aria-label={t('flexibleDuel.maxMatchProbability')} className="mt-1 block min-h-11 w-full rounded-lg border px-3 sm:w-40" value={Number.isFinite(settings.maxMatchProbability) ? Math.round(settings.maxMatchProbability! * 10000) / 100 : ''} disabled={persist.isPending} onChange={e => setSettings(s => ({ ...s, maxMatchProbability: e.target.value === '' ? NaN : Number(e.target.value) / 100 }))} />
+        </label>
+        <p className="text-xs text-gray-600">{t('flexibleDuel.matchProbabilityHelp', { max: Number.isFinite(settings.maxMatchProbability) ? Math.round(settings.maxMatchProbability! * 10000) / 100 : '—', min: Number.isFinite(settings.maxMatchProbability) ? Math.round((1 - settings.maxMatchProbability!) * 10000) / 100 : '—' })}</p>
         <p className="text-xs text-gray-600">{t('flexibleDuel.limitHelp')}</p>
         {invalidLimits ? <p role="alert" className="text-sm text-red-800">{t('flexibleDuel.invalidLimits')}</p> : null}
         <p className="text-xs">{t('flexibleDuel.participation', { games: size - 1 })} {t('flexibleDuel.seasonBalanceLimit')}</p>
