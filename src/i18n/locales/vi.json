@@ -291,7 +291,7 @@
     "remember": "Ghi nhớ trên thiết bị này",
     "clear": "Bỏ chọn",
     "viewProfile": "Hồ sơ của tôi →",
-    "playerUnavailable": "Người chơi này không còn trong giải đấu. Hãy chọn tên khác.",
+    "playerUnavailable": "Người chơi này không tham gia mùa giải này. Hãy chọn tên khác.",
     "storageUnavailable": "Trình duyệt không thể ghi nhớ lựa chọn. Bạn vẫn có thể sử dụng trong lần truy cập này.",
     "playersError": "Không thể tải danh sách người chơi.",
     "matchesError": "Không thể tải các trận của bạn.",

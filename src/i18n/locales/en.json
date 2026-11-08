@@ -293,7 +293,7 @@
     "remember": "Remember on this device",
     "clear": "Clear selection",
     "viewProfile": "My profile →",
-    "playerUnavailable": "This player is no longer available in this league. Choose another name.",
+    "playerUnavailable": "This player is not participating in this season. Choose another name.",
     "storageUnavailable": "This browser cannot save your choice. You can still use this view for this visit.",
     "playersError": "Could not load the player list.",
     "matchesError": "Could not load your matches.",

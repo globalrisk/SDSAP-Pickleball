@@ -1,5 +1,5 @@
 import { Select } from './Select'
-import { useId, useState } from 'react'
+import { useId, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useLeague } from '../context/LeagueContext'
@@ -9,19 +9,23 @@ import { usePlayerPool } from '../hooks/usePlayerPool'
 import { usePlayerPreference } from '../hooks/usePlayerPreference'
 import { usePlayerProfile } from '../hooks/usePlayerProfile'
 import { buildPersonalTournament } from '../lib/personalTournament'
-import { resolveMatchLineups } from '../lib/playerMatches'
+import { resolveMatchLineups, seasonMatchPlayers } from '../lib/playerMatches'
 import { roundRating } from '../lib/ratings'
 import type { MatchWithTeams } from '../types'
 
 export function PersonalTournamentCard({ seasonId: seasonIdOverride }: { seasonId?: string }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { leaguePath } = useLeague()
   const { selectedSeason, seasons } = useSeason()
   const season = seasonIdOverride ? seasons.find((item) => item.id === seasonIdOverride) : selectedSeason
   const preference = usePlayerPreference()
   const pool = usePlayerPool()
   const matches = useMatches(seasonIdOverride)
-  const player = pool.data?.find((item) => item.id === preference.playerId)
+  const players = useMemo(
+    () => seasonMatchPlayers(matches.data ?? [], season?.id, pool.data ?? [], i18n.language),
+    [matches.data, season?.id, pool.data, i18n.language],
+  )
+  const player = players.find((item) => item.id === preference.playerId)
   const profile = usePlayerProfile(player?.id)
   const selectId = useId()
   const matchupScope = `${season?.id ?? ''}:${player?.id ?? ''}`
@@ -98,11 +102,11 @@ export function PersonalTournamentCard({ seasonId: seasonIdOverride }: { seasonI
         <div className="mt-3 flex flex-wrap items-end gap-3">
           <div className="min-w-0 flex-1 sm:max-w-xs">
             <label htmlFor={selectId} className="mb-1 block text-xs font-semibold text-green-900">{t('personal.selectName')}</label>
-            <Select id={selectId} value={player?.id ?? ''} disabled={pool.isLoading || pool.isError}
+            <Select id={selectId} value={player?.id ?? ''} disabled={pool.isLoading || pool.isError || matches.isLoading || matches.isError}
               onValueChange={(value) => changePlayer(value || null)}
               className="min-h-11 w-full rounded-xl border border-green-300 bg-white px-3 py-2 text-sm font-bold text-green-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600">
               <option value="">{t('personal.chooseName')}</option>
-              {[...(pool.data ?? [])].sort((a, b) => a.name.localeCompare(b.name)).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+              {players.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
             </Select>
           </div>
           {preference.playerId ? <button type="button" onClick={() => changePlayer(null)} className="min-h-11 rounded-xl border border-green-200 px-3 text-sm font-semibold text-green-800 hover:bg-green-100">{t('personal.clear')}</button> : null}
@@ -112,8 +116,9 @@ export function PersonalTournamentCard({ seasonId: seasonIdOverride }: { seasonI
           {t('personal.remember')}
         </label>
         {preference.playerId && preference.remember && !preference.storageAvailable ? <p className="mt-1 text-xs text-amber-800" role="status">{t('personal.storageUnavailable')}</p> : null}
-        {preference.playerId && pool.isSuccess && !player ? <p className="mt-2 text-sm text-gray-600">{t('personal.playerUnavailable')}</p> : null}
+        {preference.playerId && season && pool.isSuccess && matches.isSuccess && !player ? <p className="mt-2 text-sm text-gray-600">{t('personal.playerUnavailable')}</p> : null}
         {pool.isError ? <RetryMessage message={t('personal.playersError')} onRetry={() => void pool.refetch()} /> : null}
+        {matches.isError && !player ? <RetryMessage message={t('personal.matchesError')} onRetry={() => void matches.refetch()} /> : null}
       </div>
 
       {player ? (

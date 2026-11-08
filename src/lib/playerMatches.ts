@@ -27,6 +27,31 @@ export function resolveMatchLineups(match: MatchWithTeams): {
   return { homeIds, awayIds }
 }
 
+/** Players taking part in the selected season, using the actual fixture lineups. */
+export function seasonMatchPlayers(
+  matches: readonly MatchWithTeams[],
+  seasonId: string | undefined,
+  knownPlayers: readonly NamedPoolPlayer[] = [],
+  locale?: string,
+): NamedPoolPlayer[] {
+  if (!seasonId) return []
+  const participants = new Set<string>()
+  const names = new Map<string, string>()
+  for (const match of matches) {
+    if (match.season_id !== seasonId) continue
+    const { homeIds, awayIds } = resolveMatchLineups(match)
+    for (const id of [...homeIds, ...awayIds]) participants.add(id)
+    for (const player of [...(match.home_team.players ?? []), ...(match.away_team.players ?? [])]) {
+      names.set(player.pool_player_id, player.name)
+    }
+  }
+  for (const player of knownPlayers) names.set(player.id, player.name)
+  return [...participants].flatMap(id => {
+    const name = names.get(id)
+    return name ? [{ id, name }] : []
+  }).sort((a, b) => a.name.localeCompare(b.name, locale) || a.id.localeCompare(b.id))
+}
+
 export function scoreLabelForMatch(match: MatchWithTeams): string | null {
   if (match.home_score == null || match.away_score == null) return null
   return `${match.home_score}-${match.away_score}`

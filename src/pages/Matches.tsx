@@ -14,7 +14,7 @@ import { useMatches } from '../hooks/useMatches'
 import { useTeams } from '../hooks/useTeams'
 import { useAuth } from '../context/AuthContext'
 import { useLeague } from '../context/LeagueContext'
-import { resolveMatchLineups } from '../lib/playerMatches'
+import { resolveMatchLineups, seasonMatchPlayers } from '../lib/playerMatches'
 import { useBetData } from '../hooks/useBets'
 import { usePlayerPool } from '../hooks/usePlayerPool'
 import { matchBettingStatus } from '../lib/matchBetting'
@@ -82,18 +82,10 @@ export function MatchesPage() {
     return grouped
   }, [bets.data, selectedSeason?.id])
 
-  const players = useMemo(() => {
-    const byId = new Map<string, string>()
-    for (const match of matches ?? []) {
-      const { homeIds, awayIds } = resolveMatchLineups(match)
-      const participantIds = new Set([...homeIds, ...awayIds])
-      for (const player of [...(match.home_team.players ?? []), ...(match.away_team.players ?? [])]) {
-        if (participantIds.has(player.pool_player_id)) byId.set(player.pool_player_id, player.name)
-      }
-    }
-    return [...byId].map(([id, name]) => ({ id, name }))
-      .sort((a, b) => a.name.localeCompare(b.name, i18n.language) || a.id.localeCompare(b.id))
-  }, [matches, i18n.language])
+  const players = useMemo(
+    () => seasonMatchPlayers(matches ?? [], selectedSeason?.id, pool.data ?? [], i18n.language),
+    [matches, selectedSeason?.id, pool.data, i18n.language],
+  )
   const playerFilterId = playerFilter.seasonId === selectedSeason?.id
     && players.some((player) => player.id === playerFilter.playerId) ? playerFilter.playerId : 'all'
 
