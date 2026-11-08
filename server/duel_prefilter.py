@@ -3,7 +3,7 @@ from itertools import combinations
 
 from ortools.graph.python import max_flow
 
-from server.duel_solver import forecast
+from server.duel_solver import forecast, rating_difference_mask
 
 
 def enough_flow(left, right, capacities, required):
@@ -22,7 +22,7 @@ def enough_flow(left, right, capacities, required):
     return status != graph.OPTIMAL or graph.optimal_flow() >= required
 
 
-def impossible_split(size, settings, probabilities):
+def impossible_split(size, settings, probabilities, ratings=None):
     """Reject only if a relaxation of the real scheduling rules is infeasible.
 
     Every real schedule maps to each network below, so insufficient capacity
@@ -36,8 +36,9 @@ def impossible_split(size, settings, probabilities):
     partner_cap = settings['maxPartnerMeetings'] or games_per_player
     opponent_cap = settings['maxOpponentMeetings'] or games_per_player
     maximum = settings.get('maxMatchProbability', .65)
+    rating_allowed = rating_difference_mask(size, settings, ratings)
     allowed = [(g // width, g % width) for g, p in enumerate(probabilities)
-               if max(p, 1 - p) <= maximum + 1e-12]
+               if rating_allowed[g] and max(p, 1 - p) <= maximum + 1e-12]
     if len(allowed) < total:
         return 'distinct_matches'
     chances = sorted(probabilities[h * width + a] for h, a in allowed)

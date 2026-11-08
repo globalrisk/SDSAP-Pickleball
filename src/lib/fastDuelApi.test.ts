@@ -1,6 +1,6 @@
+import { findDuelSchedule } from './testFixtures/flexibleDuelReference'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { requestFastDuel } from './fastDuelApi'
-import { findDuelSchedule } from './flexibleDuel'
 import type { DuelSearchInput, DuelSplit } from './flexibleDuel'
 
 vi.mock('./supabase', () => ({ supabase: { auth: { getSession: vi.fn(async () => ({ data: { session: { access_token: 'test-access-token' } }, error: null })) } } }))

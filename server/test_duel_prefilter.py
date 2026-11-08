@@ -13,6 +13,18 @@ from server.test_duel_service import Reader
 
 
 class PrefilterTests(unittest.TestCase):
+    def test_rating_spread_prefilter_preserves_boundaries_and_proves_shortages(self):
+        settings = {'maxPartnerMeetings': 2, 'maxOpponentMeetings': 2, 'maxRatingDifference': 400}
+        for size in range(4, 8):
+            ratings = [[1500.25 + (400 if i % 2 else 0) for i in range(size)]] * 2
+            probabilities = [.5] * (size * (size - 1) // 2) ** 2
+            self.assertIsNone(impossible_split(size, settings, probabilities, ratings))
+        settings['maxRatingDifference'] = 0
+        self.assertIsNotNone(impossible_split(4, settings, [.5] * 36, [[1500, 1600, 1700, 1800], [1900, 2000, 2100, 2200]]))
+        self.assertIsNone(impossible_split(4, settings, [.5] * 36, [[1500.25] * 4] * 2))
+        settings['maxRatingDifference'] = None
+        self.assertIsNone(impossible_split(4, settings, [.5] * 36))
+
     def test_shared_capacity_shortage_is_detected_even_with_local_choices(self):
         arcs = [(0, 0, 2), (1, 0, 2), (2, 1, 2), (2, 2, 2)]
         self.assertFalse(enough_flow([2, 2, 2], [2, 2, 2], arcs, 6))

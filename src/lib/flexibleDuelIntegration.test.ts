@@ -1,9 +1,10 @@
 /// <reference types="node" />
+import { findDuelSchedule } from './testFixtures/flexibleDuelReference'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { startLocalSupabase } from '../../scripts/test-support/local-supabase.mjs'
 import { readFile } from 'node:fs/promises'
-import { findDuelSchedule, measureDuelSchedule, duelScheduleId, type FlexibleDuelPlan } from './flexibleDuel'
+import { measureDuelSchedule, duelScheduleId, type FlexibleDuelPlan } from './flexibleDuel'
 import { teamWinProbability } from './ratings'
 const state = vi.hoisted(() => ({ client: null as SupabaseClient | null }))
 vi.mock('./supabase', () => ({ supabase: { from(table: string) { return state.client!.from(table) }, rpc(name: string, args: Record<string, unknown>) { return state.client!.rpc(name, args) } } }))
@@ -27,7 +28,7 @@ async function prepare() {
   const context = await fetchFlexibleDuelContext(seed.leagueId, seed.seasonId)
   const pool = context.pool.sort((a, b) => a.id.localeCompare(b.id)), squads = [pool.slice(0, 4), pool.slice(4)] as [typeof pool, typeof pool]
   const settings = { maxPartnerMeetings: 2, maxOpponentMeetings: 2 }, games = findDuelSchedule(squads, settings, .500001)!
-  const plan: FlexibleDuelPlan = { version: 1, inputKey: JSON.stringify([1, context.key, settings]), splitId: 'test-split', settings, squads: squads.map(s => s.map(p => p.id)) as [string[], string[]], option: { id: duelScheduleId(games), kind: 'balance', games, metrics: measureDuelSchedule(squads, games) } }
+  const plan: FlexibleDuelPlan = { version: 1, engine: 'cp-sat', inputKey: JSON.stringify([1, context.key, settings]), splitId: 'test-split', settings, squads: squads.map(s => s.map(p => p.id)) as [string[], string[]], option: { id: duelScheduleId(games), kind: 'balance', games, metrics: measureDuelSchedule(squads, games) } }
   return { ...seed, context, plan, squads }
 }
 
@@ -147,6 +148,55 @@ describe('flexible plans through PostgreSQL and application APIs', () => {
     expect(saved.count).toBe(6)
     expect((await fetchSeasons(s.leagueId)).find(season => season.id === s.seasonId)!.duel_draft_plan!.settings.maxMatchProbability).toBe(1)
   }, 30000)
+  it('requires a fresh search for legacy engines and removed schedule objectives', async () => {
+    const s = await prepare()
+    for (const [engine, kind] of [[undefined, 'balance'], ['exhaustive', 'balance'], ['cp-sat', 'experience'], ['cp-sat', 'alternative']] as const) {
+      const plan = structuredClone(s.plan); plan.engine = engine; plan.option.kind = kind
+      await expect(saveFlexibleDuelPlan(s.seasonId, plan, ['A', 'B'], s.context.revision, s.context.fingerprint, null, true)).rejects.toThrow('DUEL_STALE_DRAFT')
+      const response = await state.client!.rpc('save_and_generate_league_duel_plan_atomic', { p_season_id: s.seasonId, p_plan: plan, p_names: ['A', 'B'], p_expected_rating_revision: s.context.revision, p_expected_rating_fingerprint: s.context.fingerprint, p_expected_plan_hash: null })
+      expect(response.error?.message).toContain('DUEL_STALE_DRAFT')
+    }
+    expect(await fetchTeamsWithPlayers(s.seasonId)).toHaveLength(0)
+    expect(await fetchMatches(s.seasonId, s.leagueId)).toHaveLength(0)
+  })
+  it('enforces the four-player spread on save and generation and persists the cap', async () => {
+    const s = await prepare()
+    s.plan.engine = 'cp-sat'
+    s.plan.settings = { ...s.plan.settings, maxPartnerMeetings: 3, maxOpponentMeetings: 3, maxRatingDifference: 400 }
+    for (const side of s.plan.squads) for (const [i, id] of side.entries()) {
+      await api.db.query('UPDATE public.league_players SET rating=$1 WHERE league_id=$2 AND pool_player_id=$3', [i < 2 ? 1900.25 : 1500.25, s.leagueId, id])
+    }
+    // Match identical ranks across squads: every match and the season are balanced.
+    for (const game of s.plan.option.games) game.awayPoolPlayerIds = game.homePoolPlayerIds.map(id => s.plan.squads[1][s.plan.squads[0].indexOf(id)]!) as [string, string]
+    let fresh = await fetchFlexibleDuelContext(s.leagueId, s.seasonId)
+    for (const limit of [-1, .5, '400', true]) {
+      const plan = structuredClone(s.plan); plan.settings.maxRatingDifference = limit as number
+      const response = await state.client!.rpc('save_and_generate_league_duel_plan_atomic', { p_season_id: s.seasonId, p_plan: plan, p_names: ['A', 'B'], p_expected_rating_revision: fresh.revision, p_expected_rating_fingerprint: fresh.fingerprint, p_expected_plan_hash: null })
+      expect(response.error?.message).toContain('DUEL_RATING_LIMIT_RANGE')
+    }
+    s.plan.settings.maxRatingDifference = 399
+    for (const generate of [false, true]) await expect(saveFlexibleDuelPlan(s.seasonId, s.plan, ['A', 'B'], fresh.revision, fresh.fingerprint, null, generate)).rejects.toThrow('DUEL_RATING_DIFFERENCE')
+    expect(await fetchTeamsWithPlayers(s.seasonId)).toHaveLength(0)
+    expect(await fetchMatches(s.seasonId, s.leagueId)).toHaveLength(0)
+    s.plan.settings.maxRatingDifference = 400
+    const saved = await saveFlexibleDuelPlan(s.seasonId, s.plan, ['A', 'B'], fresh.revision, fresh.fingerprint, null, false)
+    expect((await fetchSeasons(s.leagueId)).find(season => season.id === s.seasonId)!.duel_draft_plan!.settings.maxRatingDifference).toBe(400)
+    // A fractional change above the cap is rejected, even with forged client metrics.
+    await api.db.query('UPDATE public.league_players SET rating=1900.26 WHERE league_id=$1 AND pool_player_id=ANY($2::uuid[])', [s.leagueId, [s.plan.squads[0][0], s.plan.squads[1][0]]])
+    fresh = await fetchFlexibleDuelContext(s.leagueId, s.seasonId)
+    await expect(saveFlexibleDuelPlan(s.seasonId, s.plan, ['Changed', 'Changed'], fresh.revision, fresh.fingerprint, saved.hash, true)).rejects.toThrow('DUEL_RATING_DIFFERENCE')
+    expect((await fetchTeamsWithPlayers(s.seasonId)).map(t => t.name).sort()).toEqual(['A', 'B'])
+    expect(await fetchMatches(s.seasonId, s.leagueId)).toHaveLength(0)
+    expect((await fetchSeasons(s.leagueId)).find(season => season.id === s.seasonId)!.duel_draft_plan_hash).toBe(saved.hash)
+    s.plan.settings.maxRatingDifference = null
+    expect((await saveFlexibleDuelPlan(s.seasonId, s.plan, ['A', 'B'], fresh.revision, fresh.fingerprint, saved.hash, true)).count).toBe(6)
+  }, 30000)
+  it('allows a zero point cap for equal unrounded ratings', async () => {
+    const s = await prepare(); s.plan.settings.maxRatingDifference = 0
+    await api.db.query('UPDATE public.league_players SET rating=1500.25 WHERE league_id=$1', [s.leagueId])
+    const fresh = await fetchFlexibleDuelContext(s.leagueId, s.seasonId)
+    expect((await saveFlexibleDuelPlan(s.seasonId, s.plan, ['A', 'B'], fresh.revision, fresh.fingerprint, null, true)).count).toBe(6)
+  })
   it('rejects duplicate four-player games in raw RPCs and the database index', async () => {
     const s = await prepare()
     const repeated = structuredClone(s.plan)
@@ -198,7 +248,7 @@ describe('flexible plans through PostgreSQL and application APIs', () => {
     const pool = context.pool.sort((a, b) => a.id.localeCompare(b.id)), squads = [pool.slice(0, 5), pool.slice(5)] as [typeof pool, typeof pool]
     const settings = { maxPartnerMeetings: 1, maxOpponentMeetings: null }
     const games = findDuelSchedule(squads, settings, .500001)!
-    const plan: FlexibleDuelPlan = { version: 1, inputKey: context.key, splitId: 'odd', settings, squads: squads.map(s => s.map(p => p.id)) as [string[], string[]], option: { id: duelScheduleId(games), kind: 'balance', games, metrics: measureDuelSchedule(squads, games) } }
+    const plan: FlexibleDuelPlan = { version: 1, engine: 'cp-sat', inputKey: context.key, splitId: 'odd', settings, squads: squads.map(s => s.map(p => p.id)) as [string[], string[]], option: { id: duelScheduleId(games), kind: 'balance', games, metrics: measureDuelSchedule(squads, games) } }
     const saved = await saveFlexibleDuelPlan(seed.seasonId, plan, ['A', 'B'], context.revision, context.fingerprint, null, true)
     expect(saved.count).toBe(10)
     const first = (await fetchMatches(seed.seasonId, seed.leagueId))[0]!
@@ -207,6 +257,25 @@ describe('flexible plans through PostgreSQL and application APIs', () => {
     expect((await fetchSeasons(seed.leagueId)).find(s => s.id === seed.seasonId)?.duel_draft_plan).toEqual(plan)
     expect((await fetchMatches(seed.seasonId, seed.leagueId)).find(m => m.id === first.id)?.winner_team_id).toBe(first.away_team_id)
     await expect(clearUnplayedLeagueDuelFixtures(seed.seasonId, (await fetchMatches(seed.seasonId, seed.leagueId)).map(m => m.id))).rejects.toThrow()
+  }, 30000)
+  it('preserves generated legacy plans and result corrections across the point-cap migration', async () => {
+    await api.close()
+    const filename = '20261108173913_duel_ranking_point_limit.sql'
+    api = await startLocalSupabase({ beforeMigration: filename })
+    state.client = createClient(api.url, 'local-anon-key', { global: { headers: { Authorization: `Bearer ${api.token}` } }, auth: { persistSession: false, autoRefreshToken: false } })
+    const s = await prepare(); s.plan.engine = 'exhaustive'; s.plan.option.kind = 'experience'
+    // Simulate a plan generated by the previous app before this migration existed.
+    const created = await state.client!.rpc('save_and_generate_league_duel_plan_atomic', { p_season_id: s.seasonId, p_plan: s.plan, p_names: ['A', 'B'], p_expected_rating_revision: s.context.revision, p_expected_rating_fingerprint: s.context.fingerprint, p_expected_plan_hash: null })
+    expect(created.error).toBeNull()
+    const before = await api.db.query('SELECT to_jsonb(m) data FROM public.matches m WHERE season_id=$1 ORDER BY id', [s.seasonId])
+    await api.db.exec(await readFile(`supabase/migrations/${filename}`, 'utf8'))
+    expect((await api.db.query('SELECT to_jsonb(m) data FROM public.matches m WHERE season_id=$1 ORDER BY id', [s.seasonId])).rows).toEqual(before.rows)
+    expect((await fetchSeasons(s.leagueId)).find(season => season.id === s.seasonId)!.duel_draft_plan).toEqual(s.plan)
+    const first = (await fetchMatches(s.seasonId, s.leagueId))[0]!
+    await recordResult(first.id, { winnerTeamId: first.home_team_id, homeScore: 11, awayScore: 5 })
+    await recordResult(first.id, { winnerTeamId: first.away_team_id, homeScore: 7, awayScore: 11 })
+    expect((await fetchSeasons(s.leagueId)).find(season => season.id === s.seasonId)!.duel_draft_plan).toEqual(s.plan)
+    expect((await fetchMatches(s.seasonId, s.leagueId)).find(match => match.id === first.id)!.winner_team_id).toBe(first.away_team_id)
   }, 30000)
   it('preserves populated legacy fixtures during migration', async () => {
     await api.close()

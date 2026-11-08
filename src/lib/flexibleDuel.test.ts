@@ -1,5 +1,6 @@
+import { findDuelSchedule, searchDuelOptions, searchDuelSplits, selectNextDuelSplit, type DuelSearchCatalog } from './testFixtures/flexibleDuelReference'
 import { describe, expect, it } from 'vitest'
-import { duelScheduleId, hasUniqueDuelMatchups, findDuelSchedule, measureDuelSchedule, orderDuelGames, searchDuelOptions, searchDuelSplits, selectNextDuelSplit, validateDuelSettings, type DuelSearchInput, type DuelGenerationSettings, type DuelSearchCatalog } from './flexibleDuel'
+import { duelScheduleId, hasUniqueDuelMatchups, measureDuelSchedule, orderDuelGames, validateDuelSettings, type DuelSearchInput, type DuelGenerationSettings } from './flexibleDuel'
 import { teamWinProbability } from './ratings'
 import { forecastSeason, isSeasonForecastBalanced } from './seasonForecast'
 import type { PoolPlayer } from '../types'

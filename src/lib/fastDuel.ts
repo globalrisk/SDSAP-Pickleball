@@ -1,5 +1,5 @@
 import { compareDuelPlayers, type LeagueDuelGame } from './leagueDuelSchedule'
-import { duelMatchProbabilityLimit, duelScheduleId, hasUniqueDuelMatchups, measureDuelSchedule, orderDuelGames, validateDuelSettings, type DuelScheduleOption, type DuelSearchInput, type DuelSplit } from './flexibleDuel'
+import { duelMatchProbabilityLimit, duelScheduleId, hasUniqueDuelMatchups, isDuelRatingDifferenceAllowed, measureDuelSchedule, orderDuelGames, validateDuelSettings, type DuelScheduleOption, type DuelSearchInput, type DuelSplit } from './flexibleDuel'
 import { isSeasonForecastBalanced } from './seasonForecast'
 
 export function chooseFastDuelSplit(input: DuelSearchInput, current?: DuelSplit, seen: string[] = [], random = Math.random): DuelSplit | undefined {
@@ -33,12 +33,12 @@ export function chooseFastDuelSplit(input: DuelSearchInput, current?: DuelSplit,
 
 /** Recompute every metric and validate received lineups before enabling Save. */
 export function decodeFastDuelOptions(input: DuelSearchInput, split: DuelSplit, raw: unknown): DuelScheduleOption[] {
-  if (!Array.isArray(raw) || raw.length > 3) throw new Error('SOLVER_INVALID_RESULT')
+  if (!Array.isArray(raw) || raw.length > 2) throw new Error('SOLVER_INVALID_RESULT')
   if (raw.length) validateDuelSettings(input.pool.length / 2, input.settings)
   const byId = new Map(input.pool.map(p => [p.id, p])), squads = split.squads.map(side => side.map(id => byId.get(id)!)) as [typeof input.pool, typeof input.pool]
   const size = squads[0].length, count = size * (size - 1) / 2, rounds = size - 1 + size % 2
   const options = raw.map((value: { kind?: unknown; games?: unknown; solver?: { status?: unknown; elapsedMs?: unknown } }) => {
-    if (!value || !['balance', 'variety', 'experience'].includes(String(value.kind)) || !Array.isArray(value.games) || value.games.length !== count) throw new Error('SOLVER_INVALID_RESULT')
+    if (!value || !['balance', 'variety'].includes(String(value.kind)) || !Array.isArray(value.games) || value.games.length !== count) throw new Error('SOLVER_INVALID_RESULT')
     const games = value.games as LeagueDuelGame[]
     const sequence = new Set<number>(), appearances = new Map<number, string[]>()
     for (const g of games) {
@@ -48,7 +48,7 @@ export function decodeFastDuelOptions(input: DuelSearchInput, split: DuelSplit, 
       sequence.add(g.sequenceNumber)
       appearances.set(g.roundNumber, [...appearances.get(g.roundNumber) ?? [], ...g.homePoolPlayerIds, ...g.awayPoolPlayerIds])
     }
-    if (!hasUniqueDuelMatchups(games) || appearances.size !== rounds || [...appearances.values()].some(ids => ids.length !== Math.floor(size / 2) * 4 || new Set(ids).size !== ids.length)) throw new Error('SOLVER_INVALID_RESULT')
+    if (!isDuelRatingDifferenceAllowed(input.pool, games, input.settings.maxRatingDifference) || !hasUniqueDuelMatchups(games) || appearances.size !== rounds || [...appearances.values()].some(ids => ids.length !== Math.floor(size / 2) * 4 || new Set(ids).size !== ids.length)) throw new Error('SOLVER_INVALID_RESULT')
     const ordered = orderDuelGames(games), metrics = measureDuelSchedule(squads, ordered)
     if (metrics.worstFavorite > duelMatchProbabilityLimit(input.settings) + 1e-12 || metrics.players.some(p => p.games !== size - 1) || metrics.maxPartnerMeetings > (input.settings.maxPartnerMeetings ?? size - 1)
       || metrics.maxOpponentMeetings > (input.settings.maxOpponentMeetings ?? size - 1) || !isSeasonForecastBalanced(metrics.forecast)
@@ -57,9 +57,6 @@ export function decodeFastDuelOptions(input: DuelSearchInput, split: DuelSplit, 
   })
   if (new Set(options.map(o => o.id)).size !== options.length || (options.length && options[0]!.kind !== 'balance')
     || options.some(o => o.metrics.worstFavorite > options[0]!.metrics.worstFavorite + .05 + 1e-12)) throw new Error('SOLVER_INVALID_RESULT')
-  const hardest = (o: DuelScheduleOption) => [Math.max(...o.metrics.players.map(p => p.below40)), Math.max(...o.metrics.players.map(p => p.disadvantage))]
-  const baseline = options[0] ? hardest(options[0]) : []
-  for (const o of options) if (o.kind === 'experience') { const score = hardest(o); if (score[0]! > baseline[0]! || score[0] === baseline[0] && score[1]! >= baseline[1]! - 1e-12) o.kind = 'alternative' }
   return options
 }
 

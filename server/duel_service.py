@@ -101,10 +101,13 @@ def load_context(body, token, reader=None):
             raise ApiError("DUEL_STALE_DRAFT", 409)
     size = len(ids) // 2
     settings = body.get("settings")
-    if not isinstance(settings, dict) or not {"maxPartnerMeetings", "maxOpponentMeetings"} <= set(settings) or set(settings) - {"maxPartnerMeetings", "maxOpponentMeetings", "maxMatchProbability"}:
+    if not isinstance(settings, dict) or not {"maxPartnerMeetings", "maxOpponentMeetings"} <= set(settings) or set(settings) - {"maxPartnerMeetings", "maxOpponentMeetings", "maxMatchProbability", "maxRatingDifference"}:
         raise ApiError("SOLVER_INVALID_LIMITS")
     max_probability = settings.get("maxMatchProbability", .65)
     if type(max_probability) not in (float, int) or not math.isfinite(max_probability) or not .5 <= max_probability <= 1:
+        raise ApiError("SOLVER_INVALID_LIMITS")
+    gap = settings.get("maxRatingDifference")
+    if gap is not None and (type(gap) not in (float, int) or not math.isfinite(gap) or gap < 0 or gap != math.floor(gap)):
         raise ApiError("SOLVER_INVALID_LIMITS")
     for cap in (settings["maxPartnerMeetings"], settings["maxOpponentMeetings"]):
         if cap is not None and (type(cap) is not int or not 1 <= cap < size):
@@ -177,14 +180,14 @@ def generate(context, cancelled, progress, *, initial=None, deadline=None):
     deadline = deadline or time.perf_counter() + 24
     maximum = settings.get("maxMatchProbability", .65)
     upper = maximum
-    for index, profile in enumerate(("balance", "variety", "experience")):
+    for index, profile in enumerate(("balance", "variety")):
         if cancelled.is_set():
             return None
-        seconds = min((10, 7, 7)[index], deadline - time.perf_counter())
+        seconds = min((10, 7)[index], deadline - time.perf_counter())
         if seconds < .2:
             break
         progress(profile)
-        result = initial if index == 0 and initial is not None else solve({"size": size, "settings": settings, "probabilities": probabilities, "seconds": seconds, "workers": 1,
+        result = initial if index == 0 and initial is not None else solve({"size": size, "settings": settings, "ratings": [[pool[p]["rating"] for p in side] for side in squads], "probabilities": probabilities, "seconds": seconds, "workers": 1,
                         "seed": context["seed"] + index, "profile": profile, "warmMs": 350, "maxWorst": upper, "presolve": False,
                         "excluded": excluded, "partnerHistory": history_weights}, cancelled)
         if not result["solution"]:
@@ -297,7 +300,7 @@ def search_squads(context, cancelled, progress):
             pending.extend((c[0], c[1], None) for c in candidates[index:] if c[0] not in skipped)
             break
         probabilities = probabilities_for(squads)
-        if impossible_split(size, settings, probabilities):
+        if impossible_split(size, settings, probabilities, [[pool[p]["rating"] for p in side] for side in squads]):
             proved.append(identity); update()
         else:
             pending.append((identity, squads, probabilities))
@@ -309,12 +312,12 @@ def search_squads(context, cancelled, progress):
             break
         if probabilities is None:
             probabilities = probabilities_for(squads)
-            if impossible_split(size, settings, probabilities):
+            if impossible_split(size, settings, probabilities, [[pool[p]["rating"] for p in side] for side in squads]):
                 proved.append(identity); update(); continue
         seconds = min(.5 * 2 ** context.get("attempt", 0), 5, search_deadline - time.perf_counter())
         if seconds <= .01:
             break
-        result = solve({"size": size, "settings": settings, "probabilities": probabilities, "seconds": seconds, "workers": 1,
+        result = solve({"size": size, "settings": settings, "ratings": [[pool[p]["rating"] for p in side] for side in squads], "probabilities": probabilities, "seconds": seconds, "workers": 1,
                         "seed": context["seed"], "profile": "primary", "warmMs": 0, "maxWorst": settings.get("maxMatchProbability", .65),
                         "presolve": False, "partnerHistory": [[history.get(frozenset(side[i] for i in edge), 0) for edge in edges] for side in squads]}, cancelled)
         if result["solution"]:

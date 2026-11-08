@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { useLeague } from '../context/LeagueContext'
 import { fetchFlexibleDuelContext, saveFlexibleDuelPlan } from '../lib/leagueTeamDuelApi'
-import { FLEXIBLE_DUEL_VERSION, hasUniqueDuelMatchups, selectNextDuelSplit, validateDuelSettings, type DuelGenerationSettings, type DuelScheduleOption, type DuelSearchCatalog, type DuelSearchInput, type DuelSearchProgress, type DuelSplit, type FlexibleDuelPlan } from '../lib/flexibleDuel'
+import { FLEXIBLE_DUEL_VERSION, hasUniqueDuelMatchups, isCurrentDuelPlan, isDuelRatingDifferenceAllowed, validateDuelSettings, type DuelGenerationSettings, type DuelScheduleOption, type DuelSearchInput, type DuelSplit, type FlexibleDuelPlan } from '../lib/flexibleDuel'
 import type { MatchWithTeams, Season, TeamWithPlayers } from '../types'
 import { SeasonForecastSummary } from './SeasonForecastSummary'
 import { SeasonMatchDeletion } from './SeasonMatchDeletion'
@@ -23,87 +23,48 @@ export function FlexibleDuelSetup({ season, rosterIds, teams, fixtures, hasFixtu
 }) {
   const { t } = useTranslation(), { league, leaguePath } = useLeague(), client = useQueryClient()
   const saved = season.duel_draft_plan
-  const [engine, setEngine] = useState<'cp-sat' | 'exhaustive'>(saved ? saved.engine ?? 'exhaustive' : 'cp-sat')
   const [fastProfile, setFastProfile] = useState('balance')
   const [squadProgress, setSquadProgress] = useState<{ checked: number; total: number }>()
   const feasibility = useRef(createDuelFeasibilityState())
-  const abort = useRef<AbortController | null>(null), activeEngine = useRef(engine)
+  const abort = useRef<AbortController | null>(null)
   const orderedTeams = saved ? saved.squads.map(s => teams.find(team => team.players.some(p => p.pool_player_id === s[0]))) : teams
-  const [settings, setSettings] = useState<DuelGenerationSettings>({ maxPartnerMeetings: 2, maxOpponentMeetings: 3, ...saved?.settings, maxMatchProbability: saved?.settings.maxMatchProbability ?? .65 })
+  const [settings, setSettings] = useState<DuelGenerationSettings>({ maxPartnerMeetings: 2, maxOpponentMeetings: 3, ...saved?.settings, maxMatchProbability: saved?.settings.maxMatchProbability ?? .65, maxRatingDifference: saved?.settings.maxRatingDifference ?? null })
   const [names, setNames] = useState<[string, string]>([orderedTeams[0]?.name ?? t('leagueDuel.squadA'), orderedTeams[1]?.name ?? t('leagueDuel.squadB')])
   const named = useRef(teams.length > 0)
   const [colorDraft, setColors] = useState<[string, string] | null>(null)
   const colors: [string, string] = colorDraft ?? [orderedTeams[0]?.color ?? DEFAULT_TEAM_COLORS[0], orderedTeams[1]?.color ?? DEFAULT_TEAM_COLORS[1]]
   useEffect(() => { if (!named.current && orderedTeams[0] && orderedTeams[1]) { named.current = true; setNames([orderedTeams[0].name, orderedTeams[1].name]) } }, [orderedTeams])
-  const [catalog, setCatalog] = useState<DuelSearchCatalog | null>(null), [split, setSplit] = useState<DuelSplit | undefined>()
+  const [split, setSplit] = useState<DuelSplit | undefined>()
   const [options, setOptions] = useState<DuelScheduleOption[]>([]), [selectedId, setSelectedId] = useState<string>()
   const [busy, setBusy] = useState(false), [unavailable, setUnavailable] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('')
   const feedbackRef = useRef<HTMLDivElement>(null)
-  const [progress, setProgress] = useState<DuelSearchProgress>(), [elapsed, setElapsed] = useState(0)
+  const [elapsed, setElapsed] = useState(0)
   const [hash, setHash] = useState(season.duel_draft_plan_hash ?? null)
-  const worker = useRef<Worker | null>(null), requestId = useRef(0), activeKey = useRef(''), seenSplits = useRef<string[]>([]), seenOptions = useRef(new Map<string, string[]>())
-  const completed = useRef(new Map<string, DuelSearchCatalog>())
+  const requestId = useRef(0), activeKey = useRef(''), seenSplits = useRef<string[]>([]), seenOptions = useRef(new Map<string, string[]>())
   const context = useQuery({ queryKey: ['flexible-duel-context', season.id, [...rosterIds].sort().join(':')], queryFn: () => fetchFlexibleDuelContext(league.id, season.id), enabled: editable && !hasFixtures && [8, 10, 12, 14].includes(rosterIds.length), staleTime: 0 })
   const actualCount = context.data?.rosterIds.length ?? rosterIds.length, size = actualCount / 2, validSize = [8, 10, 12, 14].includes(actualCount)
   let invalidLimits = false
   if (validSize) { try { validateDuelSettings(size, settings) } catch { invalidLimits = true } }
   const inputKey = context.data ? JSON.stringify([FLEXIBLE_DUEL_VERSION, context.data.key, settings]) : ''
+  const savedMatchesInput = saved && saved.inputKey === JSON.stringify([FLEXIBLE_DUEL_VERSION, context.data?.key, saved.settings])
+    && saved.settings.maxPartnerMeetings === settings.maxPartnerMeetings && saved.settings.maxOpponentMeetings === settings.maxOpponentMeetings
+    && (saved.settings.maxMatchProbability ?? .65) === settings.maxMatchProbability && (saved.settings.maxRatingDifference ?? null) === settings.maxRatingDifference
   const input: DuelSearchInput | undefined = context.data ? { pool: context.data.pool, settings, inputKey, partnerHistory: context.data.partnerHistory.map(s => [...s]) } : undefined
-  const inputRef = useRef(input); inputRef.current = input
   const selected = options.find(o => o.id === selectedId)
-  const optionsRef = useRef(options); optionsRef.current = options
-  const splitRef = useRef(split); splitRef.current = split
-  const stop = () => { abort.current?.abort(); abort.current = null; requestId.current++; worker.current?.terminate(); worker.current = null; setBusy(false) }
-  useEffect(() => () => { worker.current?.terminate(); abort.current?.abort() }, [])
+  const stop = () => { abort.current?.abort(); abort.current = null; requestId.current++; setBusy(false) }
+  useEffect(() => () => { abort.current?.abort() }, [])
   useEffect(() => {
-    if (!inputKey || activeKey.current === inputKey && activeEngine.current === engine) return
-    stop(); feasibility.current = createDuelFeasibilityState(); setSquadProgress(undefined); activeKey.current = inputKey; activeEngine.current = engine; seenSplits.current = []; seenOptions.current.clear(); setCatalog(null); setOptions([]); setSplit(undefined); setSelectedId(undefined); setNotice(''); setUnavailable(false)
-    if (saved?.inputKey === inputKey && saved.version === FLEXIBLE_DUEL_VERSION && (saved.engine ?? 'exhaustive') === engine && hasUniqueDuelMatchups(saved.option.games)) {
+    if (!inputKey || activeKey.current === inputKey) return
+    stop(); feasibility.current = createDuelFeasibilityState(); setSquadProgress(undefined); activeKey.current = inputKey; seenSplits.current = []; seenOptions.current.clear(); setOptions([]); setSplit(undefined); setSelectedId(undefined); setNotice(''); setError(''); setUnavailable(false)
+    if (savedMatchesInput && saved.version === FLEXIBLE_DUEL_VERSION && isCurrentDuelPlan(saved) && hasUniqueDuelMatchups(saved.option.games) && isDuelRatingDifferenceAllowed(context.data?.pool ?? [], saved.option.games, settings.maxRatingDifference)) {
       feasibility.current.known = { options: [saved.option], status: 'FEASIBLE', split: { id: saved.splitId, squads: saved.squads, bestWorst: saved.option.metrics.worstFavorite } }
       seenSplits.current = [saved.splitId]
       setSplit({ id: saved.splitId, squads: saved.squads, bestWorst: saved.option.metrics.worstFavorite }); setOptions([saved.option]); setSelectedId(saved.option.id); seenOptions.current.set(saved.splitId, [saved.option.id])
     }
   // Snapshot changes invalidate results; background fetches of identical data do not.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inputKey, engine])
+  }, [inputKey])
   useEffect(() => { if (!busy) return; const started = Date.now(); setElapsed(0); const timer = setInterval(() => setElapsed(Math.floor((Date.now() - started) / 1000)), 1000); return () => clearInterval(timer) }, [busy])
-  const requestOptions = (chosen: DuelSplit, refresh = false) => {
-    if (engine === 'cp-sat') { void fastSearch(chosen, refresh); return }
-    const current = inputRef.current; if (!current || !worker.current) return
-    persist.reset(); setBusy(true); setError(''); setProgress({ phase: 'options', completed: 0, total: 1, nodes: 0 }); setSplit(chosen)
-    worker.current.postMessage({ type: 'options', requestId: ++requestId.current, input: current, split: chosen, excluded: refresh ? seenOptions.current.get(chosen.id) ?? [] : [], currentIds: optionsRef.current.map(o => o.id) })
-  }
-  const getWorker = () => {
-    if (worker.current) return worker.current
-    const w = new Worker(new URL('../lib/flexibleDuel.worker.ts', import.meta.url), { type: 'module' }); worker.current = w
-    w.onerror = () => { setError(t('flexibleDuel.workerError')); setBusy(false); setUnavailable(true); w.terminate(); worker.current = null }
-    w.onmessage = (event: MessageEvent<{ requestId: number; type: string; progress?: DuelSearchProgress; catalog?: DuelSearchCatalog; options?: DuelScheduleOption[]; splitId?: string; inputKey?: string; restarted?: boolean; message?: string }>) => {
-      const message = event.data; if (message.requestId !== requestId.current) return
-      if (message.type === 'progress') { setProgress(message.progress); return }
-      if (message.type === 'error') { setError(message.message ?? t('flexibleDuel.workerError')); setBusy(false); setUnavailable(true); return }
-      if (message.type === 'catalog') {
-        const found = message.catalog!; completed.current.set(activeKey.current, found); setCatalog(found)
-        const current = splitRef.current
-        const chosen = selectNextDuelSplit(found, current, current ? [current.id] : [])
-        if (!chosen) { setOptions([]); setSplit(undefined); setNotice('noValid'); setBusy(false); return }
-        seenSplits.current = [chosen.id]; requestOptions(chosen); return
-      }
-      if (message.type === 'options' && message.inputKey === activeKey.current) {
-        const found = message.options!; setOptions(found); setSelectedId(found[0]?.id); setBusy(false); setUnavailable(!found.length)
-        const key = message.splitId!, seen = message.restarted ? [] : seenOptions.current.get(key) ?? []
-        seenOptions.current.set(key, [...new Set([...seen, ...found.map(o => o.id)])])
-        setNotice(!found.length ? 'fastInfeasible' : message.restarted ? 'restarted' : found.length < 3 ? 'fewer' : '')
-      }
-    }
-    return w
-  }
-  function search() {
-    if (!input) return
-    persist.reset(); stop(); const w = getWorker(); setBusy(true); setError(''); setNotice(''); setUnavailable(true)
-    const cached = completed.current.get(inputKey)
-    if (cached) { setCatalog(cached); const chosen = selectNextDuelSplit(cached, split, seenSplits.current); if (chosen) { seenSplits.current.push(chosen.id); requestOptions(chosen) } else { setBusy(false); setNotice('noValid') }; return }
-    setProgress({ phase: 'global', completed: 0, total: 0, nodes: 0 }); w.postMessage({ type: 'search', requestId: ++requestId.current, input })
-  }
   async function fastSearch(chosen?: DuelSplit, refresh = false) {
     if (!input || !context.data) return
     stop(); const controller = new AbortController(); abort.current = controller
@@ -122,7 +83,7 @@ export function FlexibleDuelSetup({ season, rosterIds, teams, fixtures, hasFixtu
       let restarted = false
       if (chosen && !result.options.length && result.status === 'INFEASIBLE' && refresh) {
         restarted = true
-        result = await run(optionsRef.current.map(o => o.id))
+        result = await run(options.map(o => o.id))
         if (!result.options.length && result.status === 'INFEASIBLE') result = await run([])
       }
       if (id !== requestId.current) return
@@ -135,7 +96,7 @@ export function FlexibleDuelSetup({ season, rosterIds, teams, fixtures, hasFixtu
         seenSplits.current = [...new Set([...seenSplits.current, verified.id])].slice(-1716)
       }
       setNotice(!result.options.length ? result.status === 'INFEASIBLE' ? chosen ? 'fastInfeasible' : 'noValid' : chosen ? 'fastLimited' : 'rosterLimited'
-        : !chosen ? result.reused ? 'conditionsMetReused' : 'conditionsMet' : restarted ? 'restarted' : result.options.length < 3 ? 'fewer' : '')
+        : !chosen ? result.reused ? 'conditionsMetReused' : 'conditionsMet' : restarted ? 'restarted' : result.options.length < 2 ? 'fewer' : '')
     } catch (error) {
       if (id !== requestId.current || controller.signal.aborted) return
       const code = error instanceof Error ? error.message : 'SOLVER_FAILED'
@@ -143,23 +104,12 @@ export function FlexibleDuelSetup({ season, rosterIds, teams, fixtures, hasFixtu
       if (code === 'DUEL_STALE_DRAFT') void context.refetch()
     }
   }
-  function shuffle() {
-    if (engine === 'cp-sat') {
-      if (!input) return
-      void fastSearch(); return
-    }
-    if (!catalog) { search(); return }
-    getWorker(); const chosen = selectNextDuelSplit(catalog, split, seenSplits.current)
-    if (!chosen) return
-    if (seenSplits.current.includes(chosen.id)) seenSplits.current = [split?.id ?? '']
-    seenSplits.current.push(chosen.id); requestOptions(chosen)
-  }
   const persist = useMutation({
     mutationFn: async (generate: boolean) => {
       if (!input || !context.data || !split || !selected || busy || unavailable || context.isFetching || context.isError) throw new Error(t('flexibleDuel.selectFirst'))
       const fresh = await fetchFlexibleDuelContext(league.id, season.id)
       if (fresh.key !== context.data.key) { setUnavailable(true); void context.refetch(); throw new Error(t('flexibleDuel.stale')) }
-      const plan: FlexibleDuelPlan = { version: FLEXIBLE_DUEL_VERSION, inputKey, splitId: split.id, settings, squads: split.squads, option: selected, engine }
+      const plan: FlexibleDuelPlan = { version: FLEXIBLE_DUEL_VERSION, inputKey, splitId: split.id, settings, squads: split.squads, option: selected, engine: 'cp-sat' }
       return saveFlexibleDuelPlan(season.id, plan, names, fresh.revision, fresh.fingerprint, hash, generate, colors)
     },
     onSuccess: async result => { setHash(result.hash); setNotice(result.count ? 'generated' : 'saved'); await Promise.all(['teams', 'teams-with-players', 'matches', 'seasons', 'assigned-pool-players'].map(key => client.invalidateQueries({ queryKey: [key] }))) },
@@ -183,16 +133,26 @@ export function FlexibleDuelSetup({ season, rosterIds, teams, fixtures, hasFixtu
     {hasFixtures ? <>
       <p>{t('leagueDuel.frozen')}</p>
       <div className="grid gap-4 sm:grid-cols-2">{teams.map(team => <div key={team.id}><h3 className="font-bold" style={{ color: team.color }}>{team.name}</h3>{editable ? <LeagueDuelTeamNameForm team={team} disabled={persist.isPending} /> : null}<ul>{team.players.map(p => <li key={p.id}>{p.name}</li>)}</ul></div>)}</div>
-      {saved ? <><p>{t('flexibleDuel.savedLimits', { partner: saved.settings.maxPartnerMeetings ?? t('flexibleDuel.noLimit'), opponent: saved.settings.maxOpponentMeetings ?? t('flexibleDuel.noLimit') })}</p>{saved.settings.maxMatchProbability !== undefined ? <p>{t('flexibleDuel.matchProbabilityHelp', { max: Math.round(saved.settings.maxMatchProbability * 10000) / 100, min: Math.round((1 - saved.settings.maxMatchProbability) * 10000) / 100 })}</p> : null}</> : null}
+      {saved ? <><p>{t('flexibleDuel.savedLimits', { partner: saved.settings.maxPartnerMeetings ?? t('flexibleDuel.noLimit'), opponent: saved.settings.maxOpponentMeetings ?? t('flexibleDuel.noLimit'), gap: saved.settings.maxRatingDifference ?? t('flexibleDuel.noLimit') })}</p>{saved.settings.maxMatchProbability !== undefined ? <p>{t('flexibleDuel.matchProbabilityHelp', { max: Math.round(saved.settings.maxMatchProbability * 10000) / 100, min: Math.round((1 - saved.settings.maxMatchProbability) * 10000) / 100 })}</p> : null}</> : null}
       {editable && fixtures?.length ? <SeasonMatchDeletion season={season} fixtures={fixtures} busy={persist.isPending} onCleared={() => { stop(); setOptions([]); setHash(null) }} /> : null}
       <Link to={leaguePath('/matches')} className="text-green-800 underline">{t('leagueDuel.viewGames')}</Link>
     </> : editable ? <>
-      <label className="block text-sm font-semibold">{t('flexibleDuel.mode')}<select aria-label={t('flexibleDuel.mode')} className="mt-1 min-h-11 w-full rounded-lg border px-3" value={engine} disabled={persist.isPending} onChange={e => setEngine(e.target.value as typeof engine)}><option value="cp-sat">{t('flexibleDuel.fastMode')}</option><option value="exhaustive">{t('flexibleDuel.exactMode')}</option></select></label>
-      <p className="text-xs text-gray-600">{t(engine === 'cp-sat' ? 'flexibleDuel.fastHelp' : 'flexibleDuel.exhaustiveHelp')}</p>
+      <p className="text-xs text-gray-600">{t('flexibleDuel.fastHelp')}</p>
       {!validSize ? <p>{t('leagueDuel.rosterSize', { count: rosterIds.length })}</p> : <>
         <div className="grid gap-4 sm:grid-cols-2">{(['maxPartnerMeetings', 'maxOpponentMeetings'] as const).map(field => <label key={field} className="text-sm font-semibold">{t(`flexibleDuel.${field}`)}<select aria-label={t(`flexibleDuel.${field}`)} className="mt-1 block min-h-11 w-full rounded-lg border px-3" value={settings[field] ?? 'none'} disabled={persist.isPending} onChange={e => setSettings(s => ({ ...s, [field]: e.target.value === 'none' ? null : Number(e.target.value) }))}>
           {settings[field] !== null && settings[field]! > size - 1 ? <option value={settings[field]!} disabled>{settings[field]}</option> : null}{Array.from({ length: size - 1 }, (_, i) => i + 1).map(n => <option key={n} value={n} disabled={field === 'maxOpponentMeetings' && n * size < 2 * (size - 1)}>{n}</option>)}<option value="none">{t('flexibleDuel.noLimit')}</option>
         </select></label>)}</div>
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="block text-sm font-semibold">{t('flexibleDuel.maxRatingDifference')}
+            <select aria-label={t('flexibleDuel.maxRatingDifference')} className="mt-1 block min-h-11 rounded-lg border px-3" value={settings.maxRatingDifference == null ? 'none' : 'limit'} disabled={persist.isPending} onChange={e => setSettings(s => ({ ...s, maxRatingDifference: e.target.value === 'none' ? null : 400 }))}>
+              <option value="none">{t('flexibleDuel.noLimit')}</option><option value="limit">{t('flexibleDuel.setLimit')}</option>
+            </select>
+          </label>
+          {settings.maxRatingDifference != null ? <label className="block text-sm font-semibold">{t('flexibleDuel.ratingDifferencePoints')}
+            <input type="number" min={0} step={1} aria-label={t('flexibleDuel.ratingDifferencePoints')} className="mt-1 block min-h-11 w-40 rounded-lg border px-3" value={Number.isFinite(settings.maxRatingDifference) ? settings.maxRatingDifference : ''} disabled={persist.isPending} onChange={e => setSettings(s => ({ ...s, maxRatingDifference: e.target.value === '' ? NaN : Number(e.target.value) }))} />
+          </label> : null}
+        </div>
+        <p className="text-xs text-gray-600">{t('flexibleDuel.ratingDifferenceHelp')}</p>
         <label className="block text-sm font-semibold">{t('flexibleDuel.maxMatchProbability')}
           <input type="number" min={50} max={100} step={1} aria-label={t('flexibleDuel.maxMatchProbability')} className="mt-1 block min-h-11 w-full rounded-lg border px-3 sm:w-40" value={Number.isFinite(settings.maxMatchProbability) ? Math.round(settings.maxMatchProbability! * 10000) / 100 : ''} disabled={persist.isPending} onChange={e => setSettings(s => ({ ...s, maxMatchProbability: e.target.value === '' ? NaN : Number(e.target.value) / 100 }))} />
         </label>
@@ -200,21 +160,21 @@ export function FlexibleDuelSetup({ season, rosterIds, teams, fixtures, hasFixtu
         <p className="text-xs text-gray-600">{t('flexibleDuel.limitHelp')}</p>
         {invalidLimits ? <p role="alert" className="text-sm text-red-800">{t('flexibleDuel.invalidLimits')}</p> : null}
         <p className="text-xs">{t('flexibleDuel.participation', { games: size - 1 })} {t('flexibleDuel.seasonBalanceLimit')}</p>
-        <div className="flex flex-wrap gap-3"><button type="button" className={button} disabled={invalidLimits || !context.data || context.isFetching || busy || persist.isPending} onClick={shuffle}>{t(engine === 'cp-sat' && !split && feasibility.current.attempt > 0 && notice === 'rosterLimited' ? 'flexibleDuel.continueConditions' : (engine === 'cp-sat' ? split : catalog) ? 'flexibleDuel.shuffle' : 'flexibleDuel.search')}</button><button type="button" className={button} disabled={!split || engine === 'exhaustive' && !catalog || busy || persist.isPending} onClick={() => { if (engine === 'exhaustive') getWorker(); requestOptions(split!, true) }}>{t('flexibleDuel.refreshSchedules')}</button>{busy ? <button type="button" className={button} onClick={() => { stop(); setUnavailable(true); setNotice('cancelled') }}>{t('flexibleDuel.cancel')}</button> : null}</div>
-        {busy ? <div role="status"><p>{engine === 'cp-sat' ? fastProfile === 'squads' ? t('flexibleDuel.checkingConditions', { checked: squadProgress?.checked ?? 0, total: squadProgress?.total ?? '…', seconds: elapsed }) : t('flexibleDuel.fastProgress', { profile: t(`flexibleDuel.kind.${fastProfile}`), seconds: elapsed }) : t(`flexibleDuel.phase.${progress?.phase ?? 'global'}`, { done: progress?.completed ?? 0, total: progress?.total ?? 0, seconds: elapsed })}</p><p className="text-xs">{t(engine === 'cp-sat' ? 'flexibleDuel.fastHelp' : 'flexibleDuel.exhaustiveHelp')}</p></div> : null}
+        <div className="flex flex-wrap gap-3"><button type="button" className={button} disabled={invalidLimits || !context.data || context.isFetching || busy || persist.isPending} onClick={() => void fastSearch()}>{t(!split && feasibility.current.attempt > 0 && notice === 'rosterLimited' ? 'flexibleDuel.continueConditions' : split ? 'flexibleDuel.shuffle' : 'flexibleDuel.search')}</button><button type="button" className={button} disabled={!split || invalidLimits || busy || persist.isPending} onClick={() => void fastSearch(split!, true)}>{t('flexibleDuel.refreshSchedules')}</button>{busy ? <button type="button" className={button} onClick={() => { stop(); setUnavailable(true); setNotice('cancelled') }}>{t('flexibleDuel.cancel')}</button> : null}</div>
+        {busy ? <div role="status"><p>{fastProfile === 'squads' ? t('flexibleDuel.checkingConditions', { checked: squadProgress?.checked ?? 0, total: squadProgress?.total ?? '…', seconds: elapsed }) : t('flexibleDuel.fastProgress', { profile: t(`flexibleDuel.kind.${fastProfile}`), seconds: elapsed })}</p><p className="text-xs">{t('flexibleDuel.fastHelp')}</p></div> : null}
         {context.isFetching ? <p role="status">{t('common.loading')}</p> : null}
         {context.error ? <ErrorState message={context.error.message} /> : null}
         {noScheduleNotice || feedbackError ? <div ref={feedbackRef} role="alert" tabIndex={-1} className={`scroll-mt-6 rounded-xl border p-4 text-sm focus:outline-none focus:ring-2 ${feedbackError ? 'border-red-300 bg-red-50 text-red-900 focus:ring-red-500' : 'border-amber-400 bg-amber-50 text-amber-950 focus:ring-amber-500'}`}>
           <p className="font-bold">{t(feedbackError ? 'error.title' : ['fastLimited', 'rosterLimited'].includes(noScheduleNotice) ? 'flexibleDuel.searchTimeLimitTitle' : noScheduleNotice === 'noValid' ? 'flexibleDuel.conditionsImpossibleTitle' : 'flexibleDuel.noScheduleTitle')}</p>
           <p className="mt-1">{feedbackError || t(`flexibleDuel.notice.${noScheduleNotice}`)}</p>
           {noScheduleNotice === 'rosterLimited' && squadProgress ? <p className="mt-2">{t('flexibleDuel.conditionCoverage', squadProgress)}</p> : null}
-          {!feedbackError ? <p className="mt-2 font-medium">{t('flexibleDuel.searchLimits', { partner: settings.maxPartnerMeetings ?? t('flexibleDuel.noLimit'), opponent: settings.maxOpponentMeetings ?? t('flexibleDuel.noLimit'), max: Math.round((settings.maxMatchProbability ?? .65) * 10000) / 100, min: Math.round((1 - (settings.maxMatchProbability ?? .65)) * 10000) / 100 })}</p> : null}
+          {!feedbackError ? <p className="mt-2 font-medium">{t('flexibleDuel.searchLimits', { partner: settings.maxPartnerMeetings ?? t('flexibleDuel.noLimit'), opponent: settings.maxOpponentMeetings ?? t('flexibleDuel.noLimit'), gap: settings.maxRatingDifference ?? t('flexibleDuel.noLimit'), max: Math.round((settings.maxMatchProbability ?? .65) * 10000) / 100, min: Math.round((1 - (settings.maxMatchProbability ?? .65)) * 10000) / 100 })}</p> : null}
         </div> : null}
         {notice && !noScheduleNotice ? <p role="status" className="text-sm text-green-900">{t(`flexibleDuel.notice.${notice}`, { count: options.length })}</p> : null}
         {split ? <div className="grid gap-4 sm:grid-cols-2">{split.squads.map((s, side) => <div key={side}><label className="text-sm font-bold">{t(side ? 'leagueDuel.nameB' : 'leagueDuel.nameA')}<input className="mt-1 block min-h-11 w-full rounded-lg border px-3" value={names[side]} maxLength={120} disabled={persist.isPending} onChange={e => { named.current = true; setNames(ns => side === 0 ? [e.target.value, ns[1]] : [ns[0], e.target.value]) }} /></label><div className="mt-3"><TeamColorField value={colors[side]!} disabled={persist.isPending} onChange={color => { setColors(side === 0 ? [color, colors[1]] : [colors[0], color]); persist.reset() }} /></div><ul className="mt-2 text-sm">{s.map(id => <li key={id}>{playerName(id)} <span className="text-gray-500">{pool.get(id) ? Math.round(pool.get(id)!.rating) : ''}</span></li>)}</ul></div>)}</div> : null}
-        <div className="grid gap-3 lg:grid-cols-3">{options.map(option => { const m = option.metrics, hardest = [...m.players].sort((a, b) => b.below40 - a.below40 || b.disadvantage - a.disadvantage)[0]!; return <label key={option.id} className={`rounded-lg border p-4 ${selected?.id === option.id ? 'border-green-600 bg-green-50' : 'border-gray-200'}`}>
+        <div className="grid gap-3 lg:grid-cols-2">{options.map(option => { const m = option.metrics, hardest = [...m.players].sort((a, b) => b.below40 - a.below40 || b.disadvantage - a.disadvantage)[0]!; return <label key={option.id} className={`rounded-lg border p-4 ${selected?.id === option.id ? 'border-green-600 bg-green-50' : 'border-gray-200'}`}>
           <span className="flex gap-2 font-bold"><input type="radio" name={`duel-${season.id}`} checked={selectedId === option.id} disabled={busy || persist.isPending || unavailable} onChange={() => { setSelectedId(option.id); persist.reset() }} />{t(`flexibleDuel.kind.${option.kind}`)}</span>
-          <p className="mt-2 text-xs text-gray-600">{t(`flexibleDuel.${engine === 'cp-sat' ? 'fastKindHelp' : 'kindHelp'}.${option.kind}`)}</p>
+          <p className="mt-2 text-xs text-gray-600">{t(`flexibleDuel.fastKindHelp.${option.kind}`)}</p>
           <p className="mt-2">{t('flexibleDuel.matchMetrics', { worst: (100 * m.worstFavorite).toFixed(1), within: m.within60, total: option.games.length, average: (100 * m.averageFavorite).toFixed(1) })}</p>
           <p className="mt-2 text-sm">{t('flexibleDuel.coverage', { covered: m.coveredOpponents, possible: size * size, partners: m.usedPartners })}</p>
           <p className="mt-2 text-sm">{t('flexibleDuel.hardest', { name: playerName(hardest.id), games: hardest.below40 })}</p>

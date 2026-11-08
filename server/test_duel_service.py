@@ -69,16 +69,16 @@ class ServiceTests(unittest.TestCase):
         with self.assertRaisesRegex(ApiError, "DUEL_STALE_DRAFT"):
             load_context(body, "token", self.reader)
 
-    def test_three_profiles_are_distinct_and_refresh_excludes_them(self):
+    def test_two_profiles_are_distinct_and_refresh_excludes_them(self):
         context = load_context(self.reader.body(), "token", self.reader)
         result = generate(context, threading.Event(), lambda _: None)
-        self.assertEqual([o["kind"] for o in result["options"]], ["balance", "variety", "experience"])
+        self.assertEqual([o["kind"] for o in result["options"]], ["balance", "variety"])
         identities = [o["id"] for o in result["options"]]
-        self.assertEqual(len(set(identities)), 3)
+        self.assertEqual(len(set(identities)), 2)
         context["excluded"] = identities
         refreshed = generate(context, threading.Event(), lambda _: None)
         self.assertTrue(all(o["id"] not in identities for o in refreshed["options"]))
-        self.assertEqual(len(refreshed["options"]), 3)
+        self.assertEqual(len(refreshed["options"]), 2)
 
     def test_match_probability_is_validated_and_never_relaxed_for_other_profiles(self):
         for value in (None, True, "65", .49, 1.01, float("nan"), float("inf")):
@@ -96,8 +96,30 @@ class ServiceTests(unittest.TestCase):
                 return solve(request, cancelled)
             with patch("server.duel_solver.solve", side_effect=checked):
                 result = generate(context, threading.Event(), lambda _: None)
-            self.assertEqual(len(result["options"]), 3)
-            self.assertEqual(len(seen), 3)
+            self.assertEqual(len(result["options"]), 2)
+            self.assertEqual(len(seen), 2)
+
+    def test_ranking_point_limit_validation_and_authoritative_squad_search(self):
+        for value in (-1, .5, True, "400", float("nan"), float("inf")):
+            body = self.reader.body(); body["settings"]["maxRatingDifference"] = value
+            with self.assertRaisesRegex(ApiError, "SOLVER_INVALID_LIMITS"):
+                load_context(body, "token", self.reader)
+        for value in (None, 0, 400):
+            body = self.reader.body(); body["settings"]["maxRatingDifference"] = value
+            context = load_context(body, "token", self.reader)
+            result = generate(context, threading.Event(), lambda _: None)
+            self.assertEqual(len(result["options"]), 2)
+        context["searchMode"] = "shuffle"
+        context["settings"]["maxRatingDifference"] = 400
+        # One player cannot participate in any four-player group within the cap.
+        context["pool"][self.reader.ids[0]]["rating"] = 1900.01
+        with patch("server.duel_solver.solve") as solver:
+            result = generate(context, threading.Event(), lambda _: None)
+        solver.assert_not_called()
+        self.assertEqual(result["status"], "INFEASIBLE")
+        self.assertEqual(len(result["provenInfeasibleSplitIds"]), 35)
+        context["searchMode"] = "fixed"
+        self.assertEqual(generate(context, threading.Event(), lambda _: None)["status"], "INFEASIBLE")
 
     def test_cancelled_search_returns_no_preview(self):
         event = threading.Event(); event.set()
@@ -107,7 +129,7 @@ class ServiceTests(unittest.TestCase):
     def test_fourteen_player_default_limits_return_valid_previews(self):
         reader = Reader(7)
         result = generate(load_context(reader.body(), "token", reader), threading.Event(), lambda _: None)
-        self.assertEqual(len(result["options"]), 3)
+        self.assertEqual(len(result["options"]), 2)
         for option in result["options"]:
             self.assertEqual(len(option["games"]), 21)
             self.assertEqual(len({tuple(sorted(g["homePoolPlayerIds"] + g["awayPoolPlayerIds"])) for g in option["games"]}), 21)
@@ -127,7 +149,7 @@ class ServiceTests(unittest.TestCase):
         result = generate(context, threading.Event(), lambda _: None)
         self.assertEqual(result["scope"], "roster")
         self.assertEqual(result["totalSplits"], 35)
-        self.assertEqual(len(result["options"]), 3)
+        self.assertEqual(len(result["options"]), 2)
         self.assertEqual(set(sum(result["squads"], [])), set(self.reader.ids))
         for option in result["options"]:
             self.assertTrue(all(set(g["homePoolPlayerIds"]) <= set(result["squads"][0]) and set(g["awayPoolPlayerIds"]) <= set(result["squads"][1]) for g in option["games"]))

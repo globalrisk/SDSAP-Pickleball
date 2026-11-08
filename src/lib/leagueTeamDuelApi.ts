@@ -8,7 +8,7 @@ import { buildTierMatchedDuelSchedule, compareDuelPlayers } from './leagueDuelSc
 import { partnershipKey } from './balanceTeams'
 import { fetchSeasonRosterIds } from './seasonRosterApi'
 import { isSeasonForecastBalanced } from './seasonForecast'
-import { FLEXIBLE_DUEL_VERSION, hasUniqueDuelMatchups, type FlexibleDuelPlan } from './flexibleDuel'
+import { FLEXIBLE_DUEL_VERSION, hasUniqueDuelMatchups, isCurrentDuelPlan, type FlexibleDuelPlan } from './flexibleDuel'
 import { DEFAULT_TEAM_COLORS, isTeamColor } from './teamColors'
 
 export async function fetchFlexibleDuelContext(leagueId: string, seasonId: string) {
@@ -26,6 +26,7 @@ export async function fetchFlexibleDuelContext(leagueId: string, seasonId: strin
 }
 
 export async function saveFlexibleDuelPlan(seasonId: string, plan: FlexibleDuelPlan, names: [string, string], revision: number, fingerprint: string, expectedHash: string | null, generate: boolean, colors?: [string, string]): Promise<{ hash: string; count: number }> {
+  if (!isCurrentDuelPlan(plan)) throw new Error('DUEL_STALE_DRAFT: Run a fresh schedule search before saving or generating.')
   if (!hasUniqueDuelMatchups(plan.option.games)) throw new Error('DUEL_DUPLICATE_MATCH: The same four players can play together only once per season.')
   if (colors?.some(color => !isTeamColor(color))) throw new Error('Choose valid team colors.')
   const { data, error } = await supabase.rpc(generate ? 'save_and_generate_league_duel_plan_atomic' : 'save_league_duel_plan_atomic', {

@@ -1,10 +1,39 @@
+import { findDuelSchedule } from './testFixtures/flexibleDuelReference'
 import { describe, expect, it } from 'vitest'
 import { chooseFastDuelSplit, decodeFastDuelOptions } from './fastDuel'
-import { findDuelSchedule, type DuelSearchInput } from './flexibleDuel'
+import { validateDuelSettings, type DuelSearchInput } from './flexibleDuel'
 
 const input = (): DuelSearchInput => ({ pool: Array.from({ length: 8 }, (_, i) => ({ id: `p${i}`, name: `P${i}`, rating: 1500, rating_deviation: 90, status: 'active', initial_rating: 1500, volatility: 0, created_at: '' })), inputKey: 'key', settings: { maxPartnerMeetings: 2, maxOpponentMeetings: 2 }, partnerHistory: [] })
 
 describe('Fast Team Duel client', () => {
+  it('validates ranking-point limits without accepting malformed values', () => {
+    const data = input()
+    for (const limit of [undefined, null, 0, 400]) expect(() => validateDuelSettings(4, { ...data.settings, maxRatingDifference: limit })).not.toThrow()
+    for (const limit of [-1, .5, NaN, Infinity, '400', true]) expect(() => validateDuelSettings(4, { ...data.settings, maxRatingDifference: limit as number })).toThrow('DUEL_RATING_LIMIT_RANGE')
+  })
+  it('checks the unrounded four-player spread and rejects removed option kinds', () => {
+    const data = input(), split = chooseFastDuelSplit(data, undefined, [], () => 0)!
+    const squads = split.squads.map(side => side.map(id => data.pool.find(p => p.id === id)!)) as [typeof data.pool, typeof data.pool]
+    const games = findDuelSchedule(squads, data.settings, .500001)!
+    const raw = { kind: 'balance', games, solver: { status: 'FEASIBLE', elapsedMs: 100 } }
+    // A global shift on one player keeps season probability in range, isolating the spread check.
+    data.pool[0]!.rating = 1500.25
+    data.settings.maxRatingDifference = 0
+    expect(() => decodeFastDuelOptions(data, split, [raw])).toThrow('INVALID_RESULT')
+    data.settings.maxRatingDifference = 400
+    data.pool[0]!.rating = 1900
+    data.settings.maxMatchProbability = 1
+    // Shift the opposite squad equally so the season balance remains symmetric.
+    data.pool.find(p => p.id === split.squads[1][0])!.rating = 1900
+    expect(decodeFastDuelOptions(data, split, [raw])).toHaveLength(1)
+    data.pool[0]!.rating = 1900.01
+    expect(() => decodeFastDuelOptions(data, split, [raw])).toThrow('INVALID_RESULT')
+    data.settings.maxRatingDifference = null
+    expect(decodeFastDuelOptions(data, split, [raw])).toHaveLength(1)
+    expect(() => decodeFastDuelOptions(data, split, [{ ...raw, kind: 'experience' }])).toThrow('INVALID_RESULT')
+    expect(() => decodeFastDuelOptions(data, split, [raw, raw, raw])).toThrow('INVALID_RESULT')
+  })
+
   it('chooses unseen complete balanced splits while preserving inputs', () => {
     const data = input(), before = structuredClone(data), first = chooseFastDuelSplit(data, undefined, [], () => 0)!
     const next = chooseFastDuelSplit(data, first, [first.id], () => .5)!

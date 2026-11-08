@@ -10,7 +10,7 @@ import en from '../i18n/locales/en.json'
 import vietnamese from '../i18n/locales/vi.json'
 import type { PoolPlayer, Season } from '../types'
 import skeletons from '../../server/duel_skeletons.json'
-import { duelScheduleId, measureDuelSchedule } from '../lib/flexibleDuel'
+import { duelScheduleId, measureDuelSchedule, type FlexibleDuelPlan } from '../lib/flexibleDuel'
 import type { LeagueDuelGame } from '../lib/leagueDuelSchedule'
 
 const mocks = vi.hoisted(() => ({ request: vi.fn(), search: vi.fn(), context: vi.fn(), save: vi.fn() }))
@@ -41,9 +41,9 @@ beforeEach(async () => {
   container = document.createElement('div'); document.body.append(container); root = createRoot(container)
 })
 afterEach(async () => { await act(async () => root.unmount()); client.clear(); container.remove(); vi.unstubAllGlobals() })
-async function render(language = 'en') {
+async function render(language = 'en', draft?: FlexibleDuelPlan) {
   await i18n.changeLanguage(language)
-  await act(async () => root.render(<QueryClientProvider client={client}><I18nextProvider i18n={i18n}><MemoryRouter><FlexibleDuelSetup season={season} rosterIds={rosterIds} teams={[]} fixtures={[]} hasFixtures={false} editable /></MemoryRouter></I18nextProvider></QueryClientProvider>))
+  await act(async () => root.render(<QueryClientProvider client={client}><I18nextProvider i18n={i18n}><MemoryRouter><FlexibleDuelSetup season={{ ...season, duel_draft_plan: draft ?? null }} rosterIds={rosterIds} teams={[]} fixtures={[]} hasFixtures={false} editable /></MemoryRouter></I18nextProvider></QueryClientProvider>))
   const opponent = container.querySelector<HTMLSelectElement>(`select[aria-label="${language === 'en' ? en.flexibleDuel.maxOpponentMeetings : vietnamese.flexibleDuel.maxOpponentMeetings}"]`)!
   await act(async () => { opponent.value = '2'; opponent.dispatchEvent(new Event('change', { bubbles: true })) })
 }
@@ -82,24 +82,45 @@ describe('Team Duel empty search feedback', () => {
     await act(async () => { await client.refetchQueries({ queryKey: ['flexible-duel-context'] }) })
     expect(container.querySelector('[role="alert"]')!.textContent).toContain(translation.flexibleDuel.notice[status === 'INFEASIBLE' ? 'noValid' : 'rosterLimited'])
   })
-  it('shows the roster-wide warning when exhaustive search finds no valid split', async () => {
-    class EmptySearchWorker {
-      onmessage?: (event: { data: unknown }) => void
-      onerror?: () => void
-      postMessage(message: { type: string; requestId: number }) {
-        if (message.type === 'search') this.onmessage?.({ data: { type: 'catalog', requestId: message.requestId, catalog: { globalBest: null, splits: [] } } })
-      }
-      terminate() {}
+  for (const engine of ['cp-sat', 'exhaustive', undefined] as const) for (const kind of ['balance', 'experience'] as const) it(`restores only current CP-SAT choices (${engine}, ${kind})`, async () => {
+    const squads: [PoolPlayer[], PoolPlayer[]] = [pool.slice(0, 7), pool.slice(7)]
+    const games: LeagueDuelGame[] = skeletons['7'].map((g, i) => ({ roundNumber: g.round, sequenceNumber: i + 1,
+      homePoolPlayerIds: g.home.map(p => squads[0][p]!.id) as [string, string], awayPoolPlayerIds: g.away.map(p => squads[1][p]!.id) as [string, string] }))
+    // Historical CP-SAT plans omitted maxRatingDifference; treat them as unlimited.
+    const settings = { maxPartnerMeetings: 2, maxOpponentMeetings: 2, maxMatchProbability: .65 }
+    const plan: FlexibleDuelPlan = { version: 1, engine, inputKey: JSON.stringify([1, context.key, settings]), settings,
+      splitId: 'saved', squads: squads.map(s => s.map(p => p.id)) as [string[], string[]],
+      option: { id: duelScheduleId(games), kind, games, metrics: measureDuelSchedule(squads, games) } }
+    await render('en', plan)
+    expect(container.querySelectorAll('input[type="radio"]')).toHaveLength(engine === 'cp-sat' && kind === 'balance' ? 1 : 0)
+    expect(container.textContent).not.toContain('Player experience')
+    const gap = container.querySelector<HTMLSelectElement>(`select[aria-label="${en.flexibleDuel.maxRatingDifference}"]`)!
+    expect(gap.value).toBe('none')
+    if (engine === 'cp-sat' && kind === 'balance') {
+      expect(container.textContent).toContain('Player details')
+      await act(async () => { gap.value = 'limit'; gap.dispatchEvent(new Event('change', { bubbles: true })) })
+      expect(container.querySelectorAll('input[type="radio"]')).toHaveLength(0)
+      expect(generationButton().disabled).toBe(true)
     }
-    vi.stubGlobal('Worker', EmptySearchWorker)
+  })
+  it('uses CP-SAT only and offers a ranking-point cap or No limit', async () => {
     await render()
-    const mode = container.querySelector<HTMLSelectElement>(`select[aria-label="${en.flexibleDuel.mode}"]`)!
-    await act(async () => { mode.value = 'exhaustive'; mode.dispatchEvent(new Event('change', { bubbles: true })) })
+    expect(container.querySelector('select[aria-label="Scheduling mode"]')).toBeNull()
+    expect(container.textContent).not.toContain('Exhaustive')
+    const gap = container.querySelector<HTMLSelectElement>(`select[aria-label="${en.flexibleDuel.maxRatingDifference}"]`)!
+    expect(gap.value).toBe('none')
+    await act(async () => { gap.value = 'limit'; gap.dispatchEvent(new Event('change', { bubbles: true })) })
+    const points = container.querySelector<HTMLInputElement>(`input[aria-label="${en.flexibleDuel.ratingDifferencePoints}"]`)!
+    expect(points.value).toBe('400')
+    mocks.search.mockResolvedValue({ options: [], status: 'INFEASIBLE', scope: 'roster' })
     await act(async () => searchButton().click())
-    const alert = container.querySelector('[role="alert"]')
-    expect(alert?.textContent).toContain(en.flexibleDuel.notice.noValid)
-    expect(document.activeElement).toBe(alert)
-    expect(generationButton().disabled).toBe(true)
+    expect(mocks.search.mock.calls[0]![0].settings.maxRatingDifference).toBe(400)
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('ranking-point difference 400')
+    await act(async () => { gap.value = 'none'; gap.dispatchEvent(new Event('change', { bubbles: true })) })
+    expect(container.querySelector(`input[aria-label="${en.flexibleDuel.ratingDifferencePoints}"]`)).toBeNull()
+    expect(container.querySelector('[role="alert"]')).toBeNull()
+    await act(async () => searchButton().click())
+    expect(mocks.search.mock.calls[1]![0].settings.maxRatingDifference).toBeNull()
   })
   it('does not show an unverified squad during or after an unfinished global check', async () => {
     let finish!: (value: unknown) => void

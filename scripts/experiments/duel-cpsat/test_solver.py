@@ -12,6 +12,37 @@ class SolverTests(unittest.TestCase):
         return {"size": 4, "settings": {"maxPartnerMeetings": 2, "maxOpponentMeetings": 2},
                 "probabilities": [.500000015] * 36, "seconds": 2, "workers": 1, **overrides}
 
+    def test_ranking_point_limit_is_inclusive_and_uses_unrounded_ratings(self):
+        from server.duel_solver import rating_difference_mask
+        settings = {"maxPartnerMeetings": 2, "maxOpponentMeetings": 2, "maxRatingDifference": 400}
+        for size in (4, 5, 6, 7):
+            ratings = [[1500.25 + (400 if i % 2 else 0) for i in range(size)]] * 2
+            self.assertTrue(all(rating_difference_mask(size, settings, ratings)))
+        ratings = [[1500.25, 1900.25, 1500.25, 1900.25]] * 2
+        result = solve(self.request(settings=settings, ratings=ratings, warmMs=10))
+        self.assertIsNotNone(result["solution"])
+        ratings[0] = [1500.25, 1900.26, 1500.25, 1900.25]
+        result = solve(self.request(settings=settings, ratings=ratings, warmMs=10))
+        self.assertEqual(result["status"], "INFEASIBLE")
+        self.assertIsNone(result["solution"])
+        settings["maxRatingDifference"] = None
+        self.assertIsNotNone(solve(self.request(settings=settings, ratings=ratings))["solution"])
+        settings["maxRatingDifference"] = 0
+        self.assertIsNotNone(solve(self.request(settings=settings, ratings=[[1500.25] * 4] * 2))["solution"])
+
+    def test_over_limit_warm_start_cannot_escape_an_expired_solver_budget(self):
+        settings = {"maxPartnerMeetings": 2, "maxOpponentMeetings": 2, "maxRatingDifference": 0}
+        ratings = [[1500, 1501, 1502, 1503], [1504, 1505, 1506, 1507]]
+        result = solve(self.request(settings=settings, ratings=ratings, seconds=.05, warmMs=1000))
+        self.assertIsNone(result["solution"])
+
+    def test_point_limit_requires_valid_settings_and_authoritative_ratings(self):
+        for maximum in (-1, 1.5, True, "400", float("nan"), float("inf")):
+            with self.assertRaises(ValueError):
+                solve(self.request(settings={"maxPartnerMeetings": 2, "maxOpponentMeetings": 2, "maxRatingDifference": maximum}))
+        with self.assertRaises(ValueError):
+            solve(self.request(settings={"maxPartnerMeetings": 2, "maxOpponentMeetings": 2, "maxRatingDifference": 400}))
+
     def test_ties_do_not_hide_a_one_sided_season(self):
         result = forecast([1, 1, 1, 0, 0, .1])
         self.assertAlmostEqual(result["home"], .1)

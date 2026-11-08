@@ -4,7 +4,7 @@ import { performance } from 'node:perf_hooks'
 
 const vite = await createServer({ server: { middlewareMode: true, hmr: false, ws: false } })
 try {
-  const { findDuelSchedule } = await vite.ssrLoadModule('/src/lib/flexibleDuel.ts')
+  const { findDuelSchedule } = await vite.ssrLoadModule('/src/lib/testFixtures/flexibleDuelReference.ts')
   parentPort.postMessage({ type: 'ready' })
   parentPort.once('message', () => {
     const started = performance.now()

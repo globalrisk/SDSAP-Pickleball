@@ -45,7 +45,7 @@ export async function requestFastDuel(input: DuelSearchInput, split: DuelSplit |
           if (!event.result) throw new Error('SOLVER_CANCELLED')
           if (search) {
             const result = event.result, total = fastDuelSplitCount(input.pool.length / 2)
-            if (result.scope !== 'roster' || result.totalSplits !== total || !Array.isArray(result.options) || result.options.length > 3
+            if (result.scope !== 'roster' || result.totalSplits !== total || !Array.isArray(result.options) || result.options.length > 2
               || !Array.isArray(result.provenInfeasibleSplitIds) || result.provenInfeasibleSplitIds.length > total
               || new Set(result.provenInfeasibleSplitIds).size !== result.provenInfeasibleSplitIds.length
               || !result.provenInfeasibleSplitIds.every((id: unknown) => isFastDuelSplitId(input, id))) throw new Error('SOLVER_INVALID_RESULT')

@@ -33,6 +33,23 @@ def balanced(result):
     return result["decisiveHome"] is not None and .45 - EPS <= result["decisiveHome"] <= .55 + EPS
 
 
+def rating_difference_mask(size, settings, ratings=None):
+    """Allowed doubles matchups, in the same edge order as probabilities."""
+    maximum = settings.get("maxRatingDifference")
+    if maximum is not None and (type(maximum) not in (int, float) or not math.isfinite(maximum) or maximum < 0 or maximum != math.floor(maximum)):
+        raise ValueError("Invalid ranking-point limit")
+    edges = list(itertools.combinations(range(size), 2))
+    if maximum is None:
+        return [True] * len(edges) ** 2
+    if not isinstance(ratings, list) or len(ratings) != 2 or any(not isinstance(side, list) or len(side) != size for side in ratings):
+        raise ValueError("Authoritative ratings required for ranking-point limit")
+    if any(type(r) not in (float, int) or not math.isfinite(r) for side in ratings for r in side):
+        raise ValueError("Invalid authoritative rating")
+    return [max(values) - min(values) <= maximum
+            for h in edges for a in edges
+            for values in [[ratings[0][i] for i in h] + [ratings[1][i] for i in a]]]
+
+
 def solve(request, cancelled=None):
     cancelled = cancelled or threading.Event()
     started = time.perf_counter()
@@ -52,6 +69,7 @@ def solve(request, cancelled=None):
     game_count = len(edges) ** 2
     if len(probabilities) != game_count or any(not math.isfinite(p) or not 0 <= p <= 1 for p in probabilities):
         raise ValueError("Expected one authoritative probability per pair of doubles lineups")
+    allowed = rating_difference_mask(size, settings, request.get("ratings"))
     costs = [max(p, 1 - p) for p in probabilities]
     levels = sorted(set(costs))
     ranks = {cost: i for i, cost in enumerate(levels)}
@@ -79,7 +97,7 @@ def solve(request, cancelled=None):
                 continue
             for a, away in enumerate(edges):
                 g = h * len(edges) + a
-                if costs[g] > upper + EPS:
+                if not allowed[g] or costs[g] > upper + EPS:
                     continue
                 x = model.new_bool_var(f"r{r}_g{g}")
                 variables[r, g] = x
@@ -162,30 +180,10 @@ def solve(request, cancelled=None):
             repeat = model.new_int_var(0, opponent_cap * (opponent_cap - 1) // 2, f"repeats_{i}")
             model.add_element(count, [n * (n - 1) // 2 for n in range(opponent_cap + 1)], repeat)
             repeats.append(repeat)
-        hard = []
-        disadvantages = []
-        for player in range(2 * size):
-            side, index = divmod(player, size)
-            hard_games, penalties = [], []
-            for (r, g), x in variables.items():
-                pair = edges[g // len(edges)] if side == 0 else edges[g % len(edges)]
-                if index not in pair:
-                    continue
-                probability = probabilities[g] if side == 0 else 1 - probabilities[g]
-                if probability < .4:
-                    hard_games.append(x)
-                penalties.append(round(max(0, .5 - probability) * scale) * x)
-            hard.append(sum(hard_games))
-            disadvantages.append(sum(penalties))
-        max_hard = model.new_int_var(0, size - 1, "max_hard")
-        max_disadvantage = model.new_int_var(0, (size - 1) * scale, "max_disadvantage")
-        model.add_max_equality(max_hard, hard)
-        model.add_max_equality(max_disadvantage, disadvantages)
         objectives = {
             "primary": [worst],
             "balance": [worst, outside, mean_cost, history],
             "variety": [-covered, -used_partners, sum(repeats), worst, mean_cost, history],
-            "experience": [max_hard, max_disadvantage, worst, mean_cost, history],
         }[profile]
     model.minimize(objectives[0])
     build_ms = (time.perf_counter() - started) * 1000
@@ -209,18 +207,12 @@ def solve(request, cancelled=None):
         indices = [edges.index(tuple(sorted(g["home"]))) * len(edges) + edges.index(tuple(sorted(g["away"]))) for g in result["games"]]
         partner_counts = [[0] * len(edges), [0] * len(edges)]
         opponent_meetings = [[0] * size for _ in range(size)]
-        hard_games, penalty = [0] * (size * 2), [0] * (size * 2)
         for g in indices:
             h, a = divmod(g, len(edges))
             partner_counts[0][h] += 1; partner_counts[1][a] += 1
             for p in edges[h]:
                 for q in edges[a]:
                     opponent_meetings[p][q] += 1
-            for side, pair in enumerate((edges[h], edges[a])):
-                p = probabilities[g] if side == 0 else 1 - probabilities[g]
-                for i in pair:
-                    hard_games[side * size + i] += int(p < .4)
-                    penalty[side * size + i] += round(max(0, .5 - p) * scale)
         balance_rank = (ranks[result["worstFavorite"]], sum(costs[g] > .6 + EPS for g in indices), sum(round(costs[g] * scale) for g in indices))
         history_rank = sum(history_weights[s][e] for s in range(2) for e, count in enumerate(partner_counts[s]) if count)
         if profile == "primary":
@@ -229,7 +221,7 @@ def solve(request, cancelled=None):
             return (*balance_rank, history_rank)
         if profile == "variety":
             return (-sum(c > 0 for row in opponent_meetings for c in row), -sum(c > 0 for row in partner_counts for c in row), sum(c * (c - 1) // 2 for row in opponent_meetings for c in row), balance_rank[0], balance_rank[2], history_rank)
-        return (max(hard_games), max(penalty), balance_rank[0], balance_rank[2], history_rank)
+        raise ValueError("Unknown solver profile")
 
     # A structural seed gives CP-SAT an immediate valid incumbent rather than
     # spending most of a short request budget rediscovering basic feasibility.
@@ -245,7 +237,7 @@ def solve(request, cancelled=None):
         for game in games:
             g = edge_indices[tuple(game["home"])] * len(edges) + edge_indices[tuple(game["away"])]
             count_vector[g] += 1; ps.append(probabilities[g])
-        if not games or max(count_vector) > 1 or tuple(count_vector) in excluded or max(max(p, 1 - p) for p in ps) > upper + EPS:
+        if any(count and not allowed[g] for g, count in enumerate(count_vector)) or not games or max(count_vector) > 1 or tuple(count_vector) in excluded or max(max(p, 1 - p) for p in ps) > upper + EPS:
             continue
         # Recipes meet 2/2. Stricter partner caps need a separate check.
         pc = [[0] * len(edges), [0] * len(edges)]
