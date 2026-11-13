@@ -1514,7 +1514,10 @@
       "variety": "Đa dạng hơn"
     },
     "matchMetrics": "Tỷ lệ đội cửa trên cao nhất: {{worst}}%. {{within}} / {{total}} trận trong khoảng 40/60. Trung bình cửa trên: {{average}}%.",
-    "coverage": "{{covered}} / {{possible}} cặp đối thủ gặp nhau; {{partners}} cặp đồng đội thi đấu.",
+    "opponentCoverage": "Đối thủ · {{covered}}/{{possible}} cặp",
+    "partnerCoverage": "Đồng đội · {{covered}}/{{possible}} cặp",
+    "partnersPerPlayer": "Số đồng đội khác nhau mỗi người được ghép cặp · {{partners}}",
+    "partnersPerPlayerRange": "Số đồng đội khác nhau mỗi người được ghép cặp · {{min}}–{{max}}",
     "hardest": "Lịch khó nhất: {{name}} có {{games}} trận với tỷ lệ thắng dưới 40%.",
     "actualCaps": "Mức lặp thực tế cao nhất: {{partner}} trận cùng đồng đội, {{opponent}} trận gặp đối thủ.",
     "details": "Xem trận đấu, số lượt và độ khó",
@@ -1524,7 +1527,7 @@
     "sideB": "Đội B",
     "chance": "Tỷ lệ thắng A / B",
     "playerDetails": "Chi tiết người chơi",
-    "playerRow": "{{name}}: {{games}} trận, kỳ vọng thắng {{wins}}, {{hard}} trận dưới 40%; {{partners}} đồng đội, {{opponents}} đối thủ.",
+    "playerRow": "{{name}}: {{games}} trận, kỳ vọng thắng {{wins}}, {{hard}} trận dưới 40%. {{partners}} đồng đội và {{opponents}} đối thủ khác nhau.",
     "opponentMatrix": "Số trận đối đầu",
     "partnerMatrix": "Số trận cùng đồng đội",
     "missing": "Các cặp đối thủ không gặp nhau:",
@@ -1556,7 +1559,7 @@
     "solverFeasible": "Tốt nhất tìm được trong thời gian cho phép; chưa chứng minh tối ưu.",
     "fastKindHelp": {
       "balance": "Giảm trận lệch nhất, sau đó giảm số trận ngoài khoảng 40/60 và độ lệch trung bình.",
-      "variety": "Tăng số cặp đồng đội và đối thủ trong phạm vi thêm năm điểm phần trăm so với phương án cân bằng nhất tìm được."
+      "variety": "Ưu tiên tăng số cặp đối đầu, sau đó tăng số đồng đội khác nhau cho người có ít đồng đội nhất. Mức chênh lệch so với phương án cân bằng nhất tìm được tối đa là năm điểm phần trăm."
     },
     "fastErrors": {
       "SOLVER_UNAUTHORIZED": "Đăng nhập lại trước khi tìm.",

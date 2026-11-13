@@ -1520,7 +1520,10 @@
       "variety": "More variety"
     },
     "matchMetrics": "Worst favorite: {{worst}}%. {{within}} / {{total}} games within 40/60. Average favorite: {{average}}%.",
-    "coverage": "{{covered}} / {{possible}} opponent pairs meet; {{partners}} teammate pairs play.",
+    "opponentCoverage": "Opponents · {{covered}}/{{possible}} pairs",
+    "partnerCoverage": "Partners · {{covered}}/{{possible}} pairs",
+    "partnersPerPlayer": "Distinct partners per player · {{partners}}",
+    "partnersPerPlayerRange": "Distinct partners per player · {{min}}–{{max}}",
     "hardest": "Hardest schedule: {{name}} has {{games}} games below a 40% win chance.",
     "actualCaps": "Actual maximum: {{partner}} games with one partner, {{opponent}} against one opponent.",
     "details": "Inspect matches, counts, and player difficulty",
@@ -1530,7 +1533,7 @@
     "sideB": "Squad B",
     "chance": "A / B win chance",
     "playerDetails": "Player details",
-    "playerRow": "{{name}}: {{games}} games, {{wins}} expected wins, {{hard}} below 40%; {{partners}} partners, {{opponents}} opponents.",
+    "playerRow": "{{name}}: {{games}} games, {{wins}} expected wins, {{hard}} below 40%. {{partners}} distinct partners, {{opponents}} distinct opponents.",
     "opponentMatrix": "Opponent meeting counts",
     "partnerMatrix": "Partner meeting counts",
     "missing": "Opponent pairs who never meet:",
@@ -1562,7 +1565,7 @@
     "solverFeasible": "Best found within the time budget; optimality not proved.",
     "fastKindHelp": {
       "balance": "Improves the worst matchup, then games outside 40/60 and mean imbalance.",
-      "variety": "Improves opponent and partner coverage within five percentage points of the closest-games result."
+      "variety": "Prioritizes more opponent pairs, then more partners for the players with the fewest. Stays within five percentage points of the closest-games result."
     },
     "fastErrors": {
       "SOLVER_UNAUTHORIZED": "Sign in again before searching.",

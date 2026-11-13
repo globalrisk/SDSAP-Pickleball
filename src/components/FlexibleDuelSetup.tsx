@@ -172,16 +172,28 @@ export function FlexibleDuelSetup({ season, rosterIds, teams, fixtures, hasFixtu
         </div> : null}
         {notice && !noScheduleNotice ? <p role="status" className="text-sm text-green-900">{t(`flexibleDuel.notice.${notice}`, { count: options.length })}</p> : null}
         {split ? <div className="grid gap-4 sm:grid-cols-2">{split.squads.map((s, side) => <div key={side}><label className="text-sm font-bold">{t(side ? 'leagueDuel.nameB' : 'leagueDuel.nameA')}<input className="mt-1 block min-h-11 w-full rounded-lg border px-3" value={names[side]} maxLength={120} disabled={persist.isPending} onChange={e => { named.current = true; setNames(ns => side === 0 ? [e.target.value, ns[1]] : [ns[0], e.target.value]) }} /></label><div className="mt-3"><TeamColorField value={colors[side]!} disabled={persist.isPending} onChange={color => { setColors(side === 0 ? [color, colors[1]] : [colors[0], color]); persist.reset() }} /></div><ul className="mt-2 text-sm">{s.map(id => <li key={id}>{playerName(id)} <span className="text-gray-500">{pool.get(id) ? Math.round(pool.get(id)!.rating) : ''}</span></li>)}</ul></div>)}</div> : null}
-        <div className="grid gap-3 lg:grid-cols-2">{options.map(option => { const m = option.metrics, hardest = [...m.players].sort((a, b) => b.below40 - a.below40 || b.disadvantage - a.disadvantage)[0]!; return <label key={option.id} className={`rounded-lg border p-4 ${selected?.id === option.id ? 'border-green-600 bg-green-50' : 'border-gray-200'}`}>
-          <span className="flex gap-2 font-bold"><input type="radio" name={`duel-${season.id}`} checked={selectedId === option.id} disabled={busy || persist.isPending || unavailable} onChange={() => { setSelectedId(option.id); persist.reset() }} />{t(`flexibleDuel.kind.${option.kind}`)}</span>
-          <p className="mt-2 text-xs text-gray-600">{t(`flexibleDuel.fastKindHelp.${option.kind}`)}</p>
-          <p className="mt-2">{t('flexibleDuel.matchMetrics', { worst: (100 * m.worstFavorite).toFixed(1), within: m.within60, total: option.games.length, average: (100 * m.averageFavorite).toFixed(1) })}</p>
-          <p className="mt-2 text-sm">{t('flexibleDuel.coverage', { covered: m.coveredOpponents, possible: size * size, partners: m.usedPartners })}</p>
-          <p className="mt-2 text-sm">{t('flexibleDuel.hardest', { name: playerName(hardest.id), games: hardest.below40 })}</p>
-          <p className="mt-2 text-xs">{t('flexibleDuel.actualCaps', { partner: m.maxPartnerMeetings, opponent: m.maxOpponentMeetings })}</p>
-          <div className="mt-2 text-xs">{option.solver ? t(option.solver.status === 'OPTIMAL' ? 'flexibleDuel.solverOptimal' : 'flexibleDuel.solverFeasible') : null}</div>
-          <div className="mt-3"><SeasonForecastSummary forecast={m.forecast} names={names} /></div>
-        </label> })}</div>
+        <div className="grid gap-3 lg:grid-cols-2">{options.map(option => {
+          const m = option.metrics
+          const hardest = [...m.players].sort((a, b) => b.below40 - a.below40 || b.disadvantage - a.disadvantage)[0]!
+          const partnerCounts = m.players.map(player => player.partners)
+          const minPartners = Math.min(...partnerCounts), maxPartners = Math.max(...partnerCounts)
+          return <label key={option.id} className={`rounded-lg border p-4 ${selected?.id === option.id ? 'border-green-600 bg-green-50' : 'border-gray-200'}`}>
+            <span className="flex gap-2 font-bold"><input type="radio" name={`duel-${season.id}`} checked={selectedId === option.id} disabled={busy || persist.isPending || unavailable} onChange={() => { setSelectedId(option.id); persist.reset() }} />{t(`flexibleDuel.kind.${option.kind}`)}</span>
+            <p className="mt-2 text-xs text-gray-600">{t(`flexibleDuel.fastKindHelp.${option.kind}`)}</p>
+            <p className="mt-2">{t('flexibleDuel.matchMetrics', { worst: (100 * m.worstFavorite).toFixed(1), within: m.within60, total: option.games.length, average: (100 * m.averageFavorite).toFixed(1) })}</p>
+            <div className="mt-2 text-sm">
+              <p>{t('flexibleDuel.opponentCoverage', { covered: m.coveredOpponents, possible: size * size })}</p>
+              <p>{t('flexibleDuel.partnerCoverage', { covered: m.usedPartners, possible: size * (size - 1) })}</p>
+              <p>{minPartners === maxPartners
+                ? t('flexibleDuel.partnersPerPlayer', { partners: minPartners })
+                : t('flexibleDuel.partnersPerPlayerRange', { min: minPartners, max: maxPartners })}</p>
+            </div>
+            <p className="mt-2 text-sm">{t('flexibleDuel.hardest', { name: playerName(hardest.id), games: hardest.below40 })}</p>
+            <p className="mt-2 text-xs">{t('flexibleDuel.actualCaps', { partner: m.maxPartnerMeetings, opponent: m.maxOpponentMeetings })}</p>
+            <div className="mt-2 text-xs">{option.solver ? t(option.solver.status === 'OPTIMAL' ? 'flexibleDuel.solverOptimal' : 'flexibleDuel.solverFeasible') : null}</div>
+            <div className="mt-3"><SeasonForecastSummary forecast={m.forecast} names={names} /></div>
+          </label>
+        })}</div>
         {selected && split ? <details className="rounded-lg border p-3"><summary className="cursor-pointer font-semibold">{t('flexibleDuel.details')}</summary><div className="mt-3 overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr>{['game', 'round', 'sideA', 'sideB', 'chance'].map(key => <th key={key} className="p-2">{t(`flexibleDuel.${key}`)}</th>)}</tr></thead><tbody>{selected.games.map(g => { return <tr key={g.sequenceNumber} className="border-t"><td className="p-2">{g.sequenceNumber}</td><td className="p-2">{g.roundNumber}</td><td className="p-2">{g.homePoolPlayerIds.map(playerName).join(' + ')}</td><td className="p-2">{g.awayPoolPlayerIds.map(playerName).join(' + ')}</td><td className="p-2"><GameChance ids={[g.homePoolPlayerIds, g.awayPoolPlayerIds]} pool={context.data?.pool ?? []} /></td></tr> })}</tbody></table></div>
           <h4 className="mt-4 font-semibold">{t('flexibleDuel.playerDetails')}</h4><ul className="space-y-1 text-sm">{selected.metrics.players.map(p => <li key={p.id}>{t('flexibleDuel.playerRow', { name: playerName(p.id), games: p.games, wins: p.expectedWins.toFixed(1), hard: p.below40, partners: p.partners, opponents: p.opponents })}</li>)}</ul>
           <h4 className="mt-4 font-semibold">{t('flexibleDuel.opponentMatrix')}</h4><CountMatrix names={split.squads.map(s => s.map(playerName)) as [string[], string[]]} counts={selected.metrics.opponentCounts} />
