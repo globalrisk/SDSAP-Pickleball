@@ -126,6 +126,20 @@ class ServiceTests(unittest.TestCase):
         result = generate(load_context(self.reader.body(), "token", self.reader), event, lambda _: None)
         self.assertIsNone(result)
 
+    def test_long_variety_budget_reaches_fixed_and_shuffle_solves(self):
+        from server.duel_solver import solve
+        for context in (load_context(self.reader.body(), "token", self.reader), self.shuffle_context()):
+            with self.subTest(mode=context["searchMode"]):
+                budgets = {}
+                def check(request, cancelled):
+                    budgets[request["profile"]] = request["seconds"]
+                    return solve({**request, "seconds": min(request["seconds"], 3)}, cancelled)
+                with patch("server.duel_solver.solve", side_effect=check):
+                    result = generate(context, threading.Event(), lambda _: None)
+                self.assertEqual([option["kind"] for option in result["options"]], ["balance", "variety"])
+                self.assertGreater(budgets["variety"], 239)
+                self.assertLessEqual(budgets["variety"], 240)
+
     def test_fourteen_player_default_limits_return_valid_previews(self):
         reader = Reader(7)
         result = generate(load_context(reader.body(), "token", reader), threading.Event(), lambda _: None)

@@ -5,7 +5,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler
 
-from server.duel_service import ApiError, generate, load_context
+from server.duel_service import ApiError, STREAM_TIMEOUT_SECONDS, generate, load_context
 
 CAPACITY = threading.BoundedSemaphore(1)
 
@@ -30,6 +30,7 @@ class handler(BaseHTTPRequestHandler):
             self.send_json(503, {"error": "SOLVER_NOT_CONFIGURED"})
 
     def do_POST(self):
+        started = time.monotonic()
         authorization = self.headers.get("Authorization", "")
         if not authorization.startswith("Bearer "):
             self.send_json(401, {"error": "SOLVER_UNAUTHORIZED"}); return
@@ -65,9 +66,8 @@ class handler(BaseHTTPRequestHandler):
         self.send_header("X-Accel-Buffering", "no")
         self.end_headers()
         worker.start()
-        started = time.monotonic()
         try:
-            while time.monotonic() - started < 50:
+            while time.monotonic() - started < STREAM_TIMEOUT_SECONDS:
                 try:
                     event = events.get(timeout=.5)
                 except queue.Empty:

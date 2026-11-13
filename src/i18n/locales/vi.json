@@ -1554,6 +1554,7 @@
     "seasonBalanceLimit": "Mọi phương án giữ xác suất thắng cả mùa trong khoảng 45%–55%, không tính đồng vô địch.",
     "invalidLimits": "Chọn giới hạn lặp hợp lệ, xác suất trận từ 50% đến 100%, và giới hạn chênh lệch điểm là số nguyên không âm hoặc Không giới hạn.",
     "fastHelp": "Kiểm tra các cách chia đội theo tất cả điều kiện, rồi chỉ hiển thị đội đã có lịch đấu hợp lệ. Tự bỏ qua các cách chia bất khả thi. Nếu hết thời gian, kết quả vẫn chưa được kết luận; Tiếp tục kiểm tra điều kiện sẽ tìm tiếp mà không kiểm tra lại các cách chia đã được chứng minh bất khả thi.",
+    "varietySearchHelp": "Tìm phương án đa dạng hơn có thể mất tối đa bốn phút. Bạn có thể hủy bất cứ lúc nào.",
     "fastProgress": "Đang tìm {{profile}} · {{seconds}} giây",
     "solverOptimal": "Đã chứng minh tối ưu các mục tiêu của bộ giải cho hai đội này.",
     "solverFeasible": "Tốt nhất tìm được trong thời gian cho phép; chưa chứng minh tối ưu.",

@@ -1,7 +1,7 @@
 {
   "functions": {
     "api/duel-solve.py": {
-      "maxDuration": 60,
+      "maxDuration": 300,
       "excludeFiles": "{node_modules/**,dist/**,artifacts.local/**,src/**,supabase/**,docs/**,scripts/**,.git/**}"
     }
   },
