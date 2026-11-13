@@ -35,7 +35,7 @@ Every candidate satisfies the hard **55/45 season limit**: neither squad exceeds
 For the selected squads, up to two distinct schedules appear. More variety stays within five percentage points of the Closest games result and within every hard limit:
 
 - **Closest games** minimizes worst favorite probability, then games outside 40/60, then mean imbalance.
-- **More variety** maximizes individual opponent coverage, then maximizes the fewest distinct partners any player gets, then maximizes total distinct partnerships and minimizes opponent repetitions.
+- **More variety** maximizes the total number of distinct partner and opponent pairs, with each pair counting equally. Ties favor the highest minimum number of distinct people any player shares the court with, then fewer concentrated repeat meetings and closer games.
 
 Only actual matchup differences count as distinct. Fewer available options are explained. Refresh excludes previously shown schedules until its cycle is exhausted. Partnership history is a final tie breaker and counts only pairs actually used in the proposed schedule.
 

@@ -143,9 +143,11 @@ def solve(request, cancelled=None):
     min_partners = math.ceil((size - 1) / partner_cap)
     for count in player_partner_counts:
         model.add(count >= min_partners)
-    for p in range(size):
-        model.add(sum(opponent_used[p]) >= math.ceil(2 * (size - 1) / opponent_cap))
-        model.add(sum(opponent_used[q][p] for q in range(size)) >= math.ceil(2 * (size - 1) / opponent_cap))
+    player_opponent_counts = [sum(row) for row in opponent_used] + [
+        sum(row[p] for row in opponent_used) for p in range(size)
+    ]
+    for count in player_opponent_counts:
+        model.add(count >= math.ceil(2 * (size - 1) / opponent_cap))
     counts = []
     for g, xs in enumerate(by_game):
         count = model.new_int_var(0, 1, f"count_{g}")
@@ -179,17 +181,25 @@ def solve(request, cancelled=None):
         elif profile == "variety":
             covered = sum(used for row in opponent_used for used in row)
             used_partners = sum(used for side in partner_used for used in side)
-            partner_floor = model.new_int_var(min_partners, size - 1, "fewest_distinct_partners")
-            model.add_min_equality(partner_floor, player_partner_counts)
-            # Pack the three coverage priorities so all guide the first search.
-            # One point at each priority outweighs the entire range below it.
-            partner_weight = 2 * len(edges) + 1
-            coverage_score = covered * size * partner_weight + partner_floor * partner_weight + used_partners
+            contact_floor = model.new_int_var(0, 2 * size - 1, "fewest_distinct_people")
+            model.add_min_equality(contact_floor, [
+                p + o for p, o in zip(player_partner_counts, player_opponent_counts)
+            ])
+            # One extra pair outweighs any change in the per-player minimum.
+            coverage_score = (covered + used_partners) * (2 * size) + contact_floor
+            partner_meeting_counts = []
+            for side, pairs in enumerate(partners):
+                for edge, games in enumerate(pairs):
+                    count = model.new_int_var(0, partner_cap, f"partner_count_{side}_{edge}")
+                    model.add(count == sum(games))
+                    partner_meeting_counts.append(count)
             repeats = []
-            for i, count in enumerate(opponent_counts):
-                repeat = model.new_int_var(0, opponent_cap * (opponent_cap - 1) // 2, f"repeats_{i}")
-                model.add_element(count, [n * (n - 1) // 2 for n in range(opponent_cap + 1)], repeat)
-                repeats.append(repeat)
+            for counts_by_role, cap in ((partner_meeting_counts, partner_cap), (opponent_counts, opponent_cap)):
+                penalties = [n * (n - 1) // 2 for n in range(cap + 1)]
+                for count in counts_by_role:
+                    repeat = model.new_int_var(0, penalties[-1], f"repeats_{len(repeats)}")
+                    model.add_element(count, penalties, repeat)
+                    repeats.append(repeat)
             objectives = [-coverage_score, sum(repeats), worst, mean_cost, history]
         else:
             raise ValueError("Unknown solver profile")
@@ -228,11 +238,15 @@ def solve(request, cancelled=None):
         if profile == "balance":
             return (*balance_rank, history_rank)
         if profile == "variety":
-            fewest_partners = min(sum(row[e] > 0 for e in indices) for row in partner_counts for indices in player_edges)
-            return (-sum(c > 0 for row in opponent_meetings for c in row), -fewest_partners,
-                    -sum(c > 0 for row in partner_counts for c in row),
-                    sum(c * (c - 1) // 2 for row in opponent_meetings for c in row),
-                    balance_rank[0], balance_rank[2], history_rank)
+            meetings = [c for row in partner_counts + opponent_meetings for c in row]
+            distinct_pairs = sum(c > 0 for c in meetings)
+            distinct_partners = [sum(row[e] > 0 for e in indices) for row in partner_counts for indices in player_edges]
+            distinct_opponents = [sum(c > 0 for c in row) for row in opponent_meetings] + [
+                sum(row[p] > 0 for row in opponent_meetings) for p in range(size)
+            ]
+            fewest_people = min(p + o for p, o in zip(distinct_partners, distinct_opponents))
+            repeat_penalty = sum(c * (c - 1) // 2 for c in meetings)
+            return (-distinct_pairs, -fewest_people, repeat_penalty, balance_rank[0], balance_rank[2], history_rank)
         raise ValueError("Unknown solver profile")
 
     # A structural seed gives CP-SAT an immediate valid incumbent rather than

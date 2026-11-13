@@ -1559,7 +1559,7 @@
     "solverFeasible": "Tốt nhất tìm được trong thời gian cho phép; chưa chứng minh tối ưu.",
     "fastKindHelp": {
       "balance": "Giảm trận lệch nhất, sau đó giảm số trận ngoài khoảng 40/60 và độ lệch trung bình.",
-      "variety": "Ưu tiên tăng số cặp đối đầu, sau đó tăng số đồng đội khác nhau cho người có ít đồng đội nhất. Mức chênh lệch so với phương án cân bằng nhất tìm được tối đa là năm điểm phần trăm."
+      "variety": "Tính mỗi cặp đồng đội hoặc đối thủ khác nhau như nhau. Nếu tổng số cặp bằng nhau, ưu tiên tăng số người chơi cùng sân cho người gặp ít người nhất. Mức chênh lệch so với phương án cân bằng nhất tìm được tối đa là năm điểm phần trăm."
     },
     "fastErrors": {
       "SOLVER_UNAUTHORIZED": "Đăng nhập lại trước khi tìm.",

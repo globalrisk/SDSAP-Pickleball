@@ -63,26 +63,34 @@ class SolverTests(unittest.TestCase):
         self.assertEqual(len({tuple(sorted(g["home"])) + tuple(p + 4 for p in sorted(g["away"])) for g in result["solution"]["games"]}), 6)
         self.assertTrue(balanced(result["solution"]["forecast"]))
 
-    def test_variety_prioritizes_the_player_with_fewest_partners_over_total_partnerships(self):
-        size = 6
-        edges = list(itertools.combinations(range(size), 2))
-        # Both schedules cover 35 of 36 opponent pairs. The first gives every
-        # player at least 3 partners, while the second has more partnerships
-        # overall but leaves one player with only 2.
-        fair = {11, 14, 55, 60, 62, 85, 88, 92, 150, 168, 173, 186, 188, 190, 204}
-        more_total = {13, 41, 46, 47, 67, 82, 89, 116, 122, 137, 157, 165, 190, 200, 208}
+    def test_variety_counts_partners_and_opponents_equally(self):
+        # Four extra partnerships outweigh two missing opponent pairs.
+        preferred = {0, 1, 8, 27, 34, 35}
+        alternative = {0, 2, 3, 32, 33, 35}
+        self.assertEqual(self.variety_coverage(preferred | alternative), (14, 10, 5))
+
+    def test_variety_breaks_coverage_ties_by_fewest_distinct_people(self):
+        # Both schedules cover 22 pairs. The preferred schedule gives every
+        # player at least five distinct people, compared with four in the other.
+        preferred = {0, 1, 5, 30, 34, 35}
+        alternative = {0, 1, 2, 33, 34, 35}
+        self.assertEqual(self.variety_coverage(preferred | alternative), (16, 6, 5))
+
+    def variety_coverage(self, allowed):
         result = solve(self.request(
-            size=size, profile="variety", maxWorst=.65, seconds=8,
+            profile="variety", maxWorst=.65,
             settings={"maxPartnerMeetings": None, "maxOpponentMeetings": None},
-            probabilities=[.5 if i in fair | more_total else .9 for i in range(len(edges) ** 2)],
+            probabilities=[.5 if i in allowed else .9 for i in range(36)],
         ))
         self.assertEqual(result["status"], "OPTIMAL")
         games = result["solution"]["games"]
-        opponent_pairs = {(a, b) for g in games for a in g["home"] for b in g["away"]}
-        partnerships = [{tuple(g[side]) for g in games} for side in ("home", "away")]
-        self.assertEqual(len(opponent_pairs), 35)
-        self.assertEqual(min(sum(p in pair for pair in pairs) for pairs in partnerships for p in range(size)), 3)
-        self.assertEqual(sum(map(len, partnerships)), 19)
+        opponents = {(a, b) for g in games for a in g["home"] for b in g["away"]}
+        partners = [{tuple(g[side]) for g in games} for side in ("home", "away")]
+        fewest_people = min(
+            sum(p in pair for pair in pairs) + sum(p == pair[side] for pair in opponents)
+            for side, pairs in enumerate(partners) for p in range(4)
+        )
+        return len(opponents), sum(map(len, partners)), fewest_people
 
     def test_exact_matchups_cannot_repeat_even_with_permissive_meeting_caps(self):
         probabilities = [.9] * 36
