@@ -63,6 +63,11 @@ describe('Team Duel empty search feedback', () => {
     const generate = buttons().find(b => b.textContent === 'Generate 21 selected matches')!
     expect(generate.disabled).toBe(false)
     expect(container.textContent).toContain('Player 13')
+    expect(container.textContent).toContain('Opponents · 42/49 pairs')
+    expect(container.textContent).toContain('Partners · 42/42 pairs')
+    expect(container.textContent).toContain('Distinct partners per player · 6')
+    const playerDetails = [...container.querySelectorAll('details li')].find(row => row.textContent?.startsWith('Player 13:'))
+    expect(playerDetails?.textContent).toContain('6 distinct partners, 6 distinct opponents')
     expect(mocks.save).not.toHaveBeenCalled()
   })
   for (const language of ['en', 'vi']) for (const status of ['INFEASIBLE', 'UNKNOWN']) it(`announces and focuses ${status} in ${language}, keeping generation disabled`, async () => {

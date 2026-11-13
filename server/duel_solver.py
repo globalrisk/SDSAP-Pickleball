@@ -138,10 +138,12 @@ def solve(request, cancelled=None):
             opponent_counts.append(count)
     # These are consequences of participation and the caps, not new coverage
     # rules. Explicit cardinality constraints give SAT propagation more help.
+    player_edges = [[e for e, pair in enumerate(edges) if p in pair] for p in range(size)]
+    player_partner_counts = [sum(side[e] for e in indices) for side in partner_used for indices in player_edges]
+    min_partners = math.ceil((size - 1) / partner_cap)
+    for count in player_partner_counts:
+        model.add(count >= min_partners)
     for p in range(size):
-        for side in range(2):
-            model.add(sum(partner_used[side][e] for e, pair in enumerate(edges) if p in pair)
-                      >= math.ceil((size - 1) / partner_cap))
         model.add(sum(opponent_used[p]) >= math.ceil(2 * (size - 1) / opponent_cap))
         model.add(sum(opponent_used[q][p] for q in range(size)) >= math.ceil(2 * (size - 1) / opponent_cap))
     counts = []
@@ -166,25 +168,31 @@ def solve(request, cancelled=None):
     scale = 1_000_000
     history_weights = request.get("partnerHistory", [[0] * len(edges), [0] * len(edges)])
     if profile == "primary":
-        # A roster-wide feasibility pass needs the bottleneck only. Building
-        # every unused profile's auxiliary model for every split is expensive.
+        # The roster feasibility pass only needs the worst-match objective.
         objectives = [worst]
     else:
-        outside = sum(x for (_, g), x in variables.items() if costs[g] > .6 + EPS)
         mean_cost = sum(round(costs[g] * scale) * x for (_, g), x in variables.items())
         history = sum(history_weights[side][e] * used for side in range(2) for e, used in enumerate(partner_used[side]))
-        covered = sum(used for row in opponent_used for used in row)
-        used_partners = sum(used for side in partner_used for used in side)
-        repeats = []
-        for i, count in enumerate(opponent_counts):
-            repeat = model.new_int_var(0, opponent_cap * (opponent_cap - 1) // 2, f"repeats_{i}")
-            model.add_element(count, [n * (n - 1) // 2 for n in range(opponent_cap + 1)], repeat)
-            repeats.append(repeat)
-        objectives = {
-            "primary": [worst],
-            "balance": [worst, outside, mean_cost, history],
-            "variety": [-covered, -used_partners, sum(repeats), worst, mean_cost, history],
-        }[profile]
+        if profile == "balance":
+            outside = sum(x for (_, g), x in variables.items() if costs[g] > .6 + EPS)
+            objectives = [worst, outside, mean_cost, history]
+        elif profile == "variety":
+            covered = sum(used for row in opponent_used for used in row)
+            used_partners = sum(used for side in partner_used for used in side)
+            partner_floor = model.new_int_var(min_partners, size - 1, "fewest_distinct_partners")
+            model.add_min_equality(partner_floor, player_partner_counts)
+            # Pack the three coverage priorities so all guide the first search.
+            # One point at each priority outweighs the entire range below it.
+            partner_weight = 2 * len(edges) + 1
+            coverage_score = covered * size * partner_weight + partner_floor * partner_weight + used_partners
+            repeats = []
+            for i, count in enumerate(opponent_counts):
+                repeat = model.new_int_var(0, opponent_cap * (opponent_cap - 1) // 2, f"repeats_{i}")
+                model.add_element(count, [n * (n - 1) // 2 for n in range(opponent_cap + 1)], repeat)
+                repeats.append(repeat)
+            objectives = [-coverage_score, sum(repeats), worst, mean_cost, history]
+        else:
+            raise ValueError("Unknown solver profile")
     model.minimize(objectives[0])
     build_ms = (time.perf_counter() - started) * 1000
     best = None
@@ -220,7 +228,11 @@ def solve(request, cancelled=None):
         if profile == "balance":
             return (*balance_rank, history_rank)
         if profile == "variety":
-            return (-sum(c > 0 for row in opponent_meetings for c in row), -sum(c > 0 for row in partner_counts for c in row), sum(c * (c - 1) // 2 for row in opponent_meetings for c in row), balance_rank[0], balance_rank[2], history_rank)
+            fewest_partners = min(sum(row[e] > 0 for e in indices) for row in partner_counts for indices in player_edges)
+            return (-sum(c > 0 for row in opponent_meetings for c in row), -fewest_partners,
+                    -sum(c > 0 for row in partner_counts for c in row),
+                    sum(c * (c - 1) // 2 for row in opponent_meetings for c in row),
+                    balance_rank[0], balance_rank[2], history_rank)
         raise ValueError("Unknown solver profile")
 
     # A structural seed gives CP-SAT an immediate valid incumbent rather than

@@ -35,13 +35,13 @@ Every candidate satisfies the hard **55/45 season limit**: neither squad exceeds
 For the selected squads, up to two distinct schedules appear. More variety stays within five percentage points of the Closest games result and within every hard limit:
 
 - **Closest games** minimizes worst favorite probability, then games outside 40/60, then mean imbalance.
-- **More variety** maximizes individual opponent coverage, then used partnerships, then minimizes opponent repetitions.
+- **More variety** maximizes individual opponent coverage, then maximizes the fewest distinct partners any player gets, then maximizes total distinct partnerships and minimizes opponent repetitions.
 
 Only actual matchup differences count as distinct. Fewer available options are explained. Refresh excludes previously shown schedules until its cycle is exhausted. Partnership history is a final tie breaker and counts only pairs actually used in the proposed schedule.
 
 History covers the three immediately preceding league seasons, ordered by start date and ID; empty seasons still occupy a place. Completed round-robin and duel match snapshots identify actual partners; older round-robin matches use their two-player team. Scheduled games and forfeits are excluded. Each pair counts once per previous season.
 
-Cards show worst and mean favorite probability, games within 40/60, coverage, meeting maxima, hardest player's workload, season chances, and expected squad wins. Details show every lineup/probability, per-player games/expected wins/difficulty, partner/opponent count matrices, missing opponents, and rest. A separate ordering pass minimizes back-to-back appearances on one court without changing matchups.
+Cards show worst and mean favorite probability, games within 40/60, opponent and partner pair coverage, the range of distinct partners per player, meeting maxima, hardest player's workload, season chances, and expected squad wins. Details show every lineup/probability, per-player games, expected wins, difficulty and distinct partners and opponents, partner/opponent count matrices, missing opponents, and rest. A separate ordering pass minimizes back-to-back appearances on one court without changing matchups.
 
 ## Saving and rollout
 
