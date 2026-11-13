@@ -1560,6 +1560,7 @@
     "seasonBalanceLimit": "Every option keeps season win chances between 45% and 55%, excluding joint champions.",
     "invalidLimits": "Choose valid repeat limits, a match probability from 50% to 100%, and a nonnegative whole-number ranking-point limit or No limit.",
     "fastHelp": "Checks possible squad splits against all your conditions, then shows only squads with a verified valid schedule. Impossible splits are skipped automatically. A time limit leaves the check unfinished; Continue checking conditions resumes it without rechecking splits already proved impossible.",
+    "varietySearchHelp": "More variety can take up to four minutes. You can cancel the search at any time.",
     "fastProgress": "Searching {{profile}} · {{seconds}} seconds",
     "solverOptimal": "Solver objectives proved for these squads.",
     "solverFeasible": "Best found within the time budget; optimality not proved.",

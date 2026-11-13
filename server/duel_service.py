@@ -10,6 +10,14 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 
+CLOSEST_GAMES_SECONDS = 10
+MORE_VARIETY_SECONDS = 240
+SQUAD_SEARCH_SECONDS = 20
+SCHEDULE_SEARCH_SECONDS = CLOSEST_GAMES_SECONDS + MORE_VARIETY_SECONDS
+# Allow final roster and rating checks to finish after a bounded solve.
+STREAM_TIMEOUT_SECONDS = SQUAD_SEARCH_SECONDS + MORE_VARIETY_SECONDS + 20
+
+
 class ApiError(Exception):
     def __init__(self, code, status=400):
         super().__init__(code)
@@ -177,13 +185,13 @@ def generate(context, cancelled, progress, *, initial=None, deadline=None):
     previous = context["history"]
     history_weights = [[sum(1 for season in previous["seasonIds"] if any(set(pair["poolPlayerIds"]) == {side[a], side[b]} and season in pair["seasonIds"] for pair in previous["partnerships"])) for a, b in edges] for side in squads]
     results = []
-    deadline = deadline or time.perf_counter() + 24
+    deadline = deadline or time.perf_counter() + SCHEDULE_SEARCH_SECONDS
     maximum = settings.get("maxMatchProbability", .65)
     upper = maximum
-    for index, profile in enumerate(("balance", "variety")):
+    for index, (profile, budget) in enumerate((("balance", CLOSEST_GAMES_SECONDS), ("variety", MORE_VARIETY_SECONDS))):
         if cancelled.is_set():
             return None
-        seconds = min((10, 7)[index], deadline - time.perf_counter())
+        seconds = min(budget, deadline - time.perf_counter())
         if seconds < .2:
             break
         progress(profile)
@@ -224,7 +232,8 @@ def search_squads(context, cancelled, progress):
     import random
     from server.duel_solver import solve
     started = time.perf_counter()
-    search_deadline, overall_deadline = started + 20, started + 40
+    search_deadline = started + SQUAD_SEARCH_SECONDS
+    overall_deadline = search_deadline + MORE_VARIETY_SECONDS
     pool, settings = context["pool"], context["settings"]
     ids = sorted(context["squads"][0] + context["squads"][1], key=lambda p: (-pool[p]["rating"], p))
     size = len(ids) // 2
