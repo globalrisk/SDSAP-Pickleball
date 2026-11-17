@@ -3,7 +3,7 @@ vi.mock('./supabase', () => ({ supabase: {} }))
 import type { PickleBet, PickleTransaction } from './betsApi'
 import { betHistoryResult, summarizeBetHistory } from './betHistory'
 
-const transaction = (amount: string, overrides: Partial<PickleTransaction> = {}): PickleTransaction => ({
+const transaction = (amount: string, overrides: Partial<Exclude<PickleTransaction, { kind: 'payout' }>> = {}): PickleTransaction => ({
   id: crypto.randomUUID(), amount, kind: 'bet', betId: 'bet', seasonName: 'Season 15',
   matchId: 'match', revision: 1, reason: 'confirmed', createdAt: '2026-11-01T00:00:00Z', ...overrides,
 })

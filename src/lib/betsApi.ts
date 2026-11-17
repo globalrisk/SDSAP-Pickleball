@@ -18,10 +18,10 @@ export interface PickleBet {
   state: 'open' | 'accepted' | 'review' | 'settled' | 'refunded' | 'cancelled' | 'void'
   createdAt: string; closeReason: string | null
 }
-export interface PickleTransaction {
-  id: string; amount: string; kind: 'prize' | 'bet' | 'reversal'; seasonName: string; betId: string | null
-  matchId: string | null; revision: number | null; reason: string | null; createdAt: string
-}
+export type PickleTransaction = {
+  id: string; amount: string; betId: string | null; matchId: string | null
+  revision: number | null; reason: string | null; createdAt: string
+} & ({ kind: 'prize' | 'bet' | 'reversal'; seasonName: string } | { kind: 'payout'; seasonName: null })
 export interface SettlementPreview {
   matchId: string; fingerprint: string; revision: number; status: string; winnerId: string | null; homeScore: number | null; awayScore: number | null
   bets: { id: string; creatorId: string; creatorName: string; creatorSide: string; acceptorId: string; acceptorName: string

@@ -358,6 +358,27 @@
     "vi": "VI",
     "en": "EN"
   },
+  "picklePayout": {
+    "title": "Record payout",
+    "amount": "Payout amount",
+    "reason": "Reason (optional)",
+    "reviewTitle": "Review payout",
+    "review": "Deduct {{amount}} from {{player}} in {{league}}?\nCurrent balance {{before}}\nReserved for bets {{reserved}}\nBalance after payout {{after}}",
+    "confirm": "Confirm payout",
+    "working": "Processing…",
+    "retry": "Retry payout",
+    "retryHelp": "The payout status could not be confirmed. Retry here to check the same payout.",
+    "walletError": "Could not load the player's wallet.",
+    "recorded": "Payout of {{amount}} recorded. New balance {{balance}}. Receipt {{receipt}}",
+    "errors": {
+      "PAYOUT_FUNDS": "The payout exceeds the available points.",
+      "PAYOUT_MEMBER": "This player does not belong to the selected league.",
+      "PAYOUT_REQUEST": "This request was used for another payout.",
+      "PAYOUT_AMOUNT": "Enter a positive amount with up to six decimal places.",
+      "PAYOUT_REASON": "Enter a reason of up to 240 characters.",
+      "BET_ADMIN": "Administrator access is required."
+    }
+  },
   "pickle": {
     "settingsTitle": "🥒 Pickle point prizes",
     "settingsHelp": "Set league defaults and prizes for the selected Team Duel season. Points are awarded when you archive the season.",
@@ -1269,7 +1290,8 @@
     "kinds": {
       "prize": "Season prize",
       "bet": "Trust Me Bro settlement",
-      "reversal": "Previous settlement reversed"
+      "reversal": "Previous settlement reversed",
+      "payout": "Pickle Points payout"
     },
     "adminReview": "Administrator payout review",
     "reviewHelp": "Check recorded results before paying out points. Confirmed results require the correction flow below; archived seasons are final.",
