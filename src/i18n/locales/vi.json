@@ -366,7 +366,7 @@
     "retry": "Thử lại",
     "retryHelp": "Chưa xác nhận được trạng thái giao dịch. Thử lại tại đây để kiểm tra cùng khoản chi trả.",
     "walletError": "Không tải được ví của người chơi.",
-    "recorded": "Đã ghi nhận chi trả {{amount}}. Số dư mới {{balance}}. Mã giao dịch {{receipt}}",
+    "recorded": "Đã ghi nhận chi trả · {{amount}}",
     "errors": {
       "PAYOUT_FUNDS": "Số điểm chi trả vượt quá số điểm khả dụng.",
       "PAYOUT_MEMBER": "Người chơi này không thuộc giải đã chọn.",
