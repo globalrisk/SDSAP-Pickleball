@@ -123,9 +123,9 @@ export function PicklePayoutForm({ player, adminId }: { player: PickleRankingRow
     </p> : null}
     {error ? <p role="alert" className="text-sm text-red-700">{error}</p> : null}
     {pending && !busy && !error ? <p className="text-sm text-gray-600">{t('picklePayout.retryHelp')}</p> : null}
-    {receipt ? <p role="status" className="text-sm font-semibold text-green-800">{t('picklePayout.recorded', {
-      amount: points(receipt.amount), balance: points(receipt.balanceAfter), receipt: receipt.id,
-    })}</p> : null}
+    <p role="status" className={receipt ? 'rounded-lg bg-green-50 px-3 py-2 text-sm font-medium break-words text-green-900' : 'sr-only'}>
+      {receipt ? t('picklePayout.recorded', { amount: points(receipt.amount) }) : null}
+    </p>
     <button type="submit" disabled={busy || (!pending && !canReview)} className={buttonClass}>
       {t(busy ? 'picklePayout.working' : pending ? 'picklePayout.retry' : 'picklePayout.reviewTitle')}
     </button>

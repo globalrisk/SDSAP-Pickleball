@@ -369,7 +369,7 @@
     "retry": "Retry payout",
     "retryHelp": "The payout status could not be confirmed. Retry here to check the same payout.",
     "walletError": "Could not load the player's wallet.",
-    "recorded": "Payout of {{amount}} recorded. New balance {{balance}}. Receipt {{receipt}}",
+    "recorded": "Payout recorded · {{amount}}",
     "errors": {
       "PAYOUT_FUNDS": "The payout exceeds the available points.",
       "PAYOUT_MEMBER": "This player does not belong to the selected league.",

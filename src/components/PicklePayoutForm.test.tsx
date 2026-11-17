@@ -57,7 +57,8 @@ it('reviews a payout without a reason and retries the confirmed request after re
     await act(async () => submit().click())
     expect(confirm).toHaveBeenCalledTimes(1)
     expect(api.payout.mock.calls[1]).toEqual(api.payout.mock.calls[0])
-    expect(container.textContent).toContain('New balance 2.000 🥒. Receipt receipt-1')
+    const status = container.querySelector('[role="status"]')!
+    expect(status.textContent).toBe('Payout recorded · 3.000 🥒')
     expect(sessionStorage.length).toBe(0)
   } finally {
     await act(async () => root.unmount())
