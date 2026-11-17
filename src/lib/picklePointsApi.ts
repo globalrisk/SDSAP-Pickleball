@@ -46,3 +46,22 @@ export async function fetchPickleContributions(leagueId: string, playerId: strin
     .order('awarded_at', { ascending: false }).order('season_id').range(from, to))
   return data as PickleContribution[]
 }
+
+export interface PicklePayoutWallet { balance: string; reserved: string; available: string }
+export interface PicklePayoutReceipt { id: string; amount: string; balanceAfter: string; createdAt: string }
+
+export async function fetchPicklePayoutWallet(leagueId: string, playerId: string): Promise<PicklePayoutWallet> {
+  const { data, error } = await supabase.rpc('pickle_payout_wallet', { p_league_id: leagueId, p_player_id: playerId })
+  if (error) throw error
+  return data as PicklePayoutWallet
+}
+
+export async function recordPicklePayout(
+  leagueId: string, playerId: string, amount: string, reason: string | null, requestId: string,
+): Promise<PicklePayoutReceipt> {
+  const { data, error } = await supabase.rpc('record_pickle_payout', {
+    p_league_id: leagueId, p_player_id: playerId, p_amount: amount, p_reason: reason, p_request_id: requestId,
+  })
+  if (error) throw error
+  return data as PicklePayoutReceipt
+}

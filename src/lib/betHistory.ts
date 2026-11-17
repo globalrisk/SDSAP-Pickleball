@@ -10,7 +10,7 @@ export interface BetHistorySummary {
 export function summarizeBetHistory(transactions: PickleTransaction[]): Map<string, BetHistorySummary> {
   const summaries = new Map<string, BetHistorySummary>()
   for (const transaction of transactions) {
-    if (!transaction.betId || transaction.kind === 'prize') continue
+    if (!transaction.betId || transaction.kind === 'prize' || transaction.kind === 'payout') continue
     const previous = summaries.get(transaction.betId)
     const latest = !previous || transaction.createdAt > previous.settledAt
     summaries.set(transaction.betId, {

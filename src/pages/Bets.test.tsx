@@ -63,6 +63,18 @@ describe('Simple personal bet history', () => {
     expect(html).toContain('You backed Cam + Drew')
   })
 
+  it('shows a wallet payout without a season or a bet result', () => {
+    state.bets = []
+    state.transactions = [{
+      ...payout, kind: 'payout', amount: '-1000.123456', seasonName: null,
+      betId: null, matchId: null, revision: null, reason: null,
+    }]
+    const html = render()
+    expect(html).toContain('Pickle Points payout</p>')
+    expect(html).toContain('-1.000,123456 🥒')
+    expect(html).not.toContain('You lost')
+  })
+
   it.each(['refunded', 'cancelled', 'void'] as const)('shows %s without claiming a win or loss', outcome => {
     state.bets = [{ ...bet, state: outcome }]; state.transactions = []
     const html = render()

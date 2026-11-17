@@ -6,6 +6,8 @@ import { fetchPickleContributions } from '../lib/picklePointsApi'
 import { formatPicklePoints } from '../lib/picklePoints'
 import { ErrorState } from './Layout'
 import { useLeague } from '../context/LeagueContext'
+import { useAuth } from '../context/AuthContext'
+import { PicklePayoutForm } from './PicklePayoutForm'
 
 function PlayerContributions({ playerId }: { playerId: string }) {
   const { t } = useTranslation()
@@ -22,8 +24,11 @@ function PlayerContributions({ playerId }: { playerId: string }) {
 
 export function PicklePointsRankings() {
   const { t } = useTranslation()
+  const { isAdmin, user } = useAuth()
+  const { league } = useLeague()
   const rankings = usePickleLeaderboard()
   const [expanded, setExpanded] = useState<string | null>(null)
+  const [payoutPlayer, setPayoutPlayer] = useState<string | null>(null)
   if (rankings.isLoading) return <p>{t('common.loading')}</p>
   if (rankings.error) return <ErrorState message={rankings.error.message} />
   return <div>
@@ -35,7 +40,19 @@ export function PicklePointsRankings() {
           <span className="min-w-0 flex-1 break-words text-sm font-semibold text-gray-900">{player.name}{player.status === 'inactive' ? <span className="ml-2 text-xs font-normal text-gray-500">{t('rankings.inactive')}</span> : null}<span className="block text-xs font-normal text-gray-500">{t('pickle.viewContributions')}</span></span>
           <span className="shrink-0 text-sm font-bold text-green-900 sm:text-base">{formatPicklePoints(player.balance)}</span>
         </button>
-        <div id={`pickle-history-${player.id}`} hidden={expanded !== player.id}>{expanded === player.id ? <PlayerContributions playerId={player.id} /> : null}</div>
+        <div id={`pickle-history-${player.id}`} hidden={expanded !== player.id}>
+          {expanded === player.id ? <PlayerContributions playerId={player.id} /> : null}
+          {isAdmin && user && (expanded === player.id || payoutPlayer === player.id) ? <>
+            <button type="button" aria-expanded={payoutPlayer === player.id} aria-controls={`pickle-payout-${player.id}`}
+              onClick={() => setPayoutPlayer((prev) => prev === player.id ? null : player.id)}
+              className="mt-2 min-h-11 rounded-lg border border-green-200 px-3 text-sm font-bold text-green-800 hover:bg-green-50">
+              {t('picklePayout.title')}
+            </button>
+            <div id={`pickle-payout-${player.id}`} hidden={payoutPlayer !== player.id}>
+              {payoutPlayer === player.id ? <PicklePayoutForm key={`${league.id}:${user.id}:${player.id}`} player={player} adminId={user.id} /> : null}
+            </div>
+          </> : null}
+        </div>
       </li>)}
     </ol>}
     <p className="mt-3 text-xs text-gray-600">{t('pickle.displayHelp')}</p>

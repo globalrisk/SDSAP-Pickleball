@@ -355,6 +355,27 @@
     "vi": "VI",
     "en": "EN"
   },
+  "picklePayout": {
+    "title": "Ghi nhận chi trả",
+    "amount": "Số điểm chi trả",
+    "reason": "Lý do (không bắt buộc)",
+    "reviewTitle": "Kiểm tra khoản chi trả",
+    "review": "Trừ {{amount}} của {{player}} trong giải {{league}}?\nSố dư hiện tại {{before}}\nĐiểm đang giữ cho cược {{reserved}}\nSố dư sau chi trả {{after}}",
+    "confirm": "Xác nhận chi trả",
+    "working": "Đang xử lý…",
+    "retry": "Thử lại",
+    "retryHelp": "Chưa xác nhận được trạng thái giao dịch. Thử lại tại đây để kiểm tra cùng khoản chi trả.",
+    "walletError": "Không tải được ví của người chơi.",
+    "recorded": "Đã ghi nhận chi trả {{amount}}. Số dư mới {{balance}}. Mã giao dịch {{receipt}}",
+    "errors": {
+      "PAYOUT_FUNDS": "Số điểm chi trả vượt quá số điểm khả dụng.",
+      "PAYOUT_MEMBER": "Người chơi này không thuộc giải đã chọn.",
+      "PAYOUT_REQUEST": "Mã yêu cầu này đã dùng cho khoản chi trả khác.",
+      "PAYOUT_AMOUNT": "Nhập số điểm lớn hơn 0 với tối đa sáu chữ số thập phân.",
+      "PAYOUT_REASON": "Nhập lý do dài tối đa 240 ký tự.",
+      "BET_ADMIN": "Chỉ quản trị viên có quyền thực hiện."
+    }
+  },
   "pickle": {
     "settingsTitle": "🥒 Phần thưởng Pickle point",
     "settingsHelp": "Đặt mức thưởng mặc định của giải và mức thưởng cho mùa Đấu đội đang chọn. Điểm được trao khi lưu trữ mùa giải.",
@@ -1264,7 +1285,8 @@
     "kinds": {
       "prize": "Giải thưởng mùa",
       "bet": "Quyết toán Trust Me Bro",
-      "reversal": "Đảo giao dịch trả điểm cũ"
+      "reversal": "Đảo giao dịch trả điểm cũ",
+      "payout": "Chi trả Pickle Points"
     },
     "adminReview": "Quản trị duyệt trả điểm",
     "reviewHelp": "Kiểm tra kết quả trước khi trả điểm. Kết quả đã xác nhận phải dùng chức năng sửa bên dưới; mùa lưu trữ là kết quả cuối cùng.",
