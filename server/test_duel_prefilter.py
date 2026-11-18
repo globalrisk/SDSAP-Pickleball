@@ -77,7 +77,7 @@ class PrefilterTests(unittest.TestCase):
 
     def test_all_split_filter_failures_bypass_cp_sat(self):
         reader = Reader()
-        body = reader.body(); body['searchMode'] = 'shuffle'
+        body = reader.body()
         context = load_context(body, 'token', reader)
         with patch('server.duel_service.normal_cdf', return_value=.99), patch('server.duel_solver.solve') as solver:
             result = generate(context, threading.Event(), lambda _: None)
@@ -87,13 +87,13 @@ class PrefilterTests(unittest.TestCase):
 
     def test_filtering_finishes_before_any_split_is_solved(self):
         reader = Reader()
-        body = reader.body(); body['searchMode'] = 'shuffle'
+        body = reader.body()
         context = load_context(body, 'token', reader)
         checked = []
         def filter_split(*_):
             checked.append(1)
             return None
-        def full_solve(*_):
+        def full_solve(*_, initial):
             self.assertEqual(len(checked), 35)
             return {'status': 'UNKNOWN', 'solution': None}
         with patch('server.duel_prefilter.impossible_split', side_effect=filter_split), patch('server.duel_solver.solve', side_effect=full_solve):

@@ -50,7 +50,8 @@ def rating_difference_mask(size, settings, ratings=None):
             for values in [[ratings[0][i] for i in h] + [ratings[1][i] for i in a]]]
 
 
-def solve(request, cancelled=None):
+def solve(request, cancelled=None, *, initial=None):
+    """Solve one split, optionally seeded with a verified result for the same inputs."""
     cancelled = cancelled or threading.Event()
     started = time.perf_counter()
     size = request["size"]
@@ -80,6 +81,8 @@ def solve(request, cancelled=None):
         raise ValueError("Positive finite benchmark time budget required")
     deadline = started + limit
     profile = request.get("profile", "primary")
+    if profile not in ("primary", "variety"):
+        raise ValueError("Unknown solver profile")
     model = cp_model.CpModel()
     variables = {}
     by_round = [[] for _ in range(rounds)]
@@ -153,11 +156,6 @@ def solve(request, cancelled=None):
         count = model.new_int_var(0, 1, f"count_{g}")
         model.add(count == sum(xs))
         counts.append(count)
-    excluded = {tuple(row) for row in request.get("excluded", [])}
-    if excluded:
-        if any(len(row) != game_count or any(type(x) is not int or x < 0 or x > size - 1 for x in row) for row in excluded):
-            raise ValueError("Invalid excluded schedule")
-        model.add_forbidden_assignments(counts, list(excluded))
     if not size % 2:
         first_games = []
         for r in range(rounds):
@@ -170,48 +168,46 @@ def solve(request, cancelled=None):
     scale = 1_000_000
     history_weights = request.get("partnerHistory", [[0] * len(edges), [0] * len(edges)])
     if profile == "primary":
-        # The roster feasibility pass only needs the worst-match objective.
+        # Retain the single-objective model for the offline benchmark.
         objectives = [worst]
     else:
         mean_cost = sum(round(costs[g] * scale) * x for (_, g), x in variables.items())
         history = sum(history_weights[side][e] * used for side in range(2) for e, used in enumerate(partner_used[side]))
-        if profile == "balance":
-            outside = sum(x for (_, g), x in variables.items() if costs[g] > .6 + EPS)
-            objectives = [worst, outside, mean_cost, history]
-        elif profile == "variety":
-            covered = sum(used for row in opponent_used for used in row)
-            used_partners = sum(used for side in partner_used for used in side)
-            contact_floor = model.new_int_var(0, 2 * size - 1, "fewest_distinct_people")
-            model.add_min_equality(contact_floor, [
-                p + o for p, o in zip(player_partner_counts, player_opponent_counts)
-            ])
-            # One extra pair outweighs any change in the per-player minimum.
-            coverage_score = (covered + used_partners) * (2 * size) + contact_floor
-            partner_meeting_counts = []
-            for side, pairs in enumerate(partners):
-                for edge, games in enumerate(pairs):
-                    count = model.new_int_var(0, partner_cap, f"partner_count_{side}_{edge}")
-                    model.add(count == sum(games))
-                    partner_meeting_counts.append(count)
-            repeats = []
-            for counts_by_role, cap in ((partner_meeting_counts, partner_cap), (opponent_counts, opponent_cap)):
-                penalties = [n * (n - 1) // 2 for n in range(cap + 1)]
-                for count in counts_by_role:
-                    repeat = model.new_int_var(0, penalties[-1], f"repeats_{len(repeats)}")
-                    model.add_element(count, penalties, repeat)
-                    repeats.append(repeat)
-            objectives = [-coverage_score, sum(repeats), worst, mean_cost, history]
-        else:
-            raise ValueError("Unknown solver profile")
+        covered = sum(used for row in opponent_used for used in row)
+        used_partners = sum(used for side in partner_used for used in side)
+        contact_floor = model.new_int_var(0, 2 * size - 1, "fewest_distinct_people")
+        model.add_min_equality(contact_floor, [
+            p + o for p, o in zip(player_partner_counts, player_opponent_counts)
+        ])
+        # One extra pair outweighs any change in the per-player minimum.
+        coverage_score = (covered + used_partners) * (2 * size) + contact_floor
+        partner_meeting_counts = []
+        for side, pairs in enumerate(partners):
+            for edge, games in enumerate(pairs):
+                count = model.new_int_var(0, partner_cap, f"partner_count_{side}_{edge}")
+                model.add(count == sum(games))
+                partner_meeting_counts.append(count)
+        repeats = []
+        for counts_by_role, cap in ((partner_meeting_counts, partner_cap), (opponent_counts, opponent_cap)):
+            penalties = [n * (n - 1) // 2 for n in range(cap + 1)]
+            for count in counts_by_role:
+                repeat = model.new_int_var(0, penalties[-1], f"repeats_{len(repeats)}")
+                model.add_element(count, penalties, repeat)
+                repeats.append(repeat)
+        objectives = [-coverage_score, sum(repeats), worst, mean_cost, history]
     model.minimize(objectives[0])
     build_ms = (time.perf_counter() - started) * 1000
-    best = None
     first_balanced_ms = None
     rejected = 0
     attempts = 0
     branches = 0
     conflicts = 0
     proved = 0
+    pair_upper_bound = None
+    edge_indices = {edge: i for i, edge in enumerate(edges)}
+
+    def game_index(game):
+        return edge_indices[tuple(game["home"])] * len(edges) + edge_indices[tuple(game["away"])]
 
     def candidate(value):
         selected = [(r, g) for (r, g), variable in variables.items() if value(variable)]
@@ -222,7 +218,10 @@ def solve(request, cancelled=None):
                 "forecast": result, "worstFavorite": max(costs[g] for _, g in selected)}
 
     def rank(result):
-        indices = [edges.index(tuple(sorted(g["home"]))) * len(edges) + edges.index(tuple(sorted(g["away"]))) for g in result["games"]]
+        worst_favorite = result["worstFavorite"]
+        if profile == "primary":
+            return (worst_favorite,)
+        indices = [game_index(g) for g in result["games"]]
         partner_counts = [[0] * len(edges), [0] * len(edges)]
         opponent_meetings = [[0] * size for _ in range(size)]
         for g in indices:
@@ -231,39 +230,45 @@ def solve(request, cancelled=None):
             for p in edges[h]:
                 for q in edges[a]:
                     opponent_meetings[p][q] += 1
-        balance_rank = (ranks[result["worstFavorite"]], sum(costs[g] > .6 + EPS for g in indices), sum(round(costs[g] * scale) for g in indices))
         history_rank = sum(history_weights[s][e] for s in range(2) for e, count in enumerate(partner_counts[s]) if count)
-        if profile == "primary":
-            return balance_rank[:1]
-        if profile == "balance":
-            return (*balance_rank, history_rank)
-        if profile == "variety":
-            meetings = [c for row in partner_counts + opponent_meetings for c in row]
-            distinct_pairs = sum(c > 0 for c in meetings)
-            distinct_partners = [sum(row[e] > 0 for e in indices) for row in partner_counts for indices in player_edges]
-            distinct_opponents = [sum(c > 0 for c in row) for row in opponent_meetings] + [
-                sum(row[p] > 0 for row in opponent_meetings) for p in range(size)
-            ]
-            fewest_people = min(p + o for p, o in zip(distinct_partners, distinct_opponents))
-            repeat_penalty = sum(c * (c - 1) // 2 for c in meetings)
-            return (-distinct_pairs, -fewest_people, repeat_penalty, balance_rank[0], balance_rank[2], history_rank)
-        raise ValueError("Unknown solver profile")
+        meetings = [c for row in partner_counts + opponent_meetings for c in row]
+        distinct_pairs = sum(c > 0 for c in meetings)
+        distinct_partners = [sum(row[e] > 0 for e in player) for row in partner_counts for player in player_edges]
+        distinct_opponents = [sum(c > 0 for c in row) for row in opponent_meetings] + [
+            sum(row[p] > 0 for row in opponent_meetings) for p in range(size)
+        ]
+        fewest_people = min(p + o for p, o in zip(distinct_partners, distinct_opponents))
+        repeat_penalty = sum(c * (c - 1) // 2 for c in meetings)
+        mean_cost = sum(round(costs[g] * scale) for g in indices)
+        return (-distinct_pairs, -fewest_people, repeat_penalty, worst_favorite, mean_cost, history_rank)
+
+    best = initial
+    best_rank = rank(best) if best else None
+    if best:
+        first_balanced_ms = 0
+
+    def keep(result):
+        nonlocal best, best_rank, first_balanced_ms
+        score = rank(result)
+        if best_rank is None or score < best_rank:
+            best, best_rank = result, score
+            if first_balanced_ms is None:
+                first_balanced_ms = (time.perf_counter() - started) * 1000
 
     # A structural seed gives CP-SAT an immediate valid incumbent rather than
     # spending most of a short request budget rediscovering basic feasibility.
     warm_deadline = min(deadline, time.perf_counter() + request.get("warmMs", 0) / 1000)
-    recipe = json.loads(Path(__file__).with_name("duel_skeletons.json").read_text()).get(str(size), [])
+    recipe = json.loads(Path(__file__).with_name("duel_skeletons.json").read_text()).get(str(size), []) if request.get("warmMs", 0) else []
     rng = random.Random(request.get("seed", 1))
-    edge_indices = {edge: i for i, edge in enumerate(edges)}
     while time.perf_counter() < warm_deadline and not cancelled.is_set():
         permutations = [rng.sample(range(size), size), rng.sample(range(size), size)]
         games = [{"round": g["round"], "home": sorted(permutations[0][p] for p in g["home"]), "away": sorted(permutations[1][p] for p in g["away"])} for g in recipe]
         count_vector = [0] * game_count
         ps = []
         for game in games:
-            g = edge_indices[tuple(game["home"])] * len(edges) + edge_indices[tuple(game["away"])]
+            g = game_index(game)
             count_vector[g] += 1; ps.append(probabilities[g])
-        if any(count and not allowed[g] for g, count in enumerate(count_vector)) or not games or max(count_vector) > 1 or tuple(count_vector) in excluded or max(max(p, 1 - p) for p in ps) > upper + EPS:
+        if any(count and not allowed[g] for g, count in enumerate(count_vector)) or not games or max(count_vector) > 1 or max(max(p, 1 - p) for p in ps) > upper + EPS:
             continue
         # Recipes meet 2/2. Stricter partner caps need a separate check.
         pc = [[0] * len(edges), [0] * len(edges)]
@@ -273,34 +278,29 @@ def solve(request, cancelled=None):
         if any(c > partner_cap for row in pc for c in row):
             continue
         result = {"games": games, "forecast": forecast(ps), "worstFavorite": max(max(p, 1 - p) for p in ps)}
-        if balanced(result["forecast"]) and (best is None or rank(result) < rank(best)):
-            best = result; first_balanced_ms = first_balanced_ms or (time.perf_counter() - started) * 1000
+        if balanced(result["forecast"]):
+            keep(result)
     if best:
-        hint_games = best["games"]
+        games_by_round = {}
+        for game in best["games"]:
+            games_by_round.setdefault(game["round"], []).append(game)
         if size % 2:
-            for r in set(g["round"] for g in hint_games):
-                bye = next(p for p in range(size) if all(p not in g["home"] for g in hint_games if g["round"] == r))
-                for g in hint_games:
-                    if g["round"] == r:
-                        g["hintRound"] = bye
+            round_indices = {r: next(p for p in range(size) if all(p not in g["home"] for g in games))
+                             for r, games in games_by_round.items()}
         else:
-            order = sorted(set(g["round"] for g in hint_games), key=lambda r: min(edge_indices[tuple(g["home"])] * len(edges) + edge_indices[tuple(g["away"])] for g in hint_games if g["round"] == r))
-            for g in hint_games:
-                g["hintRound"] = order.index(g["round"])
-        hint = {(g["hintRound"], edge_indices[tuple(g["home"])] * len(edges) + edge_indices[tuple(g["away"])]) for g in hint_games}
+            order = sorted(games_by_round, key=lambda r: min(map(game_index, games_by_round[r])))
+            round_indices = {r: i for i, r in enumerate(order)}
+        hint = {(round_indices[game["round"]], game_index(game)) for game in best["games"]}
         for key, variable in variables.items():
             model.add_hint(variable, int(key in hint))
-        if profile in ("primary", "balance"):
+        if profile == "primary":
             model.add(worst <= ranks[best["worstFavorite"]])
 
     class Incumbents(cp_model.CpSolverSolutionCallback):
         def on_solution_callback(self):
-            nonlocal best, first_balanced_ms
             result = candidate(self.value)
-            if balanced(result["forecast"]) and (best is None or rank(result) < rank(best)):
-                best = result
-                if first_balanced_ms is None:
-                    first_balanced_ms = (time.perf_counter() - started) * 1000
+            if balanced(result["forecast"]):
+                keep(result)
 
     solver_status = "UNKNOWN"
     optimal = False
@@ -332,13 +332,15 @@ def solve(request, cancelled=None):
             raise ValueError(solver.solution_info())
         if status in (cp_model.INFEASIBLE, cp_model.UNKNOWN):
             break
-        best_bound = levels[max(0, min(len(levels) - 1, math.ceil(solver.best_objective_bound - EPS)))]
+        if profile == "primary":
+            best_bound = levels[max(0, min(len(levels) - 1, math.ceil(solver.best_objective_bound - EPS)))]
         result = candidate(solver.value)
         if balanced(result["forecast"]):
-            if best is None or rank(result) <= rank(best):
-                best = result
+            keep(result)
             if status != cp_model.OPTIMAL:
                 break
+            if profile == "variety" and proved == 0:
+                pair_upper_bound = -solver.value(objectives[0]) // (2 * size)
             model.add(objectives[proved] == solver.value(objectives[proved]))
             proved += 1
             if proved == len(objectives):
@@ -357,7 +359,7 @@ def solve(request, cancelled=None):
             "solverStatus": solver_status, "bestBound": best_bound,
             "attempts": attempts, "rejectedForSeasonBalance": rejected,
             "branches": branches, "conflicts": conflicts,
-            "variables": len(variables), "solution": best}
+            "variables": len(variables), "solution": best, "rank": best_rank, "pairUpperBound": pair_upper_bound}
 
 
 if __name__ == "__main__":

@@ -10,7 +10,6 @@ export interface DuelGenerationSettings { maxPartnerMeetings: number | null; max
 export function duelMatchProbabilityLimit(settings: DuelGenerationSettings): number {
   return settings.maxMatchProbability ?? DEFAULT_MAX_MATCH_PROBABILITY
 }
-export type DuelOptionKind = 'balance' | 'variety'
 export interface DuelPlayerExperience {
   id: string; games: number; expectedWins: number; below40: number; disadvantage: number
   partners: number; opponents: number
@@ -22,22 +21,39 @@ export interface DuelMetrics {
   backToBack: number; maxIdleGames: number
 }
 export interface DuelScheduleOption {
-  id: string; kind: DuelOptionKind; games: LeagueDuelGame[]; metrics: DuelMetrics
-  solver?: { status: 'OPTIMAL' | 'FEASIBLE'; elapsedMs: number }
+  id: string; kind: 'variety'; games: LeagueDuelGame[]; metrics: DuelMetrics
+  solver?: { status: 'OPTIMAL' | 'FEASIBLE'; elapsedMs: number; coverageProof?: 'roster' | 'squads' }
 }
 export interface FlexibleDuelPlan {
   version: number; inputKey: string; splitId: string; settings: DuelGenerationSettings
-  squads: [string[], string[]]; option: Omit<DuelScheduleOption, 'kind'> & { kind: DuelOptionKind | 'experience' | 'alternative' }
+  squads: [string[], string[]]; option: Omit<DuelScheduleOption, 'kind'> & { kind: 'variety' | 'balance' | 'experience' | 'alternative' }
   engine?: 'cp-sat' | 'exhaustive'
 }
 /** Legacy plans remain readable, but only current solver options can be reused. */
 export function isCurrentDuelPlan(plan: FlexibleDuelPlan): plan is FlexibleDuelPlan & { option: DuelScheduleOption } {
-  return plan.engine === 'cp-sat' && (plan.option.kind === 'balance' || plan.option.kind === 'variety')
+  return plan.engine === 'cp-sat' && plan.option.kind === 'variety'
 }
+
+export function duelPlanMatchesInput(plan: FlexibleDuelPlan, contextKey: string, settings = plan.settings): boolean {
+  if (plan.version !== FLEXIBLE_DUEL_VERSION) return false
+  // JSONB can reorder settings keys when the plan is read back.
+  const sameLimits = (a: DuelGenerationSettings, b: DuelGenerationSettings) =>
+    a.maxPartnerMeetings === b.maxPartnerMeetings && a.maxOpponentMeetings === b.maxOpponentMeetings
+    && duelMatchProbabilityLimit(a) === duelMatchProbabilityLimit(b)
+    && (a.maxRatingDifference ?? null) === (b.maxRatingDifference ?? null)
+  try {
+    const snapshot = JSON.parse(plan.inputKey)
+    if (!Array.isArray(snapshot) || snapshot.length !== 3) return false
+    const [version, key, limits] = snapshot
+    return version === plan.version && key === contextKey && limits !== null && typeof limits === 'object'
+      && sameLimits(limits, plan.settings) && sameLimits(settings, plan.settings)
+  } catch { return false }
+}
+
 export interface DuelSearchInput {
   pool: PoolPlayer[]; settings: DuelGenerationSettings; inputKey: string; partnerHistory: string[][]
 }
-export interface DuelSplit { id: string; squads: [string[], string[]]; bestWorst: number }
+export interface DuelSplit { id: string; squads: [string[], string[]] }
 export function validateDuelSettings(size: number, settings: DuelGenerationSettings): void {
   if (!Number.isInteger(size) || size < 4 || size > 7) throw new Error('DUEL_SIZE')
   for (const value of [settings.maxPartnerMeetings, settings.maxOpponentMeetings]) {

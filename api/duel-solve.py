@@ -5,7 +5,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler
 
-from server.duel_service import ApiError, STREAM_TIMEOUT_SECONDS, generate, load_context
+from server.duel_service import ApiError, FINAL_CHECK_SECONDS, SEARCH_SECONDS, STREAM_TIMEOUT_SECONDS, generate, load_context
 
 CAPACITY = threading.BoundedSemaphore(1)
 
@@ -48,9 +48,11 @@ class handler(BaseHTTPRequestHandler):
             self.send_json(429, {"error": "SOLVER_BUSY"}); return
         cancelled = threading.Event()
         events = queue.Queue()
+        remaining = STREAM_TIMEOUT_SECONDS - (time.monotonic() - started) - FINAL_CHECK_SECONDS
+        deadline = time.perf_counter() + min(remaining, SEARCH_SECONDS)
         def run():
             try:
-                result = generate(context, cancelled, lambda profile: events.put({"type": "squadProgress", **profile} if isinstance(profile, dict) else {"type": "progress", "profile": profile}))
+                result = generate(context, cancelled, lambda progress: events.put({"type": "squadProgress", **progress}), deadline=deadline)
                 events.put({"type": "result", "result": result})
             except ApiError as error:
                 events.put({"type": "error", "error": error.code})

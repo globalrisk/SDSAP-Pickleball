@@ -8,7 +8,7 @@ import { buildTierMatchedDuelSchedule, compareDuelPlayers } from './leagueDuelSc
 import { partnershipKey } from './balanceTeams'
 import { fetchSeasonRosterIds } from './seasonRosterApi'
 import { isSeasonForecastBalanced } from './seasonForecast'
-import { FLEXIBLE_DUEL_VERSION, hasUniqueDuelMatchups, isCurrentDuelPlan, type FlexibleDuelPlan } from './flexibleDuel'
+import { duelPlanMatchesInput, hasUniqueDuelMatchups, isCurrentDuelPlan, type FlexibleDuelPlan } from './flexibleDuel'
 import { DEFAULT_TEAM_COLORS, isTeamColor } from './teamColors'
 
 export async function fetchFlexibleDuelContext(leagueId: string, seasonId: string) {
@@ -121,7 +121,7 @@ export async function generateLeagueDuelSeasonMatches(seasonId: string): Promise
     const plan = stored.data.duel_draft_plan as FlexibleDuelPlan | null
     if (!plan) throw new Error('DUEL_STALE_DRAFT: Select a new plan first.')
     const [context, teams] = await Promise.all([fetchFlexibleDuelContext(season.data.league_id, seasonId), fetchTeamsWithPlayers(seasonId)])
-    if (plan.inputKey !== JSON.stringify([FLEXIBLE_DUEL_VERSION, context.key, plan.settings])) throw new Error('DUEL_STALE_DRAFT: Search and save a current plan first.')
+    if (!duelPlanMatchesInput(plan, context.key)) throw new Error('DUEL_STALE_DRAFT: Search and save a current plan first.')
     const names = plan.squads.map(s => teams.find(t => t.players.some(p => p.pool_player_id === s[0]))?.name ?? '') as [string, string]
     return (await saveFlexibleDuelPlan(seasonId, plan, names, context.revision, context.fingerprint, stored.data.duel_draft_plan_hash, true)).count
   }

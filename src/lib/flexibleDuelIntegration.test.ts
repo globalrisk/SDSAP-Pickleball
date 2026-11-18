@@ -14,6 +14,7 @@ import { fetchSeasons, fetchTeamsWithPlayers, fetchMatches, recordResult } from 
 import { saveSeasonRoster } from './seasonRosterApi'
 
 let api: Awaited<ReturnType<typeof startLocalSupabase>>
+const varietyMigration = '20261118024352_require_variety_duel_drafts.sql'
 beforeEach(async () => {
   api = await startLocalSupabase()
   state.client = createClient(api.url, 'local-anon-key', { global: { headers: { Authorization: `Bearer ${api.token}` } }, auth: { persistSession: false, autoRefreshToken: false } })
@@ -28,13 +29,15 @@ async function prepare() {
   const context = await fetchFlexibleDuelContext(seed.leagueId, seed.seasonId)
   const pool = context.pool.sort((a, b) => a.id.localeCompare(b.id)), squads = [pool.slice(0, 4), pool.slice(4)] as [typeof pool, typeof pool]
   const settings = { maxPartnerMeetings: 2, maxOpponentMeetings: 2 }, games = findDuelSchedule(squads, settings, .500001)!
-  const plan: FlexibleDuelPlan = { version: 1, engine: 'cp-sat', inputKey: JSON.stringify([1, context.key, settings]), splitId: 'test-split', settings, squads: squads.map(s => s.map(p => p.id)) as [string[], string[]], option: { id: duelScheduleId(games), kind: 'balance', games, metrics: measureDuelSchedule(squads, games) } }
+  const plan: FlexibleDuelPlan = { version: 1, engine: 'cp-sat', inputKey: JSON.stringify([1, context.key, settings]), splitId: 'test-split', settings, squads: squads.map(s => s.map(p => p.id)) as [string[], string[]], option: { id: duelScheduleId(games), kind: 'variety', games, metrics: measureDuelSchedule(squads, games) } }
   return { ...seed, context, plan, squads }
 }
 
 describe('flexible plans through PostgreSQL and application APIs', () => {
   it('saves, reloads, generates exactly the selected preview, freezes it, and clears explicitly', async () => {
     const s = await prepare()
+    s.plan.settings = { ...s.plan.settings, maxMatchProbability: .65, maxRatingDifference: null }
+    s.plan.inputKey = JSON.stringify([s.plan.version, s.context.key, s.plan.settings])
     const untouched = (await api.db.query('SELECT to_jsonb(m) data FROM public.matches m WHERE season_id<>$1 ORDER BY id', [s.seasonId])).rows
     const saved = await saveFlexibleDuelPlan(s.seasonId, s.plan, ['A', 'B'], s.context.revision, s.context.fingerprint, null, false)
     expect(saved.hash).toHaveLength(32)
@@ -150,7 +153,7 @@ describe('flexible plans through PostgreSQL and application APIs', () => {
   }, 30000)
   it('requires a fresh search for legacy engines and removed schedule objectives', async () => {
     const s = await prepare()
-    for (const [engine, kind] of [[undefined, 'balance'], ['exhaustive', 'balance'], ['cp-sat', 'experience'], ['cp-sat', 'alternative']] as const) {
+    for (const [engine, kind] of [[undefined, 'variety'], ['exhaustive', 'variety'], ['cp-sat', 'balance'], ['cp-sat', 'experience'], ['cp-sat', 'alternative']] as const) {
       const plan = structuredClone(s.plan); plan.engine = engine; plan.option.kind = kind
       await expect(saveFlexibleDuelPlan(s.seasonId, plan, ['A', 'B'], s.context.revision, s.context.fingerprint, null, true)).rejects.toThrow('DUEL_STALE_DRAFT')
       const response = await state.client!.rpc('save_and_generate_league_duel_plan_atomic', { p_season_id: s.seasonId, p_plan: plan, p_names: ['A', 'B'], p_expected_rating_revision: s.context.revision, p_expected_rating_fingerprint: s.context.fingerprint, p_expected_plan_hash: null })
@@ -248,7 +251,7 @@ describe('flexible plans through PostgreSQL and application APIs', () => {
     const pool = context.pool.sort((a, b) => a.id.localeCompare(b.id)), squads = [pool.slice(0, 5), pool.slice(5)] as [typeof pool, typeof pool]
     const settings = { maxPartnerMeetings: 1, maxOpponentMeetings: null }
     const games = findDuelSchedule(squads, settings, .500001)!
-    const plan: FlexibleDuelPlan = { version: 1, engine: 'cp-sat', inputKey: context.key, splitId: 'odd', settings, squads: squads.map(s => s.map(p => p.id)) as [string[], string[]], option: { id: duelScheduleId(games), kind: 'balance', games, metrics: measureDuelSchedule(squads, games) } }
+    const plan: FlexibleDuelPlan = { version: 1, engine: 'cp-sat', inputKey: context.key, splitId: 'odd', settings, squads: squads.map(s => s.map(p => p.id)) as [string[], string[]], option: { id: duelScheduleId(games), kind: 'variety', games, metrics: measureDuelSchedule(squads, games) } }
     const saved = await saveFlexibleDuelPlan(seed.seasonId, plan, ['A', 'B'], context.revision, context.fingerprint, null, true)
     expect(saved.count).toBe(10)
     const first = (await fetchMatches(seed.seasonId, seed.leagueId))[0]!
@@ -258,7 +261,7 @@ describe('flexible plans through PostgreSQL and application APIs', () => {
     expect((await fetchMatches(seed.seasonId, seed.leagueId)).find(m => m.id === first.id)?.winner_team_id).toBe(first.away_team_id)
     await expect(clearUnplayedLeagueDuelFixtures(seed.seasonId, (await fetchMatches(seed.seasonId, seed.leagueId)).map(m => m.id))).rejects.toThrow()
   }, 30000)
-  it('preserves generated legacy plans and result corrections across the point-cap migration', async () => {
+  it('preserves generated legacy plans and result corrections across planner migrations', async () => {
     await api.close()
     const filename = '20261108173913_duel_ranking_point_limit.sql'
     api = await startLocalSupabase({ beforeMigration: filename })
@@ -269,6 +272,7 @@ describe('flexible plans through PostgreSQL and application APIs', () => {
     expect(created.error).toBeNull()
     const before = await api.db.query('SELECT to_jsonb(m) data FROM public.matches m WHERE season_id=$1 ORDER BY id', [s.seasonId])
     await api.db.exec(await readFile(`supabase/migrations/${filename}`, 'utf8'))
+    await api.db.exec(await readFile(`supabase/migrations/${varietyMigration}`, 'utf8'))
     expect((await api.db.query('SELECT to_jsonb(m) data FROM public.matches m WHERE season_id=$1 ORDER BY id', [s.seasonId])).rows).toEqual(before.rows)
     expect((await fetchSeasons(s.leagueId)).find(season => season.id === s.seasonId)!.duel_draft_plan).toEqual(s.plan)
     const first = (await fetchMatches(s.seasonId, s.leagueId))[0]!
@@ -276,6 +280,25 @@ describe('flexible plans through PostgreSQL and application APIs', () => {
     await recordResult(first.id, { winnerTeamId: first.away_team_id, homeScore: 7, awayScore: 11 })
     expect((await fetchSeasons(s.leagueId)).find(season => season.id === s.seasonId)!.duel_draft_plan).toEqual(s.plan)
     expect((await fetchMatches(s.seasonId, s.leagueId)).find(match => match.id === first.id)!.winner_team_id).toBe(first.away_team_id)
+  }, 30000)
+  it('requires a fresh schedule for a stored balance draft and preserves its appearance until replacement', async () => {
+    await api.close()
+    api = await startLocalSupabase({ beforeMigration: varietyMigration })
+    state.client = createClient(api.url, 'local-anon-key', { global: { headers: { Authorization: `Bearer ${api.token}` } }, auth: { persistSession: false, autoRefreshToken: false } })
+    const s = await prepare()
+    const old = structuredClone(s.plan); old.option.kind = 'balance'
+    const args = { p_season_id: s.seasonId, p_plan: old, p_names: ['Existing A', 'Existing B'], p_expected_rating_revision: s.context.revision,
+      p_expected_rating_fingerprint: s.context.fingerprint, p_expected_plan_hash: null, p_colors: ['#9333ea', '#0891b2'] }
+    const saved = await state.client!.rpc('save_league_duel_plan_atomic', args)
+    expect(saved.error).toBeNull()
+    await api.db.exec(await readFile(`supabase/migrations/${varietyMigration}`, 'utf8'))
+    await expect(generateLeagueDuelSeasonMatches(s.seasonId)).rejects.toThrow('DUEL_STALE_DRAFT')
+    const rejected = await state.client!.rpc('save_and_generate_league_duel_plan_atomic', { ...args, p_expected_plan_hash: saved.data.hash })
+    expect(rejected.error?.message).toContain('DUEL_STALE_DRAFT')
+    expect(await fetchMatches(s.seasonId, s.leagueId)).toHaveLength(0)
+    expect((await fetchTeamsWithPlayers(s.seasonId)).map(t => [t.name, t.color]).sort()).toEqual([['Existing A', '#9333ea'], ['Existing B', '#0891b2']])
+    expect((await fetchSeasons(s.leagueId)).find(season => season.id === s.seasonId)?.duel_draft_plan).toEqual(old)
+    expect((await saveFlexibleDuelPlan(s.seasonId, s.plan, ['Existing A', 'Existing B'], s.context.revision, s.context.fingerprint, saved.data.hash, true)).count).toBe(6)
   }, 30000)
   it('preserves populated legacy fixtures during migration', async () => {
     await api.close()

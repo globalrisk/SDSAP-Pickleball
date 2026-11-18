@@ -1,9 +1,12 @@
 import threading
+import time
 import unittest
 import uuid
+from collections import Counter
+from itertools import combinations
 from unittest.mock import patch
 
-from server.duel_service import ApiError, generate, load_context, normal_cdf
+from server.duel_service import ApiError, generate, load_context, normal_cdf, split_id
 
 
 class Reader:
@@ -14,6 +17,8 @@ class Reader:
         self.season = str(uuid.UUID(int=201))
         self.admin, self.fixtures = True, False
         self.snapshot = {"revision": 1, "fingerprint": "fingerprint"}
+        self.ratings = [1500] * len(self.ids)
+        self.deviations = [90] * len(self.ids)
 
     def request(self, path, query=None, body=None):
         if path == "/auth/v1/user":
@@ -23,7 +28,8 @@ class Reader:
         if path == "/rest/v1/season_roster":
             return [{"pool_player_id": p} for p in self.ids]
         if path == "/rest/v1/league_players":
-            return [{"pool_player_id": p, "rating": 1500, "rating_deviation": 90, "status": "active"} for p in self.ids]
+            return [{"pool_player_id": p, "rating": r, "rating_deviation": rd, "status": "active"}
+                    for p, r, rd in zip(self.ids, self.ratings, self.deviations)]
         if path == "/rest/v1/matches":
             return [{"id": "fixture"}] if self.fixtures else []
         raise AssertionError(path)
@@ -35,14 +41,27 @@ class Reader:
             return {"leagueId": self.league, "seasonIds": [], "partnerships": []}
         raise AssertionError(name)
 
-    def body(self):
+    def body(self, **overrides):
         return {"leagueId": self.league, "seasonId": self.season, **self.snapshot,
-                "squads": [self.ids[:self.size], self.ids[self.size:]], "settings": {"maxPartnerMeetings": 2, "maxOpponentMeetings": 2}}
+                "searchMode": "generate", "settings": {"maxPartnerMeetings": 2, "maxOpponentMeetings": 3},
+                **overrides}
+
+    def split_ids(self):
+        ids = sorted(self.ids, key=lambda p: (-self.ratings[self.ids.index(p)], p))
+        for tail in combinations(ids[1:], self.size - 1):
+            home = [ids[0], *tail]
+            yield split_id([home, [p for p in ids if p not in home]])
 
 
 class ServiceTests(unittest.TestCase):
     def setUp(self):
         self.reader = Reader()
+
+    def context(self, **overrides):
+        return load_context(self.reader.body(**overrides), "token", self.reader)
+
+    def run_search(self, context, seconds=3):
+        return generate(context, threading.Event(), lambda _: None, deadline=time.perf_counter() + seconds)
 
     def test_authentication_and_authorization_precede_solving(self):
         with self.assertRaises(ApiError) as error:
@@ -54,168 +73,120 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(error.exception.status, 403)
 
     def test_stale_snapshot_and_fixture_existence_are_rejected(self):
-        body = self.reader.body(); body["revision"] = 0
         with self.assertRaisesRegex(ApiError, "DUEL_STALE_DRAFT"):
-            load_context(body, "token", self.reader)
+            self.context(revision=0)
         self.reader.fixtures = True
         with self.assertRaisesRegex(ApiError, "SOLVER_SEASON_HAS_MATCHES"):
-            load_context(self.reader.body(), "token", self.reader)
+            self.context()
 
-    def test_caps_and_exact_roster_are_checked(self):
-        body = self.reader.body(); body["settings"]["maxOpponentMeetings"] = 1
-        with self.assertRaisesRegex(ApiError, "SOLVER_INVALID_LIMITS"):
-            load_context(body, "token", self.reader)
-        body = self.reader.body(); body["squads"][0][0] = body["squads"][1][0]
-        with self.assertRaisesRegex(ApiError, "DUEL_STALE_DRAFT"):
-            load_context(body, "token", self.reader)
+    def test_validation_rejects_old_requests_and_unknown_shuffle_splits(self):
+        for overrides in ({"searchMode": "fixed"}, {"excludedIds": []}, {"squads": []}, {"searchMode": "shuffle"}):
+            with self.assertRaisesRegex(ApiError, "SOLVER_INVALID_REQUEST"):
+                self.context(**overrides)
+        with self.assertRaisesRegex(ApiError, "SOLVER_INVALID_REQUEST"):
+            self.run_search(self.context(searchMode="shuffle", currentSplitId="outside-roster"))
 
-    def test_two_profiles_are_distinct_and_refresh_excludes_them(self):
-        context = load_context(self.reader.body(), "token", self.reader)
-        result = generate(context, threading.Event(), lambda _: None)
-        self.assertEqual([o["kind"] for o in result["options"]], ["balance", "variety"])
-        identities = [o["id"] for o in result["options"]]
-        self.assertEqual(len(set(identities)), 2)
-        context["excluded"] = identities
-        refreshed = generate(context, threading.Event(), lambda _: None)
-        self.assertTrue(all(o["id"] not in identities for o in refreshed["options"]))
-        self.assertEqual(len(refreshed["options"]), 2)
+    def test_limits_are_validated(self):
+        defaults = self.reader.body()["settings"]
+        for key, invalid in (
+            ("maxOpponentMeetings", [1]),
+            ("maxMatchProbability", [None, True, "65", .49, 1.01, float("nan"), float("inf")]),
+            ("maxRatingDifference", [-1, .5, True, "400", float("nan"), float("inf")]),
+        ):
+            for value in invalid:
+                with self.subTest(key=key, value=value), self.assertRaisesRegex(ApiError, "SOLVER_INVALID_LIMITS"):
+                    self.context(settings={**defaults, key: value})
 
-    def test_match_probability_is_validated_and_never_relaxed_for_other_profiles(self):
-        for value in (None, True, "65", .49, 1.01, float("nan"), float("inf")):
-            body = self.reader.body(); body["settings"]["maxMatchProbability"] = value
-            with self.assertRaisesRegex(ApiError, "SOLVER_INVALID_LIMITS"):
-                load_context(body, "token", self.reader)
-        for limit in (.6, .65, .7):
-            body = self.reader.body(); body["settings"]["maxMatchProbability"] = limit
-            context = load_context(body, "token", self.reader)
-            from server.duel_solver import solve
-            seen = []
-            def checked(request, cancelled):
-                seen.append(request["maxWorst"])
-                self.assertLessEqual(request["maxWorst"], limit)
-                return solve(request, cancelled)
-            with patch("server.duel_solver.solve", side_effect=checked):
-                result = generate(context, threading.Event(), lambda _: None)
-            self.assertEqual(len(result["options"]), 2)
-            self.assertEqual(len(seen), 2)
-
-    def test_ranking_point_limit_validation_and_authoritative_squad_search(self):
-        for value in (-1, .5, True, "400", float("nan"), float("inf")):
-            body = self.reader.body(); body["settings"]["maxRatingDifference"] = value
-            with self.assertRaisesRegex(ApiError, "SOLVER_INVALID_LIMITS"):
-                load_context(body, "token", self.reader)
-        for value in (None, 0, 400):
-            body = self.reader.body(); body["settings"]["maxRatingDifference"] = value
-            context = load_context(body, "token", self.reader)
-            result = generate(context, threading.Event(), lambda _: None)
-            self.assertEqual(len(result["options"]), 2)
-        context["searchMode"] = "shuffle"
-        context["settings"]["maxRatingDifference"] = 400
-        # One player cannot participate in any four-player group within the cap.
-        context["pool"][self.reader.ids[0]]["rating"] = 1900.01
+    def test_ranking_point_cap_prefilters_all_splits(self):
+        self.reader.ratings[0] = 1900.01
+        context = self.context(settings={**self.reader.body()["settings"], "maxRatingDifference": 400})
         with patch("server.duel_solver.solve") as solver:
-            result = generate(context, threading.Event(), lambda _: None)
+            result = self.run_search(context)
         solver.assert_not_called()
         self.assertEqual(result["status"], "INFEASIBLE")
         self.assertEqual(len(result["provenInfeasibleSplitIds"]), 35)
-        context["searchMode"] = "fixed"
-        self.assertEqual(generate(context, threading.Event(), lambda _: None)["status"], "INFEASIBLE")
 
-    def test_cancelled_search_returns_no_preview(self):
-        event = threading.Event(); event.set()
-        result = generate(load_context(self.reader.body(), "token", self.reader), event, lambda _: None)
-        self.assertIsNone(result)
+    def test_generation_picks_the_split_with_more_pairs(self):
+        self.reader.ratings = [1910, 1840, 1800, 1700, 1570, 1470, 1310, 1140]
+        self.reader.deviations = [65, 160, 65, 160, 65, 90, 65, 120]
+        context = self.context(settings={**self.reader.body()["settings"], "maxMatchProbability": .68})
+        result = self.run_search(context, 8)
+        self.assertEqual(result["status"], "FEASIBLE")
+        self.assertEqual(result["squads"][0], [self.reader.ids[i] for i in (0, 3, 5, 6)])
+        option, = result["options"]
+        self.assertEqual(option["kind"], "variety")
+        self.assertEqual(option["solver"]["coverageProof"], "roster")
+        partners = {tuple(side) for g in option["games"] for side in (g["homePoolPlayerIds"], g["awayPoolPlayerIds"])}
+        opponents = {(p, q) for g in option["games"] for p in g["homePoolPlayerIds"] for q in g["awayPoolPlayerIds"]}
+        self.assertEqual((len(partners), len(opponents)), (12, 16))
 
-    def test_long_variety_budget_reaches_fixed_and_shuffle_solves(self):
+    def test_single_preview_for_all_supported_rosters(self):
         from server.duel_solver import solve
-        for context in (load_context(self.reader.body(), "token", self.reader), self.shuffle_context()):
-            with self.subTest(mode=context["searchMode"]):
-                budgets = {}
-                def check(request, cancelled):
-                    budgets[request["profile"]] = request["seconds"]
-                    return solve({**request, "seconds": min(request["seconds"], 3)}, cancelled)
-                with patch("server.duel_solver.solve", side_effect=check):
-                    result = generate(context, threading.Event(), lambda _: None)
-                self.assertEqual([option["kind"] for option in result["options"]], ["balance", "variety"])
-                self.assertGreater(budgets["variety"], 239)
-                self.assertLessEqual(budgets["variety"], 240)
+        for size in range(4, 8):
+            with self.subTest(size=size):
+                reader = Reader(size)
+                preferred, *other = reader.split_ids()
+                context = load_context(reader.body(skipSplitIds=other), "token", reader)
 
-    def test_fourteen_player_default_limits_return_valid_previews(self):
-        reader = Reader(7)
-        result = generate(load_context(reader.body(), "token", reader), threading.Event(), lambda _: None)
-        self.assertEqual(len(result["options"]), 2)
-        for option in result["options"]:
-            self.assertEqual(len(option["games"]), 21)
-            self.assertEqual(len({tuple(sorted(g["homePoolPlayerIds"] + g["awayPoolPlayerIds"])) for g in option["games"]}), 21)
-            counts = {}
-            for game in option["games"]:
-                for h in game["homePoolPlayerIds"]:
-                    for a in game["awayPoolPlayerIds"]:
-                        counts[h, a] = counts.get((h, a), 0) + 1
-            self.assertLessEqual(max(counts.values()), 2)
+                def checked(request, cancelled, *, initial):
+                    self.assertEqual(request["maxWorst"], .65)
+                    self.assertEqual(request["profile"], "variety")
+                    return solve({**request, "seconds": min(request["seconds"], .5)}, cancelled, initial=initial)
 
-    def shuffle_context(self):
-        body = self.reader.body(); body["searchMode"] = "shuffle"; body.pop("squads")
-        return load_context(body, "token", self.reader)
+                with patch("server.duel_solver.solve", side_effect=checked):
+                    result = self.run_search(context)
+                option, = result["options"]
+                self.assertEqual(split_id(result["squads"]), preferred)
+                self.assertEqual(len(option["games"]), size * (size - 1) // 2)
+                self.assertEqual(len({tuple(sorted(g["homePoolPlayerIds"] + g["awayPoolPlayerIds"])) for g in option["games"]}), len(option["games"]))
+                counts = Counter((p, q) for g in option["games"] for p in g["homePoolPlayerIds"] for q in g["awayPoolPlayerIds"])
+                self.assertLessEqual(max(counts.values()), 3)
 
-    def test_shuffle_returns_only_squads_with_a_valid_schedule(self):
-        context = self.shuffle_context()
-        result = generate(context, threading.Event(), lambda _: None)
-        self.assertEqual(result["scope"], "roster")
-        self.assertEqual(result["totalSplits"], 35)
-        self.assertEqual(len(result["options"]), 2)
-        self.assertEqual(set(sum(result["squads"], [])), set(self.reader.ids))
-        for option in result["options"]:
-            self.assertTrue(all(set(g["homePoolPlayerIds"]) <= set(result["squads"][0]) and set(g["awayPoolPlayerIds"]) <= set(result["squads"][1]) for g in option["games"]))
+    def test_shuffle_excludes_current_and_prefers_unseen(self):
+        current, seen, *_ = self.reader.split_ids()
+        options = self.run_search(self.context(searchMode="shuffle", currentSplitId=current, seenSplitIds=[current, seen]))
+        self.assertNotIn(split_id(options["squads"]), [current, seen])
+        self.assertEqual(len(options["options"]), 1)
+        self.assertEqual(options["options"][0]["solver"]["coverageProof"], "squads")
 
-    def test_shuffle_skips_an_infeasible_split_and_finds_another(self):
-        from server.duel_solver import solve
-        first = True
-        def checked(request, cancelled):
-            nonlocal first
-            if first:
-                first = False
-                return {"solution": None, "status": "INFEASIBLE"}
-            return solve(request, cancelled)
-        with patch("server.duel_solver.solve", side_effect=checked):
-            result = generate(self.shuffle_context(), threading.Event(), lambda _: None)
-        self.assertEqual(len(result["provenInfeasibleSplitIds"]), 1)
-        self.assertTrue(result["options"])
-
-    def test_shuffle_requires_proof_for_every_possible_split(self):
-        context = self.shuffle_context()
+    def test_shuffle_reports_impossibility_only_after_proving_all_other_splits(self):
+        current, *others = self.reader.split_ids()
+        context = self.context(searchMode="shuffle", currentSplitId=current)
         with patch("server.duel_solver.solve", return_value={"solution": None, "status": "INFEASIBLE"}):
-            result = generate(context, threading.Event(), lambda _: None)
+            result = self.run_search(context)
         self.assertEqual(result["status"], "INFEASIBLE")
-        self.assertEqual(len(set(result["provenInfeasibleSplitIds"])), 35)
-        self.assertNotIn("squads", result)
+        self.assertEqual(set(result["provenInfeasibleSplitIds"]), set(others))
 
-    def test_unknown_split_is_not_skipped_when_a_batch_is_resumed(self):
-        first = True
-        def unfinished(request, cancelled):
-            nonlocal first
-            status = "UNKNOWN" if first else "INFEASIBLE"
-            first = False
-            return {"solution": None, "status": status}
-        context = self.shuffle_context()
-        with patch("server.duel_solver.solve", side_effect=unfinished):
-            result = generate(context, threading.Event(), lambda _: None)
+    def test_unknown_split_can_be_retried_and_is_never_recorded_as_a_proof(self):
+        first, *others = self.reader.split_ids()
+        context = self.context(skipSplitIds=others)
+        with patch("server.duel_solver.solve", return_value={"solution": None, "status": "UNKNOWN"}) as solver:
+            result = self.run_search(context)
         self.assertEqual(result["status"], "UNKNOWN")
-        self.assertEqual(len(result["provenInfeasibleSplitIds"]), 34)
-        context["skipSplitIds"] = result["provenInfeasibleSplitIds"]
-        context["attempt"] = 2
-        resumed = generate(context, threading.Event(), lambda _: None)
-        self.assertTrue(resumed["options"])
-        self.assertEqual(resumed["provenInfeasibleSplitIds"], [])
+        self.assertEqual(result["provenInfeasibleSplitIds"], [])
+        self.assertEqual(solver.call_count, 2)
+        context["attempt"] = 1
+        result = self.run_search(context)
+        self.assertEqual(split_id(result["squads"]), first)
 
-    def test_shuffle_rejects_stale_proofs_if_ratings_change_during_search(self):
-        context = self.shuffle_context()
-        def changed(request, cancelled):
+    def test_search_honors_one_deadline_and_cancellation(self):
+        event = threading.Event()
+        event.set()
+        self.assertIsNone(generate(self.context(), event, lambda _: None))
+        with patch("server.duel_solver.solve") as solver:
+            result = self.run_search(self.context(), 0)
+        solver.assert_not_called()
+        self.assertEqual(result["status"], "UNKNOWN")
+
+    def test_rating_change_during_search_invalidates_proofs(self):
+        def changed(request, cancelled, *, initial):
             self.reader.snapshot = {"revision": 2, "fingerprint": "changed"}
             return {"solution": None, "status": "INFEASIBLE"}
+
+        context = self.context()
         with patch("server.duel_solver.solve", side_effect=changed):
             with self.assertRaisesRegex(ApiError, "DUEL_STALE_DRAFT"):
-                generate(context, threading.Event(), lambda _: None)
+                self.run_search(context)
 
     def test_probability_approximation_agrees_with_known_values(self):
         self.assertAlmostEqual(normal_cdf(0), .500000015, places=12)

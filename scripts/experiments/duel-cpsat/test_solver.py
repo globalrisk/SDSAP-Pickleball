@@ -121,7 +121,7 @@ class SolverTests(unittest.TestCase):
         probabilities = [.5 * (1 + math.erf((sum(h) - sum(a)) / math.sqrt(2 * 290000)))
                          for h in edges for a in edges]
         result = solve(self.request(size=7, probabilities=probabilities, seconds=.5,
-                                    warmMs=50, presolve=False, profile="balance"))
+                                    warmMs=50, presolve=False, profile="variety"))
         self.assertEqual(result["status"], "FEASIBLE")
         self.assertEqual(len(result["solution"]["games"]), 21)
         self.assertTrue(balanced(result["solution"]["forecast"]))

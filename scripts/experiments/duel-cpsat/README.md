@@ -44,6 +44,6 @@ The mixed-rating fixture uses the existing anonymous twelve-player rating/uncert
 
 CP-SAT is promising for the equal-rating case that stalls the custom search. It is not yet a universally faster replacement: mixed-rating optimization still needs work, and tight quality thresholds can consume the whole budget without a solution.
 
-This benchmark tests worst-match probability for one fixed split, not global squad selection or both profile objectives. The production service additionally implements balance/variety profiles and history tie breakers. It retains the saved-plan format and existing database validation. The timings above describe formulation version 2; the current shared solver is version 3, with structural warm starts and additional objectives.
+This benchmark tests worst-match probability for one fixed split. The production service compares splits and optimizes distinct partner and opponent coverage, using actual partnership history as a tie breaker. The timings above describe formulation version 2. The current shared solver also supports structural warm starts and verified schedule hints.
 
 References: [OR-Tools scheduling examples](https://developers.google.com/optimization/scheduling/employee_scheduling), [official CP-SAT Python implementation](https://github.com/google/or-tools/blob/stable/ortools/sat/python/cp_model.py).
