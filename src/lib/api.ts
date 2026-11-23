@@ -8,6 +8,7 @@ import { fetchAllPages } from './pagination'
 import { buildRoundRobinMatches } from './schedule'
 import { generateLeagueDuelSeasonMatches } from './leagueTeamDuelApi'
 import { validateTeamDuelScore } from './teamDuelSchedule'
+import { assertReviewedDuelLineup, type DuelMatchLineup } from './duelMatchReplacement'
 import { partnershipKey } from './balanceTeams'
 import { validateForfeitTeam, validateMatchResult } from './matchResultValidation'
 import { computePlayerFunStats } from './engagement'
@@ -977,6 +978,7 @@ export async function recordResult(
     awayScore?: number
   },
   correction?: BetCorrection,
+  reviewedLineup?: DuelMatchLineup,
 ): Promise<void> {
   const { data: match, error: matchError } = await supabase
     .from('matches')
@@ -986,6 +988,7 @@ export async function recordResult(
     .eq('id', matchId)
     .single()
   if (matchError) throw matchError
+  assertReviewedDuelLineup(match, reviewedLineup)
   const leagueId = joinedOne(match.seasons as { league_id: string } | { league_id: string }[])?.league_id
   if (!leagueId) throw new Error('Match league was not found')
 
@@ -1040,6 +1043,7 @@ export async function recordForfeit(
   homeTeamId: string,
   awayTeamId: string,
   correction?: BetCorrection,
+  reviewedLineup?: DuelMatchLineup,
 ): Promise<void> {
   const { data: match, error: matchError } = await supabase
     .from('matches')
@@ -1049,6 +1053,7 @@ export async function recordForfeit(
     .eq('id', matchId)
     .single()
   if (matchError) throw matchError
+  assertReviewedDuelLineup(match, reviewedLineup)
   const leagueId = joinedOne(match.seasons as { league_id: string } | { league_id: string }[])?.league_id
   if (!leagueId) throw new Error('Match league was not found')
 

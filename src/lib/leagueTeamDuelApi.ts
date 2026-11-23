@@ -11,6 +11,23 @@ import { isSeasonForecastBalanced } from './seasonForecast'
 import { duelPlanMatchesInput, hasUniqueDuelMatchups, isCurrentDuelPlan, type FlexibleDuelPlan } from './flexibleDuel'
 import { DEFAULT_TEAM_COLORS, isTeamColor } from './teamColors'
 
+export async function replaceLeagueDuelMatchPlayer(
+  matchId: string,
+  outgoingPlayerId: string,
+  incomingPlayerId: string,
+  expectedHome: string[],
+  expectedAway: string[],
+): Promise<void> {
+  const { error } = await supabase.rpc('replace_league_duel_match_player', {
+    p_match_id: matchId,
+    p_outgoing_player_id: outgoingPlayerId,
+    p_incoming_player_id: incomingPlayerId,
+    p_expected_home: expectedHome,
+    p_expected_away: expectedAway,
+  })
+  if (error) throw error
+}
+
 export async function fetchFlexibleDuelContext(leagueId: string, seasonId: string) {
   for (let attempt = 0; attempt < 3; attempt++) {
     const context = await fetchLeagueDuelDraftContext(leagueId, seasonId)

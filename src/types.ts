@@ -244,6 +244,8 @@ export interface Match {
   result_recorded_at: string | null
   created_at: string
   duel_sequence_number?: number | null
+  duel_planned_home_pool_player_ids?: string[] | null
+  duel_planned_away_pool_player_ids?: string[] | null
 }
 
 export interface MatchWithTeams extends Match {

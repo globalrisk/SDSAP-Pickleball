@@ -379,6 +379,7 @@ export function LiveTournamentPage() {
                   label={t(tournament.upNext ? 'live.queuedNext' : 'live.autoSelected')}
                   tone="next"
                   actions={canManage ? upNextActions(upNextMatch) : null}
+                  allowPlayerReplacement={canManage}
                 />
               ) : (
                 <p className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900">{t('live.noUpNext')}</p>
@@ -395,10 +396,29 @@ export function LiveTournamentPage() {
               </div>
               <div className="space-y-3">
                 {availableMatches.map((match) => (
-                  <LiveMatchCard key={match.id} match={match} label={t('live.ready')} actions={canManage ? queueActions(match) : null} />
+                  <LiveMatchCard key={match.id} match={match} label={t('live.ready')} actions={canManage ? queueActions(match) : null} allowPlayerReplacement={canManage} />
                 ))}
               </div>
             </section>
+
+            {selectedSeason?.format === 'team_duel' && tournament.waiting.length > 0 && (
+              <section aria-labelledby="live-waiting-players">
+                <h2 id="live-waiting-players" className="mb-3 text-lg font-black text-green-950">{t('live.waitingForPlayers')}</h2>
+                <div className="space-y-3">
+                  {tournament.waiting.map((match) => {
+                    const missing = [...(match.home_team.players ?? []), ...(match.away_team.players ?? [])]
+                      .filter((player) => !player.is_present).map((player) => player.name)
+                    return <LiveMatchCard
+                      key={match.id}
+                      match={match}
+                      label={t('live.waitingForNames', { names: missing.join(', ') })}
+                      tone="waiting"
+                      allowPlayerReplacement={canManage}
+                    />
+                  })}
+                </div>
+              </section>
+            )}
 
           </div>
 

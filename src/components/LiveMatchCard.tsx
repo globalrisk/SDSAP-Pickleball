@@ -1,7 +1,9 @@
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { RecordResultForm, type SavedMatchResult } from './RecordResultForm'
+import { DuelMatchPlayerReplacement } from './DuelMatchPlayerReplacement'
 import { TeamNameWithPlayers } from './TeamNameWithPlayers'
+import { canReplaceDuelMatchPlayer } from '../lib/duelMatchReplacement'
 import type { MatchWithTeams } from '../types'
 
 interface LiveMatchCardProps {
@@ -9,6 +11,7 @@ interface LiveMatchCardProps {
   label: string
   tone?: 'playing' | 'next' | 'available' | 'waiting'
   showResultForm?: boolean
+  allowPlayerReplacement?: boolean
   actions?: ReactNode
   onSaved?: (result: SavedMatchResult) => void
 }
@@ -25,6 +28,7 @@ export function LiveMatchCard({
   label,
   tone = 'available',
   showResultForm = false,
+  allowPlayerReplacement = false,
   actions,
   onSaved,
 }: LiveMatchCardProps) {
@@ -33,8 +37,8 @@ export function LiveMatchCard({
   return (
     <article className={`overflow-hidden rounded-2xl border bg-white shadow-sm ${toneClasses[tone]}`}>
       <div className="flex items-center border-b border-gray-100 bg-gray-50/80 px-4 py-2.5">
-        <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-green-800">
-          {tone === 'playing' ? <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" /> : null}
+        <span className="text-xs font-bold uppercase tracking-wider text-green-800 [overflow-wrap:anywhere]">
+          {tone === 'playing' ? <span aria-hidden="true" className="mr-2 inline-block size-2 animate-pulse rounded-full bg-red-500 align-middle" /> : null}
           {label}
           {match.duel_sequence_number != null ? <span className="normal-case"> · {t('leagueDuel.gameLabel', { game: match.duel_sequence_number, round: match.round_number })}</span> : null}
         </span>
@@ -63,6 +67,7 @@ export function LiveMatchCard({
         </div>
 
         {actions ? <div className="mt-4 flex flex-wrap gap-2">{actions}</div> : null}
+        {allowPlayerReplacement && canReplaceDuelMatchPlayer(match) && <DuelMatchPlayerReplacement match={match} />}
 
         {showResultForm ? (
           <>

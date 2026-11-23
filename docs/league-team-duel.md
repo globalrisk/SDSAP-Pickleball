@@ -40,15 +40,17 @@ Cards show worst and mean favorite probability, games within 40/60, opponent and
 
 Apply `supabase/migrations/20261118024352_require_variety_duel_drafts.sql` **before deploying the updated server and frontend together**. The migration requires the current `variety` objective when saving a draft or creating fixtures. Database validation checks roster, equal participation, rounds, caps, authoritative ratings, TrueSkill season chances, rating snapshot, and expected plan hash under existing locks. Failures roll back the transaction.
 
-Generated seasons retain their schedule mode and frozen lineups. Legacy tier-matched and mirror schedules remain valid, including result corrections and rating replay. The former tier planner remains in compatibility paths; new editable fixture-free drafts use flexible planning. Existing fixtures are never automatically replaced and the current season is never rebuilt automatically.
+Generated seasons retain their schedule mode and planned lineups. Legacy tier-matched and mirror schedules remain valid, including result corrections and rating replay. The former tier planner remains in compatibility paths; new editable fixture-free drafts use flexible planning. Existing fixtures are never automatically replaced and the current season is never rebuilt automatically.
 
 Active-season administrators can rename squads without changing membership, fixtures, results, or ratings. Archived seasons remain read-only. **Clear unplayed fixtures** requires confirmation, exact reviewed fixture IDs, no recorded results or forfeits, no game on court, and no linked rating history. It atomically clears fixtures and invalidates the plan, preserving season, roster, squads, ratings, and other seasons. Search/save a fresh plan before regeneration. Advanced fixture deletion also invalidates plans through existing snapshot guards.
 
 ## Results and forecasts
 
+Administrators can use **Replace player** on **Matches** or **Live**, including fixtures under **Waiting for players**. An active squadmate can stand in for one game until that game first goes on court or receives a result. The same control can restore the planned player before that cutoff. Changing the lineup voids that match’s open and accepted offers and releases reserved stakes. Apply the `replace_league_duel_match_player` migration before deploying the frontend. It preserves the planned lineups recorded by the Season 17 and 18 corrections.
+
 Standard results require at least 11 points and a two-point margin. Forfeits award a squad point without changing ratings. All games continue after a squad clinches victory. Equal final game wins mean joint champions without a deciding game or point-differential tiebreak.
 
-Dashboard and Matches forecast all frozen games using current ratings. Recorded wins and forfeits become fixed outcomes. Missing ratings or incomplete lineups make the forecast unavailable; games are never silently omitted. It assumes independent outcomes and does not model correlated form or partnership chemistry. After play starts, forecasts can exceed 55/45; the guardrail applies when selecting and generating drafts.
+Dashboard and Matches forecast scheduled games from their current lineups and player ratings. Recorded wins and forfeits become fixed outcomes. Missing ratings or incomplete lineups make the forecast unavailable; games are never silently omitted. It assumes independent outcomes and does not model correlated form or partnership chemistry. After play starts, forecasts can exceed 55/45; the guardrail applies when selecting and generating drafts.
 
 ## Verification
 
