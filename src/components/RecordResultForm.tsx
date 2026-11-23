@@ -139,14 +139,17 @@ export function RecordResultForm({
         await cancelMatch(match.id)
         return
       }
+      const reviewedLineup = match.duel_sequence_number != null ? match : undefined
       if (payload.type === 'result') {
         await recordResult(match.id, {
           winnerTeamId: payload.winnerTeamId,
           homeScore: payload.homeScore,
           awayScore: payload.awayScore,
-        })
+        }, undefined, reviewedLineup)
       }
-      if (payload.type === 'forfeit') await recordForfeit(match.id, payload.forfeitTeamId, match.home_team_id, match.away_team_id)
+      if (payload.type === 'forfeit') {
+        await recordForfeit(match.id, payload.forfeitTeamId, match.home_team_id, match.away_team_id, undefined, reviewedLineup)
+      }
     },
     onSuccess: async (_data, payload) => {
       await Promise.all([
@@ -179,6 +182,12 @@ export function RecordResultForm({
       onDone?.()
     },
     onError: (err: Error, payload) => {
+      if (err.message?.startsWith('DUEL_SUB_STALE:')) {
+        setFailedPayload(null)
+        setError(t('matchReplacement.errors.DUEL_SUB_STALE'))
+        void queryClient.invalidateQueries({ queryKey: ['matches', match.season_id] })
+        return
+      }
       if (err instanceof MatchSaveConflictError) {
         setFailedPayload(null)
         setError(t('record.saveConflict'))

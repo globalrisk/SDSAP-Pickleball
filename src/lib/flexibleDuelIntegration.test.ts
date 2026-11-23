@@ -8,10 +8,13 @@ import { measureDuelSchedule, duelScheduleId, type FlexibleDuelPlan } from './fl
 import { teamWinProbability } from './ratings'
 const state = vi.hoisted(() => ({ client: null as SupabaseClient | null }))
 vi.mock('./supabase', () => ({ supabase: { from(table: string) { return state.client!.from(table) }, rpc(name: string, args: Record<string, unknown>) { return state.client!.rpc(name, args) } } }))
-import { clearUnplayedLeagueDuelFixtures, fetchFlexibleDuelContext, saveFlexibleDuelPlan, setSeasonFormat, renameLeagueDuelTeam, saveTeamAppearance, fetchLeagueDuelDraftPreview, saveLeagueDuelDraft, generateLeagueDuelSeasonMatches } from './leagueTeamDuelApi'
+import { clearUnplayedLeagueDuelFixtures, fetchFlexibleDuelContext, saveFlexibleDuelPlan, setSeasonFormat, renameLeagueDuelTeam, saveTeamAppearance, fetchLeagueDuelDraftPreview, saveLeagueDuelDraft, generateLeagueDuelSeasonMatches, replaceLeagueDuelMatchPlayer } from './leagueTeamDuelApi'
 import { DEFAULT_TEAM_COLORS } from './teamColors'
-import { fetchSeasons, fetchTeamsWithPlayers, fetchMatches, recordResult } from './api'
+import { archiveSeason, fetchSeasons, fetchTeamsWithPlayers, fetchMatches, recordResult, setMatchLiveStatus } from './api'
 import { saveSeasonRoster } from './seasonRosterApi'
+import { acceptBet, createBet, fetchWallet, linkPlayerAccount } from './betsApi'
+import { fetchPicklePreview, savePickleSettings } from './picklePointsApi'
+import type { MatchWithTeams } from '../types'
 
 let api: Awaited<ReturnType<typeof startLocalSupabase>>
 const varietyMigration = '20261118024352_require_variety_duel_drafts.sql'
@@ -33,7 +36,142 @@ async function prepare() {
   return { ...seed, context, plan, squads }
 }
 
+function substitute(match: MatchWithTeams, outgoing: string, incoming: string) {
+  return replaceLeagueDuelMatchPlayer(match.id, outgoing, incoming, match.home_pool_player_ids!, match.away_pool_player_ids!)
+}
+
 describe('flexible plans through PostgreSQL and application APIs', () => {
+  it('keeps the planned fixtures intact when two games end up with the same actual players', async () => {
+    const season = await prepare()
+    await saveFlexibleDuelPlan(season.seasonId, season.plan, ['A', 'B'], season.context.revision, season.context.fingerprint, null, true)
+    const read = () => fetchMatches(season.seasonId, season.leagueId)
+    const [first, second, ...others] = await read()
+    let revised = first!
+    for (const side of ['home_pool_player_ids', 'away_pool_player_ids'] as const) {
+      for (const desired of second![side]!) {
+        if (revised[side]!.includes(desired)) continue
+        const outgoing = revised[side]!.find((id) => !second![side]!.includes(id))!
+        await substitute(revised, outgoing, desired)
+        revised = (await read())[0]!
+      }
+    }
+    expect([...revised.home_pool_player_ids!].sort()).toEqual([...second!.home_pool_player_ids!].sort())
+    expect([...revised.away_pool_player_ids!].sort()).toEqual([...second!.away_pool_player_ids!].sort())
+    expect(revised.duel_planned_home_pool_player_ids ?? revised.home_pool_player_ids).toEqual(first!.home_pool_player_ids)
+    expect(revised.duel_planned_away_pool_player_ids ?? revised.away_pool_player_ids).toEqual(first!.away_pool_player_ids)
+    expect((await read()).slice(1)).toEqual([second, ...others])
+    expect((await state.client!.rpc('validate_league_duel_season', { p_season_id: season.seasonId })).error).toBeNull()
+  }, 30000)
+
+  it('revalidates Up Next, restores a late player, and rejects stale or ineligible replacements', async () => {
+    const season = await prepare()
+    await saveFlexibleDuelPlan(season.seasonId, season.plan, ['A', 'B'], season.context.revision, season.context.fingerprint, null, true)
+    const read = () => fetchMatches(season.seasonId, season.leagueId)
+    const [first, ...others] = await read()
+    const outgoing = first!.home_pool_player_ids![0]
+    const teammates = season.plan.squads[0].filter((id) => !first!.home_pool_player_ids!.includes(id))
+    const [present, absent] = teammates
+    await api.db.query('UPDATE public.players SET is_present = pool_player_id <> $2 WHERE season_id = $1', [season.seasonId, absent])
+    await expect(substitute(first!, outgoing, first!.home_pool_player_ids![1])).rejects.toThrow('DUEL_SUB_INELIGIBLE')
+    await expect(substitute(first!, outgoing, season.plan.squads[1][0])).rejects.toThrow('DUEL_SUB_INELIGIBLE')
+    const player = await api.addAccount({ email: 'stand-in-player@example.test' })
+    const member = createClient(api.url, 'local-anon-key', {
+      global: { headers: { Authorization: `Bearer ${player.token}` } },
+      auth: { persistSession: false, autoRefreshToken: false },
+    })
+    expect((await member.rpc('replace_league_duel_match_player', {
+      p_match_id: first!.id, p_outgoing_player_id: outgoing, p_incoming_player_id: present,
+      p_expected_home: first!.home_pool_player_ids, p_expected_away: first!.away_pool_player_ids,
+    })).error?.code).toBe('42501')
+
+    await setMatchLiveStatus(first!.id, 'up_next')
+    await substitute(first!, outgoing, present)
+    let revised = (await read())[0]!
+    expect(revised.live_status).toBe('up_next')
+    await expect(substitute(first!, outgoing, absent)).rejects.toThrow('DUEL_SUB_STALE')
+    await substitute(revised, present, absent)
+    revised = (await read())[0]!
+    expect(revised.live_status).toBe('available')
+    expect(revised.home_team.players?.find((p) => p.pool_player_id === absent)?.is_present).toBe(false)
+    expect(revised.duel_planned_home_pool_player_ids).toEqual(first!.home_pool_player_ids)
+    await substitute(revised, absent, outgoing)
+    revised = (await read())[0]!
+    expect(revised.home_pool_player_ids).toEqual(first!.home_pool_player_ids)
+    expect(revised.duel_planned_home_pool_player_ids).toBeNull()
+
+    await setMatchLiveStatus(first!.id, 'playing')
+    const other = others.find((match) => !match.home_pool_player_ids!.includes(outgoing))!
+    await expect(substitute(other, other.home_pool_player_ids![0], outgoing)).rejects.toThrow('DUEL_SUB_INELIGIBLE')
+    await expect(substitute(first!, outgoing, present)).rejects.toThrow('DUEL_SUB_LOCKED')
+    await setMatchLiveStatus(first!.id, 'available')
+    await expect(substitute(first!, outgoing, present)).rejects.toThrow('DUEL_SUB_LOCKED')
+  }, 30000)
+
+  it('voids lineup offers, releases both stakes and rates the lineup that actually played', async () => {
+    const season = await prepare()
+    await saveFlexibleDuelPlan(season.seasonId, season.plan, ['A', 'B'], season.context.revision, season.context.fingerprint, null, true)
+    const [first] = await fetchMatches(season.seasonId, season.leagueId)
+    const fixture = first!
+    const outgoing = fixture.home_pool_player_ids![0]
+    const incoming = season.plan.squads[0].find((id) => !fixture.home_pool_player_ids!.includes(id))!
+    const admin = state.client!
+    const bettors = await Promise.all(season.players.slice(-2).map((player, index) =>
+      api.addAccount({ email: `stand-in-bettor-${index}@example.test` }).then((account) => ({ player, account }))))
+    const clients: SupabaseClient[] = []
+    for (const { player, account } of bettors) {
+      await linkPlayerAccount(player.id, account.email)
+      await api.db.query('INSERT INTO public.pickle_wallets VALUES ($1, $2, 5000)', [season.leagueId, player.id])
+      clients.push(createClient(api.url, 'local-anon-key', {
+        global: { headers: { Authorization: `Bearer ${account.token}` } },
+        auth: { persistSession: false, autoRefreshToken: false },
+      }))
+    }
+    state.client = clients[0]!
+    const accepted = await createBet(fixture.id, fixture.home_team_id, '1000', '1000', crypto.randomUUID())
+    await createBet(fixture.id, fixture.home_team_id, '1000', '1000', crypto.randomUUID())
+    expect(await fetchWallet(season.leagueId)).toMatchObject({ reserved: '2000.000000' })
+    state.client = clients[1]!
+    await acceptBet(accepted, crypto.randomUUID())
+    expect(await fetchWallet(season.leagueId)).toMatchObject({ reserved: '1000.000000' })
+
+    state.client = admin
+    const revision = (await admin.rpc('league_duel_rating_snapshot', { p_league_id: season.leagueId })).data.revision
+    await substitute(fixture, outgoing, incoming)
+    expect((await api.db.query('SELECT state, close_reason FROM public.pickle_bets WHERE match_id = $1', [fixture.id])).rows)
+      .toEqual(Array.from({ length: 2 }, () => ({ state: 'void', close_reason: 'lineup' })))
+    for (const client of clients) {
+      state.client = client
+      expect(await fetchWallet(season.leagueId)).toMatchObject({ balance: '5000.000000', reserved: '0' })
+    }
+
+    state.client = admin
+    const score = { winnerTeamId: fixture.home_team_id, homeScore: 11, awayScore: 7 }
+    await expect(recordResult(fixture.id, score, undefined, fixture)).rejects.toThrow('DUEL_SUB_STALE')
+    // The score transaction was prepared before the substitution. Sending it
+    // afterward must roll back its claimed revision and the stale lineup.
+    const staleSave = await admin.rpc('save_match_and_ratings_atomic', {
+      p_league_id: season.leagueId, p_match_id: fixture.id, p_status: 'completed', p_winner_team_id: fixture.home_team_id,
+      p_home_score: 11, p_away_score: 7, p_home_pool_player_ids: fixture.home_pool_player_ids,
+      p_away_pool_player_ids: fixture.away_pool_player_ids, p_result_recorded_at: new Date().toISOString(),
+      p_history_rows: [], p_player_ratings: [], p_expected_revision: revision,
+    })
+    expect(staleSave.error?.message).toContain('DUEL_SUB_STALE')
+    expect((await admin.rpc('league_duel_rating_snapshot', { p_league_id: season.leagueId })).data.revision).toBe(revision)
+    await recordResult(fixture.id, score)
+    const actual = (await fetchMatches(season.seasonId, season.leagueId)).find((match) => match.id === fixture.id)!
+    expect(actual).toMatchObject({
+      status: 'completed', winner_team_id: fixture.home_team_id, home_pool_player_ids: [incoming, fixture.home_pool_player_ids![1]],
+    })
+    expect((await api.db.query('SELECT pool_player_id FROM public.rating_history WHERE match_id = $1 ORDER BY pool_player_id', [fixture.id])).rows)
+      .toEqual([...actual.home_pool_player_ids!, ...actual.away_pool_player_ids!].sort().map((pool_player_id) => ({ pool_player_id })))
+    await expect(substitute(actual, incoming, outgoing)).rejects.toThrow('DUEL_SUB_LOCKED')
+
+    await api.db.query("UPDATE public.matches SET status = 'forfeit', winner_team_id = home_team_id WHERE season_id = $1 AND status = 'scheduled'", [season.seasonId])
+    await savePickleSettings('season', season.seasonId, { matchPrize: '0', championPrize: '0' })
+    await archiveSeason(season.seasonId, (await fetchPicklePreview(season.seasonId)).fingerprint)
+    await expect(substitute(actual, incoming, outgoing)).rejects.toThrow('DUEL_SUB_LOCKED')
+  }, 30000)
+
   it('saves, reloads, generates exactly the selected preview, freezes it, and clears explicitly', async () => {
     const s = await prepare()
     s.plan.settings = { ...s.plan.settings, maxMatchProbability: .65, maxRatingDifference: null }

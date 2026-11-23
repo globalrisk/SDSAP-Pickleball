@@ -542,6 +542,24 @@
     "stepDone": "Complete",
     "stepAction": "Continue"
   },
+  "matchReplacement": {
+    "action": "Replace player",
+    "outgoing": "Player to replace",
+    "incoming": "Replacement teammate",
+    "selectPlayer": "Select a player",
+    "noTeammates": "No eligible teammates are available for this match.",
+    "confirm": "Replace {{outgoing}} with {{incoming}} for this match? Existing offers on this match will be voided and any reserved stakes released.",
+    "saving": "Saving…",
+    "saved": "Match lineup updated.",
+    "errors": {
+      "DUEL_SUB_STALE": "The lineup changed. Review the updated match and try again.",
+      "DUEL_SUB_BUSY": "The match is being updated. Review it again in a moment.",
+      "DUEL_SUB_LOCKED": "The match lineup is locked.",
+      "DUEL_SUB_INELIGIBLE": "That player is no longer eligible. Choose a teammate who is free.",
+      "load": "Could not load the current lineup and teammates.",
+      "generic": "Could not confirm the replacement. Check the current lineup before trying again."
+    }
+  },
   "matches": {
     "title": "Matches",
     "subtitle": "{{count}} round-robin matches",

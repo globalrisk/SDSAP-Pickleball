@@ -539,6 +539,24 @@
     "stepDone": "Đã xong",
     "stepAction": "Tiếp tục"
   },
+  "matchReplacement": {
+    "action": "Thay người chơi",
+    "outgoing": "Người chơi cần thay",
+    "incoming": "Đồng đội thay thế",
+    "selectPlayer": "Chọn người chơi",
+    "noTeammates": "Không có đồng đội đủ điều kiện thay người trong trận này.",
+    "confirm": "Thay {{outgoing}} bằng {{incoming}} trong trận này? Các đề nghị cược hiện có của trận này sẽ bị hủy và điểm đang giữ sẽ được giải phóng.",
+    "saving": "Đang lưu…",
+    "saved": "Đã cập nhật đội hình trận đấu.",
+    "errors": {
+      "DUEL_SUB_STALE": "Đội hình đã thay đổi. Hãy kiểm tra trận đấu đã cập nhật rồi thử lại.",
+      "DUEL_SUB_BUSY": "Trận đấu đang được cập nhật. Vui lòng kiểm tra lại sau giây lát.",
+      "DUEL_SUB_LOCKED": "Đội hình trận đấu đã bị khóa.",
+      "DUEL_SUB_INELIGIBLE": "Người chơi này không còn đủ điều kiện. Hãy chọn đồng đội đang rảnh.",
+      "load": "Không thể tải đội hình và danh sách đồng đội hiện tại.",
+      "generic": "Không thể xác nhận việc thay người. Hãy kiểm tra đội hình hiện tại trước khi thử lại."
+    }
+  },
   "matches": {
     "title": "Trận đấu",
     "subtitle": "{{count}} trận vòng tròn",

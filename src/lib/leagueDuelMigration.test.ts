@@ -10,8 +10,8 @@ vi.mock('./supabase', () => ({ supabase: {
   from(table: string) { return state.client!.from(table) },
   rpc(name: string, args: Record<string, unknown>) { return state.client!.rpc(name, args) },
 } }))
-import { fetchMatches, recordResult } from './api'
-import { fetchLeagueDuelDraftPreview, generateLeagueDuelSeasonMatches, saveLeagueDuelDraft, setSeasonFormat } from './leagueTeamDuelApi'
+import { fetchMatches, fetchTeamsWithPlayers, recordResult } from './api'
+import { fetchLeagueDuelDraftPreview, generateLeagueDuelSeasonMatches, replaceLeagueDuelMatchPlayer, saveLeagueDuelDraft, setSeasonFormat } from './leagueTeamDuelApi'
 import { saveSeasonRoster } from './seasonRosterApi'
 
 const migration = '20261002170215_league_duel_tier_partnerships.sql'
@@ -48,13 +48,17 @@ describe('tier migration over populated mirror history', () => {
       const originalSeason = (await api.db.query('SELECT to_jsonb(s) - ARRAY[\'duel_draft_rating_revision\', \'duel_draft_rating_fingerprint\'] AS data FROM public.seasons s WHERE id = $1', [emptySeason])).rows
       const storedData = async () => {
         const data: Record<string, unknown> = {}
+        const addedColumns = ['duel_tier', 'duel_schedule_mode', 'duel_draft_priority', 'betting_closed_at', 'badge',
+          'duel_planned_home_pool_player_ids', 'duel_planned_away_pool_player_ids']
         for (const table of ['seasons', 'season_roster', 'teams', 'players', 'matches', 'league_players', 'player_pool', 'rating_state', 'rating_history']) {
-          data[table] = (await api.db.query(`SELECT to_jsonb(t) - ARRAY['duel_tier','duel_schedule_mode','duel_draft_priority','betting_closed_at','badge'] AS data FROM public.${table} t ORDER BY (to_jsonb(t) - ARRAY['duel_tier','duel_schedule_mode','duel_draft_priority','badge'])::text`)).rows
+          data[table] = (await api.db.query(`SELECT to_jsonb(t) - $1::text[] AS data FROM public.${table} t ORDER BY (to_jsonb(t) - $1::text[])::text`, [addedColumns])).rows
         }
         return data
       }
       const before = await storedData()
       for (const file of (await readdir('supabase/migrations')).filter((file) => file >= migration && file.endsWith('.sql')).sort()) {
+        // Exercise upgrades from a database without the historical lineup columns.
+        if (file === '20261112173410_record_season17_duel_stand_in.sql') continue
         await api.db.exec(await readFile(`supabase/migrations/${file}`, 'utf8'))
       }
       const after = await storedData()
@@ -80,6 +84,21 @@ describe('tier migration over populated mirror history', () => {
       expect((await api.db.query('SELECT * FROM public.season_roster WHERE season_id = $1 ORDER BY pool_player_id', [emptySeason])).rows).toEqual(originalRoster)
       expect((await api.db.query('SELECT to_jsonb(s) - ARRAY[\'duel_draft_plan\', \'duel_draft_plan_hash\', \'duel_schedule_mode\', \'duel_draft_priority\', \'duel_draft_rating_revision\', \'duel_draft_rating_fingerprint\'] AS data FROM public.seasons s WHERE id = $1', [emptySeason])).rows).toEqual(originalSeason)
       expect(await fetchMatches(seasonId, leagueId)).toEqual(frozenHistory)
+      const mirror = frozenHistory.find((game) => game.status === 'scheduled')!
+      const tiered = (await fetchMatches(emptySeason, otherLeague))[0]!
+      for (const [match, league] of [[mirror, leagueId], [tiered, otherLeague]] as const) {
+        const teams = await fetchTeamsWithPlayers(match.season_id)
+        const home = teams.find((team) => team.id === match.home_team_id)!
+        const incoming = home.players.find((player) => !match.home_pool_player_ids!.includes(player.pool_player_id))!.pool_player_id
+        await replaceLeagueDuelMatchPlayer(match.id, match.home_pool_player_ids![0], incoming, match.home_pool_player_ids!, match.away_pool_player_ids!)
+        await recordResult(match.id, { winnerTeamId: match.home_team_id, homeScore: 11, awayScore: 8 })
+        expect((await fetchMatches(match.season_id, league)).find((game) => game.id === match.id)).toMatchObject({
+          status: 'completed',
+          home_pool_player_ids: [incoming, match.home_pool_player_ids![1]],
+          duel_planned_home_pool_player_ids: match.home_pool_player_ids,
+        })
+        expect((await state.client!.rpc('validate_league_duel_season', { p_season_id: match.season_id })).error).toBeNull()
+      }
     } finally { await api.close() }
   }, 30000)
 })

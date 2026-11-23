@@ -2,11 +2,13 @@ import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { RecordResultForm } from './RecordResultForm'
 import { TeamNameWithPlayers } from './TeamNameWithPlayers'
+import { DuelMatchPlayerReplacement } from './DuelMatchPlayerReplacement'
 import { useSeason } from '../context/SeasonContext'
 import { useAuth } from '../context/AuthContext'
 import { useLeague } from '../context/LeagueContext'
 import { formatMatchDate } from '../lib/formatDate'
 import { calculateMatchProbability } from '../lib/matchProbability'
+import { canReplaceDuelMatchPlayer } from '../lib/duelMatchReplacement'
 import type { MatchWithTeams } from '../types'
 
 interface MatchCardProps {
@@ -99,6 +101,7 @@ export function MatchCard({ match, showForm = true, betting }: MatchCardProps) {
 
       {betting}
       {match.status === 'cancelled' ? <p className="mt-4 text-sm text-gray-500">{t('record.cancelHelp')}</p> : null}
+      {canEdit && canReplaceDuelMatchPlayer(match) && <DuelMatchPlayerReplacement match={match} />}
       {canEdit && match.status === 'scheduled' && <RecordResultForm match={match} />}
 
       {canEdit && isFinished && !editing && (
