@@ -274,9 +274,18 @@ username sign-in and setup access still work.
 The expandable **Registered accounts** list under **League setup → Player accounts**
 shows registered emails, including unlinked accounts across all leagues. Search,
 refresh and pagination are available; **Use email** fills the linking form without
-creating a link. The directory is protected by a server-side administrator check
-and returns only email and linked player details. Anonymous and regular player
-accounts cannot read it.
+creating a link. Administrators can choose **Reset password** next to a registered
+player account, including one that is still unlinked. Enter the new password twice
+to apply it through Supabase Auth immediately. Administrator accounts use their
+own **My Profile → Settings** page to change their passwords.
+
+The directory is protected by a server-side administrator check. It returns the
+email, linked player details, and a stable reset target for eligible accounts.
+Apply the player password reset migration and deploy
+`npx supabase functions deploy admin-player-password-reset` before releasing the
+frontend. The function verifies the caller's current admin role in Supabase Auth
+and uses the platform-provided secret key on the server.
+
 The directory's [privileged RPC advisor notice](https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable)
 is expected: signed-in callers can request it, but the function verifies the protected
 administrator role before reading any emails. Database tests cover that distinction.

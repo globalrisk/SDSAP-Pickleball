@@ -16,6 +16,13 @@ BEGIN
   IF NOT EXISTS(SELECT 1 FROM jsonb_array_elements(result->'accounts') a WHERE a->>'email'='directory-waiting@example.test' AND a->>'playerId' IS NULL) THEN RAISE EXCEPTION 'Unlinked account missing'; END IF;
   IF NOT EXISTS(SELECT 1 FROM jsonb_array_elements(result->'accounts') a WHERE a->>'email'='directory-linked@example.test' AND a->>'playerName'='Directory player') THEN RAISE EXCEPTION 'Linked account missing'; END IF;
   IF EXISTS(SELECT 1 FROM jsonb_array_elements(result->'accounts') a WHERE a ? 'id' OR a ? 'userId' OR a ? 'password') THEN RAISE EXCEPTION 'Unnecessary Auth fields exposed'; END IF;
+  IF NOT EXISTS(SELECT 1 FROM jsonb_array_elements(result->'accounts') a
+      WHERE a->>'email'='directory-linked@example.test' AND (a->>'passwordResetUserId')::uuid=player_user)
+    OR NOT EXISTS(SELECT 1 FROM jsonb_array_elements(result->'accounts') a
+      WHERE a->>'email'='directory-waiting@example.test' AND (a->>'passwordResetUserId')::uuid=waiting_user)
+    OR NOT EXISTS(SELECT 1 FROM jsonb_array_elements(result->'accounts') a
+      WHERE a->>'email'='directory-admin@example.test' AND a->'passwordResetUserId'='null'::jsonb)
+  THEN RAISE EXCEPTION 'Reset targets must include linked and unlinked players and exclude administrators'; END IF;
   result := public.admin_player_account_directory('DIRECTORY-',1,1);
   IF (result->>'total')::integer <> 3 OR jsonb_array_length(result->'accounts') <> 1 OR result->'accounts'->0->>'email' <> 'directory-linked@example.test' THEN RAISE EXCEPTION 'Pagination unstable'; END IF;
   result := public.admin_player_account_directory('no-matching-email',0,25);

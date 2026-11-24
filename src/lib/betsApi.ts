@@ -8,7 +8,12 @@ export function betErrorMessage(error: unknown, t: TFunction): string {
 }
 
 export interface PlayerAccount { playerId: string; name: string }
-export interface RegisteredPlayerAccount { email: string; playerId: string | null; playerName: string | null }
+export interface RegisteredPlayerAccount {
+  email: string
+  playerId: string | null
+  playerName: string | null
+  passwordResetUserId: string | null
+}
 export interface PlayerAccountDirectory { accounts: RegisteredPlayerAccount[]; total: number }
 export interface PickleWallet { balance: string; reserved: string; available: string; owed: string }
 export interface PickleBet {
