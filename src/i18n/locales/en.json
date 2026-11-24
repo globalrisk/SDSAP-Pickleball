@@ -610,9 +610,7 @@
     "saveConflict": "This match changed on another device. The latest result has been reloaded for review.",
     "undoing": "Undoing…",
     "undoFailed": "Could not undo the result. Please edit the match instead.",
-    "cancelMatch": "Cancel match",
-    "cancelHelp": "No points, wins, losses or rating changes. Reserved stakes are released.",
-    "cancelConfirm": "Cancel this unplayed match? Neither side receives points, wins or losses, player ratings stay unchanged, and reserved stakes are released. The fixture will remain visible as Cancelled."
+    "cancelledMatchNote": "No points, wins, losses or rating changes. Reserved stakes are released."
   },
   "live": {
     "badge": "MATCH DAY",
@@ -660,8 +658,8 @@
     "waiting": "Waiting",
     "waitingForNames": "Waiting for {{names}}",
     "playNow": "Play now",
-    "cancelMatch": "Cancel match",
-    "confirmCancelMatch": "Cancel {{home}} vs {{away}} and return it to the available matches? No result will be recorded.",
+    "returnToAvailable": "Return to available",
+    "confirmReturnToAvailable": "Return {{home}} vs {{away}} to the available matches?",
     "setUpNext": "Set up next",
     "removeFromQueue": "Remove from queue",
     "waitForPlayers": "Wait for players",

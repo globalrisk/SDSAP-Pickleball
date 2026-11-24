@@ -607,9 +607,7 @@
     "saveConflict": "Trận đấu này đã được thay đổi trên thiết bị khác. Kết quả mới nhất đã được tải lại để kiểm tra.",
     "undoing": "Đang hoàn tác…",
     "undoFailed": "Không thể hoàn tác kết quả. Hãy sửa lại trận đấu.",
-    "cancelMatch": "Hủy trận đấu",
-    "cancelHelp": "Không tính điểm, thắng, thua hoặc thay đổi rating. Điểm cược đã giữ sẽ được giải phóng.",
-    "cancelConfirm": "Hủy trận chưa có kết quả này? Cả hai bên không nhận điểm, thắng hoặc thua; rating giữ nguyên và điểm cược đã giữ được giải phóng. Trận vẫn hiển thị với trạng thái Đã hủy."
+    "cancelledMatchNote": "Không tính điểm, thắng, thua hoặc thay đổi rating. Điểm cược đã giữ sẽ được giải phóng."
   },
   "live": {
     "badge": "NGÀY THI ĐẤU",
@@ -656,8 +654,8 @@
     "waiting": "Đang chờ",
     "waitingForNames": "Đang chờ {{names}}",
     "playNow": "Đấu ngay",
-    "cancelMatch": "Hủy trận",
-    "confirmCancelMatch": "Hủy trận {{home}} gặp {{away}} và đưa về danh sách trận sẵn sàng? Kết quả sẽ không được ghi.",
+    "returnToAvailable": "Đưa về danh sách sẵn sàng",
+    "confirmReturnToAvailable": "Đưa trận {{home}} gặp {{away}} về danh sách trận sẵn sàng?",
     "setUpNext": "Xếp tiếp theo",
     "removeFromQueue": "Bỏ khỏi hàng chờ",
     "waitForPlayers": "Chờ người chơi",
