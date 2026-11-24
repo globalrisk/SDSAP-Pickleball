@@ -1,3 +1,4 @@
+import { readFileSync, readdirSync } from 'node:fs'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { startLocalSupabase } from '../../scripts/test-support/local-supabase.mjs'
@@ -6,7 +7,7 @@ vi.mock('./supabase', () => ({ supabase: {
   from(table: string) { return state.client!.from(table) },
   rpc(name: string, args: Record<string, unknown>) { return state.client!.rpc(name, args) },
 } }))
-import { cancelMatch, createManyTeamsWithPlayers, createSeasonMatches, fetchMatches, fetchPlayerRankings, fetchTeamsWithPlayers, recordResult, revertMatchToScheduled, setMatchLiveStatus } from './api'
+import { createManyTeamsWithPlayers, createSeasonMatches, fetchMatches, fetchPlayerRankings, fetchTeamsWithPlayers, recordResult, revertMatchToScheduled, setMatchLiveStatus } from './api'
 import { fetchLeagueDuelDraftPreview, saveLeagueDuelDraft, setSeasonFormat } from './leagueTeamDuelApi'
 import { archiveWithPicklePoints, fetchPicklePreview, savePickleSettings } from './picklePointsApi'
 import { computeStandings } from './standings'
@@ -15,15 +16,24 @@ import { buildTournamentView } from './tournamentMode'
 import { forecastLeagueDuelSeason } from './seasonForecast'
 import { getLeagueDuelProgress } from './leagueTeamDuel'
 
+const migrations = new URL('../../supabase/migrations/', import.meta.url)
+const beforeMigration = readdirSync(migrations).find(file => file.endsWith('_remove_match_cancellation.sql'))!
+const retireCancellation = readFileSync(new URL(beforeMigration, migrations), 'utf8')
+
+async function seedLegacyCancellation(matchId: string) {
+  const { error } = await state.client!.rpc('cancel_unplayed_match', { p_match_id: matchId })
+  if (error) throw error
+}
+
 let api: Awaited<ReturnType<typeof startLocalSupabase>>
 const client = (token?: string) => createClient(api.url, 'local-anon-key', {
   global: { headers: token ? { Authorization: `Bearer ${token}` } : {} },
   auth: { persistSession: false, autoRefreshToken: false },
 })
-beforeAll(async () => { api = await startLocalSupabase(); state.client = client(api.token) }, 20000)
+beforeAll(async () => { api = await startLocalSupabase({ beforeMigration }); state.client = client(api.token) }, 20000)
 afterAll(async () => { await api?.close() })
 
-describe('cancel an unplayed match without scoring it', () => {
+describe('retire match cancellation and preserve legacy fixtures', () => {
   it('keeps rankings and history exactly unchanged during a round robin already in play', async () => {
     const { leagueId, seasonId, players } = api.seeded!
     await createManyTeamsWithPlayers(seasonId, [0, 2, 4].map(i => ({ name: `Pair ${i}`, color: '#008800', poolPlayerIds: [players[i]!.id, players[i + 1]!.id] })))
@@ -38,8 +48,7 @@ describe('cancel an unplayed match without scoring it', () => {
     const revision = (await api.db.query('SELECT * FROM public.rating_state ORDER BY league_id')).rows
     const teams = await fetchTeamsWithPlayers(seasonId)
     const standings = computeStandings(teams, await fetchMatches(seasonId, leagueId))
-    await cancelMatch(absent.id)
-    await cancelMatch(absent.id) // A lost response can be retried safely.
+    await seedLegacyCancellation(absent.id)
     const updated = await fetchMatches(seasonId, leagueId)
     expect(updated.find(m => m.id === absent.id)).toMatchObject({ status: 'cancelled', winner_team_id: null, home_score: null, away_score: null, result_recorded_at: null, live_status: 'available', live_court_number: null })
     expect(await fetchPlayerRankings(leagueId)).toEqual(rankings)
@@ -53,13 +62,12 @@ describe('cancel an unplayed match without scoring it', () => {
     expect(personal.remainingMatches.some(m => m.id === absent.id)).toBe(false)
     await expect(recordResult(absent.id, { winnerTeamId: absent.home_team_id, homeScore: 11, awayScore: 5 })).rejects.toMatchObject({ message: expect.stringContaining('MATCH_CANCELLED') })
     await expect(revertMatchToScheduled(absent.id)).rejects.toMatchObject({ message: expect.stringContaining('MATCH_CANCELLED') })
-    await expect(cancelMatch(played.id)).rejects.toMatchObject({ message: expect.stringContaining('MATCH_CANCEL') })
   })
 
-  it('releases open and accepted stakes without changing wallets or settling a winner', async () => {
+  it('preserves legacy voided bets and released stakes after the migration', async () => {
     const { leagueId, seasonId, players } = api.seeded!
     const match = (await fetchMatches(seasonId, leagueId)).find(m => m.status === 'scheduled')!
-    // Seed reservations only; the cancellation itself runs through the real authenticated RPC.
+    // Create the historical cancellations and reservations with the original schema.
     const betId = crypto.randomUUID(), openId = crypto.randomUUID()
     for (const [id, state, acceptor] of [[betId, 'accepted', players[12]!.id], [openId, 'open', null]]) {
       await api.db.query(`INSERT INTO public.pickle_bets(id,league_id,season_id,match_id,creator_id,creator_side,creator_stake,acceptor_stake,acceptor_id,state,home_ids,away_ids,creator_request,home_team_id,away_team_id)
@@ -68,7 +76,8 @@ describe('cancel an unplayed match without scoring it', () => {
     }
     const wallets = (await api.db.query('SELECT * FROM public.pickle_wallets ORDER BY league_id,pool_player_id')).rows
     const ledger = (await api.db.query('SELECT * FROM public.pickle_transactions ORDER BY id')).rows
-    await cancelMatch(match.id)
+    await seedLegacyCancellation(match.id)
+    await api.db.exec(retireCancellation)
     expect((await api.db.query('SELECT state,close_reason FROM public.pickle_bets WHERE match_id=$1', [match.id])).rows).toEqual([
       { state: 'void', close_reason: 'match_cancelled' }, { state: 'void', close_reason: 'match_cancelled' },
     ])
@@ -78,14 +87,23 @@ describe('cancel an unplayed match without scoring it', () => {
     expect((await api.db.query('SELECT pickle_private.reserved($1,$2) AS reserved', [leagueId, players[13]!.id])).rows[0]).toMatchObject({ reserved: '0' })
   })
 
-  it('rejects unauthenticated and non-admin cancellation', async () => {
-    const match = (await fetchMatches(api.seeded!.seasonId, api.seeded!.leagueId))[0]!
-    state.client = client()
-    await expect(cancelMatch(match.id)).rejects.toMatchObject({ code: '42501' })
-    const player = await api.addAccount({ email: 'cancel-player@example.test' })
-    state.client = client(player.token)
-    await expect(cancelMatch(match.id)).rejects.toMatchObject({ code: '42501' })
-    state.client = client(api.token)
+  it('rejects new cancellations through the old RPC and direct fixture writes', async () => {
+    const { leagueId, seasonId } = api.seeded!
+    const match = (await fetchMatches(seasonId, leagueId)).find(fixture => fixture.status === 'completed')!
+    await revertMatchToScheduled(match.id)
+    const { error } = await state.client!.rpc('cancel_unplayed_match', { p_match_id: match.id })
+    expect(error).toMatchObject({ code: '42883' })
+    const { rows } = await api.db.query("SELECT to_regprocedure('pickle_private.cancel_unplayed_match(uuid)') AS private_cancel")
+    expect(rows).toEqual([{ private_cancel: null }])
+    await expect(api.db.query("UPDATE public.matches SET status='cancelled' WHERE id=$1", [match.id]))
+      .rejects.toMatchObject({ code: '23514', message: expect.stringContaining('MATCH_CANCELLATION_REMOVED') })
+    await expect(api.db.query(
+      "INSERT INTO public.matches (season_id, home_team_id, away_team_id, status) VALUES ($1,$2,$3,'cancelled')",
+      [seasonId, match.home_team_id, match.away_team_id],
+    )).rejects.toMatchObject({ code: '23514', message: expect.stringContaining('MATCH_CANCELLATION_REMOVED') })
+    const matches = await fetchMatches(seasonId, leagueId)
+    expect(matches.find(fixture => fixture.id === match.id)?.status).toBe('scheduled')
+    expect(matches.filter(fixture => fixture.status === 'cancelled')).toHaveLength(2)
   })
 })
 
@@ -93,7 +111,7 @@ function teamsIds(players: { pool_player_id: string }[] | undefined) { return pl
 
 describe('cancelled Team Duel fixtures and prizes', () => {
   it.each([false, true])('finishes and archives with no prizes for cancellations (has played game: %s)', async (hasPlayedGame) => {
-    const other = await startLocalSupabase()
+    const other = await startLocalSupabase({ beforeMigration })
     try {
       state.client = createClient(other.url, 'local-anon-key', { global: { headers: { Authorization: `Bearer ${other.token}` } }, auth: { persistSession: false, autoRefreshToken: false } })
       const { leagueId, seasonId, players } = other.seeded!
@@ -104,7 +122,8 @@ describe('cancelled Team Duel fixtures and prizes', () => {
       await savePickleSettings('season', seasonId, { matchPrize: '1000', championPrize: '10000' })
       const original = await fetchMatches(seasonId, leagueId)
       if (hasPlayedGame) await recordResult(original[0]!.id, { winnerTeamId: original[0]!.home_team_id, homeScore: 11, awayScore: 5 })
-      for (const match of original.slice(hasPlayedGame ? 1 : 0)) await cancelMatch(match.id)
+      for (const match of original.slice(hasPlayedGame ? 1 : 0)) await seedLegacyCancellation(match.id)
+      await other.db.exec(retireCancellation)
       const matches = await fetchMatches(seasonId, leagueId)
       const lineups = (fixtures: typeof matches) => [...fixtures].sort((a, b) => a.id.localeCompare(b.id)).map(m => [m.id, m.home_pool_player_ids, m.away_pool_player_ids])
       expect(lineups(matches)).toEqual(lineups(original))
@@ -115,7 +134,6 @@ describe('cancelled Team Duel fixtures and prizes', () => {
       expect(prizes.squads.reduce((sum, squad) => sum + Number(squad.matchTotal), 0)).toBe(hasPlayedGame ? 1000 : 0)
       expect(prizes.squads.reduce((sum, squad) => sum + Number(squad.total), 0)).toBe(hasPlayedGame ? 11000 : 0)
       await archiveWithPicklePoints(seasonId, prizes.fingerprint)
-      await expect(cancelMatch(matches[0]!.id)).rejects.toMatchObject({ message: expect.stringContaining('active') })
     } finally { state.client = client(api.token); await other.close() }
   }, 30000)
 })

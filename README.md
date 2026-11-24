@@ -379,7 +379,7 @@ Database integration checks live in `supabase/tests/database`. `test:database` a
 
 ## Standings rules
 
-- During an active season, administrators can choose **Cancel match** under an unplayed fixture's result form on Matches or Live. The fixture stays visible as **Cancelled**, with no winner, points, win/loss, match prize, or rating change. Open and accepted bets are voided and reserved stakes released without changing wallet balances. Played results and archived seasons cannot be cancelled. Apply the `cancel_unplayed_matches` migration before using this option.
+- Use **Return to available** on Match Day to free the court and put the fixture back in the list of available matches. Historical cancelled fixtures remain visible and are excluded from results, ratings, and match prizes.
 - Cancelled fixtures count as resolved for season completion. A season with every fixture cancelled awards no Pickle points, including no champion bonus.
 - Win = 1 point
 - Loss or forfeit = 0 points

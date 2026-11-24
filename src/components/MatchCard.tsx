@@ -100,7 +100,7 @@ export function MatchCard({ match, showForm = true, betting }: MatchCardProps) {
       )}
 
       {betting}
-      {match.status === 'cancelled' ? <p className="mt-4 text-sm text-gray-500">{t('record.cancelHelp')}</p> : null}
+      {match.status === 'cancelled' ? <p className="mt-4 text-sm text-gray-500">{t('record.cancelledMatchNote')}</p> : null}
       {canEdit && canReplaceDuelMatchPlayer(match) && <DuelMatchPlayerReplacement match={match} />}
       {canEdit && match.status === 'scheduled' && <RecordResultForm match={match} />}
 

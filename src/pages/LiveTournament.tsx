@@ -113,10 +113,10 @@ export function LiveTournamentPage() {
     queueMutation.mutate({ matchId: match.id, liveStatus })
   }
 
-  async function cancelPlayingMatch(match: MatchWithTeams) {
+  async function returnPlayingMatch(match: MatchWithTeams) {
     if (
       !await confirm(
-        t('live.confirmCancelMatch', {
+        t('live.confirmReturnToAvailable', {
           home: match.home_team.name,
           away: match.away_team.name,
         }),
@@ -300,10 +300,10 @@ export function LiveTournamentPage() {
                           <button
                             type="button"
                             disabled={queueMutation.isPending}
-                            onClick={() => cancelPlayingMatch(playingMatch)}
-                            className={`${actionClass} border border-red-200 bg-red-50 text-red-700 hover:bg-red-100`}
+                            onClick={() => returnPlayingMatch(playingMatch)}
+                            className={`${actionClass} border border-green-200 bg-white text-green-800 hover:bg-green-50`}
                           >
-                            {t('live.cancelMatch')}
+                            {t('live.returnToAvailable')}
                           </button>
                         ) : null
                       }
