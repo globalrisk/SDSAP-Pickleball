@@ -8,6 +8,7 @@ import { betErrorMessage, fetchPlayerAccountDirectory, fetchPlayerAccounts, link
 import { useConfirm } from '../lib/confirmation'
 import { Select } from './Select'
 import { ErrorState } from './Layout'
+import { PlayerPasswordReset } from './PlayerPasswordReset'
 
 export function PlayerAccountLinks() {
   const { t } = useTranslation()
@@ -77,7 +78,11 @@ export function PlayerAccountLinks() {
       {directory.isLoading ? <p role="status" className="mt-3">{t('common.loading')}</p> : directory.error ? <ErrorState message={betErrorMessage(directory.error, t)} /> : <>
         <ul className="mt-3 space-y-2 text-sm">{directory.data?.accounts.map(account => <li key={account.email} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-green-100 p-3">
           <div className="min-w-0"><p className="break-all font-semibold text-green-950">{account.email}</p><p className="mt-1 break-words text-xs text-gray-600">{account.playerId ? t('bets.linkedToPlayer', { name: account.playerName }) : t('bets.accountNotLinked')}</p></div>
-          {!account.playerId ? <button type="button" onClick={() => { setEmail(account.email); setShowLinkForm(true); if (showLinkForm) formRef.current?.scrollIntoView({ block: 'nearest' }) }} className="min-h-11 rounded-lg bg-green-50 px-3 font-bold text-green-800">{t('bets.useEmail')}</button> : <button type="button" disabled={save.isPending || unlink.isPending} onClick={() => void confirmUnlink({ playerId: account.playerId!, email: account.email, name: account.playerName ?? account.email })} className="min-h-11 rounded-lg border border-red-200 px-3 font-bold text-red-700 hover:bg-red-50 disabled:opacity-50">{t('bets.unlinkAccount')}</button>}
+          <div className="flex flex-wrap items-center gap-2">
+            {!account.playerId ? <button type="button" onClick={() => { setEmail(account.email); setShowLinkForm(true); if (showLinkForm) formRef.current?.scrollIntoView({ block: 'nearest' }) }} className="min-h-11 rounded-lg bg-green-50 px-3 font-bold text-green-800">{t('bets.useEmail')}</button> : <button type="button" disabled={save.isPending || unlink.isPending} onClick={() => void confirmUnlink({ playerId: account.playerId!, email: account.email, name: account.playerName ?? account.email })} className="min-h-11 rounded-lg border border-red-200 px-3 font-bold text-red-700 hover:bg-red-50 disabled:opacity-50">{t('bets.unlinkAccount')}</button>}
+            {account.passwordResetUserId ? <PlayerPasswordReset key={account.passwordResetUserId}
+              email={account.email} userId={account.passwordResetUserId} /> : null}
+          </div>
         </li>)}</ul>
         {!directory.data?.accounts.length ? <p className="mt-3 text-sm text-gray-600">{t('bets.noRegisteredAccounts')}</p> : null}
         <nav aria-label={t('bets.accountPages')} className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm">
